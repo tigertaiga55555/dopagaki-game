@@ -33,11 +33,13 @@ function Content({ onComplete }: EventComponentProps) {
     onComplete({
       eventId: 'treasureBox',
       scoreDelta: correct ? CFG.reward : 0,
-      diagnostic: {
-        category: 'impulse',
-        score,
-        crimeText: score >= V3_CONFIG.crimeThreshold ? `ヒントを待たず${(elapsedMs / 1000).toFixed(1)}秒で箱を選択` : undefined,
-      },
+      diagnostics: [
+        {
+          category: 'impulse',
+          score,
+          crimeText: score >= V3_CONFIG.crimeThreshold ? `ヒントを待たず${(elapsedMs / 1000).toFixed(1)}秒で箱を選択` : undefined,
+        },
+      ],
     })
   }
 

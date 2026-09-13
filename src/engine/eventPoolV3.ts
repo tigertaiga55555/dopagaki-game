@@ -7,7 +7,6 @@ export const EVENT_CATEGORY: Record<EventId, DiagnosticCategory> = {
   skipQuiz: 'skip',
   comboBoost: 'impulse',
   instantReward: 'impulse',
-  notificationReflex: 'notification',
   sortRush: 'stimulation',
   holdRelease: 'patience',
   adCountdown: 'skip',
@@ -16,13 +15,16 @@ export const EVENT_CATEGORY: Record<EventId, DiagnosticCategory> = {
   gambleChoice: 'impulse',
 }
 
-/** 必ず含めたい候補（A〜I）＋バリエーション用のK。Jは終盤限定の低確率イベントとして別枠。 */
+/**
+ * 必ず含めたい候補（A〜I）＋バリエーション用のK。Jは終盤限定の低確率イベントとして別枠。
+ * Ver.3.1で「偽通知」イベント（notificationReflex）は削除し、代わりに comboBoost /
+ * sortRush の内部に「乱入ボーナス」を組み込んで notification カテゴリーを測定する。
+ */
 const MAIN_POOL: EventId[] = [
   'videoMemory',
   'skipQuiz',
   'comboBoost',
   'instantReward',
-  'notificationReflex',
   'sortRush',
   'holdRelease',
   'adCountdown',

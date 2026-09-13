@@ -13,7 +13,6 @@ export const EVENT_INTROS: Record<string, string> = {
   skipQuiz: '説明を読んで答えろ',
   comboBoost: '100％まで貯めろ',
   instantReward: '報酬を選べ',
-  notificationReflex: '青になった瞬間タップ',
   sortRush: '食べ物は右へ',
   holdRelease: '離すタイミングを見極めろ',
   adCountdown: '5秒待てば+900',

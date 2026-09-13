@@ -33,9 +33,9 @@ export const V3_CONFIG = {
   totalTimeMs: 60_000,
   /** 各イベント開始時、指示文だけを見せる時間（ミリ秒） */
   introDurationMs: 1000,
-  /** 中盤で選ぶイベント数の範囲 */
-  eventCountMin: 7,
-  eventCountMax: 8,
+  /** 中盤で選ぶイベント数の範囲（メインプールが9種のため、多様性を保つため7〜8から6〜7に調整） */
+  eventCountMin: 6,
+  eventCountMax: 7,
   /** EVENT J（途中診断チラ見）が終盤候補として差し込まれる確率 */
   peekEventChance: 0.3,
   /** ドパガキ度算出時、このスコア以上のイベントを「犯行記録」候補にする */
@@ -77,6 +77,8 @@ export const V3_CONFIG = {
       autoFillMs: 6000,
       tapBoostPercent: 2.2,
       reward: 700,
+      /** 乱入ボーナスの対象になる最低ゲージ進捗（%） */
+      interruptEligibleAtPercent: 30,
       tapBands: [
         { max: 3, score: 12 },
         { max: 10, score: 45 },
@@ -95,23 +97,6 @@ export const V3_CONFIG = {
       fallbackScoreImmediate: 40,
       fallbackScoreWait: 15,
     },
-    notificationReflex: {
-      waitMinMs: 1000,
-      waitMaxMs: 2200,
-      reactionWindowMs: 1500,
-      successReward: 500,
-      failReward: 0,
-      notifShowMinMs: 400,
-      notifShowMaxMs: 1000,
-      notifAutoHideMs: 2200,
-      notifWinChance: 0.3,
-      notifWinReward: 500,
-      bands: [
-        { maxMs: 500, score: 90 },
-        { maxMs: 1200, score: 62 },
-      ] satisfies TimeBand[],
-      fallbackScore: 15,
-    },
     sortRush: {
       cardCount: 5,
       perCardTimeoutMs: 2400,
@@ -119,6 +104,10 @@ export const V3_CONFIG = {
       incorrectPenalty: -50,
       fastMsThreshold: 450,
       moderateMsThreshold: 750,
+      /** 連続正解1回ごとのコンボボーナス（例: COMBO×3なら+60加算） */
+      comboBonusPerStreak: 20,
+      /** 乱入ボーナスの対象になる最低コンボ数 */
+      comboInterruptEligibleAt: 2,
     },
     holdRelease: {
       maxMs: 5000,
@@ -170,5 +159,36 @@ export const V3_CONFIG = {
       gambleScore: 55,
       diagnosticWeight: 0.3,
     },
+  },
+
+  /**
+   * 乱入ボーナス（Ver.3.1）。
+   * comboBoost / sortRush など「積み上げた進捗」を持つイベントの最中に、
+   * 本当に得する可能性のある高報酬サイドイベントを突然出す。
+   * 乗り換えると今の進捗（コンボ／ゲージ）を手放すという明確なトレードオフにする。
+   */
+  bonusInterrupt: {
+    /** 条件を満たしても、このプレイでは出現しない場合がある（毎回は出さない） */
+    triggerChance: 0.55,
+    /** 条件を満たしてから、実際に出現するまでのランダムな遅延 */
+    armDelayMinMs: 200,
+    armDelayMaxMs: 900,
+    /** 「押すか無視するか」を決められる時間 */
+    decisionWindowMs: 3200,
+    /** 乗り換えた後の超短いチャレンジの長さ */
+    challengeMs: 1800,
+    reward: 1500,
+    failReward: 0,
+    bands: [
+      { maxMs: 800, score: 85 },
+      { maxMs: 1800, score: 60 },
+    ] satisfies TimeBand[],
+    fallbackScore: 35,
+    /** 手放した進捗が大きいほど加算するスコア（0〜1のstakeScoreに乗算） */
+    stakeScoreBonusMax: 20,
+    /** 無視した（我慢できた）場合の低いドパガキスコア */
+    ignoredScore: 12,
+    /** stakeScoreがこの値未満なら、犯行記録は「手放した」ではなく「即乗り換え」の汎用文にする */
+    lowStakeThreshold: 0.3,
   },
 }

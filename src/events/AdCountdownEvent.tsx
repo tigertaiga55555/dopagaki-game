@@ -32,14 +32,16 @@ function Content({ onComplete }: EventComponentProps) {
     onComplete({
       eventId: 'adCountdown',
       scoreDelta: skipped ? 0 : CFG.reward,
-      diagnostic: {
-        category: 'skip',
-        score,
-        crimeText:
-          skipped && score >= V3_CONFIG.crimeThreshold
-            ? `${CFG.reward}ptを捨てて${(elapsedMs / 1000).toFixed(1)}秒でSKIP`
-            : undefined,
-      },
+      diagnostics: [
+        {
+          category: 'skip',
+          score,
+          crimeText:
+            skipped && score >= V3_CONFIG.crimeThreshold
+              ? `${CFG.reward}ptを捨てて${(elapsedMs / 1000).toFixed(1)}秒でSKIP`
+              : undefined,
+        },
+      ],
     })
   }
 

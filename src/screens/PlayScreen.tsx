@@ -75,8 +75,8 @@ export function PlayScreen({ onFinish }: Props) {
       }, V3_CONFIG.popupDurationMs)
     }
 
-    if (result.diagnostic) {
-      diagnosticsRef.current = [...diagnosticsRef.current, result.diagnostic]
+    if (result.diagnostics && result.diagnostics.length > 0) {
+      diagnosticsRef.current = [...diagnosticsRef.current, ...result.diagnostics]
     }
 
     if (finishedRef.current) return

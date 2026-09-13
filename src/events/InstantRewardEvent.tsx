@@ -39,12 +39,14 @@ function Content({ onComplete }: EventComponentProps) {
     onComplete({
       eventId: 'instantReward',
       scoreDelta: CFG.immediateReward,
-      diagnostic: {
-        category: 'impulse',
-        score,
-        crimeText:
-          score >= V3_CONFIG.crimeThreshold ? `＋${CFG.immediateReward}を${(elapsedMs / 1000).toFixed(1)}秒で即回収` : undefined,
-      },
+      diagnostics: [
+        {
+          category: 'impulse',
+          score,
+          crimeText:
+            score >= V3_CONFIG.crimeThreshold ? `＋${CFG.immediateReward}を${(elapsedMs / 1000).toFixed(1)}秒で即回収` : undefined,
+        },
+      ],
     })
   }
 
@@ -54,7 +56,7 @@ function Content({ onComplete }: EventComponentProps) {
     onComplete({
       eventId: 'instantReward',
       scoreDelta: CFG.waitReward,
-      diagnostic: { category: 'impulse', score: CFG.fallbackScoreWait },
+      diagnostics: [{ category: 'impulse', score: CFG.fallbackScoreWait }],
     })
   }
 

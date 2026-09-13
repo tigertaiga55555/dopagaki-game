@@ -47,11 +47,13 @@ function Content({ onComplete }: EventComponentProps) {
     onComplete({
       eventId: 'skipQuiz',
       scoreDelta: correct ? CFG.correct : CFG.incorrect,
-      diagnostic: {
-        category: 'skip',
-        score,
-        crimeText: elapsed !== null && score >= V3_CONFIG.crimeThreshold ? `説明を${(elapsed / 1000).toFixed(1)}秒でSKIP` : undefined,
-      },
+      diagnostics: [
+        {
+          category: 'skip',
+          score,
+          crimeText: elapsed !== null && score >= V3_CONFIG.crimeThreshold ? `説明を${(elapsed / 1000).toFixed(1)}秒でSKIP` : undefined,
+        },
+      ],
     })
   }
 

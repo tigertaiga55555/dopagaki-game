@@ -77,11 +77,13 @@ function Content({ onComplete }: EventComponentProps) {
     onComplete({
       eventId: 'videoMemory',
       scoreDelta: correct ? CFG.correct : CFG.incorrect,
-      diagnostic: {
-        category: 'speed',
-        score,
-        crimeText: elapsed !== null && score >= V3_CONFIG.crimeThreshold ? `動画開始${(elapsed / 1000).toFixed(1)}秒で2倍速` : undefined,
-      },
+      diagnostics: [
+        {
+          category: 'speed',
+          score,
+          crimeText: elapsed !== null && score >= V3_CONFIG.crimeThreshold ? `動画開始${(elapsed / 1000).toFixed(1)}秒で2倍速` : undefined,
+        },
+      ],
     })
   }
 

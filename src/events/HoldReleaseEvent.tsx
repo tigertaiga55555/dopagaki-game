@@ -54,11 +54,13 @@ function Content({ onComplete }: EventComponentProps) {
     onComplete({
       eventId: 'holdRelease',
       scoreDelta: reward,
-      diagnostic: {
-        category: 'patience',
-        score,
-        crimeText: score >= V3_CONFIG.crimeThreshold ? `${(clamped / 1000).toFixed(1)}秒で${reward}ptに飛びつき` : undefined,
-      },
+      diagnostics: [
+        {
+          category: 'patience',
+          score,
+          crimeText: score >= V3_CONFIG.crimeThreshold ? `${(clamped / 1000).toFixed(1)}秒で${reward}ptに飛びつき` : undefined,
+        },
+      ],
     })
   }
 

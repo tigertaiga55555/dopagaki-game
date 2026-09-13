@@ -11,7 +11,7 @@ function Content({ onComplete }: EventComponentProps) {
     onComplete({
       eventId: 'gambleChoice',
       scoreDelta: CFG.safeReward,
-      diagnostic: { category: 'impulse', score: CFG.safeScore, weight: CFG.diagnosticWeight },
+      diagnostics: [{ category: 'impulse', score: CFG.safeScore, weight: CFG.diagnosticWeight }],
     })
   }
 
@@ -20,7 +20,7 @@ function Content({ onComplete }: EventComponentProps) {
     onComplete({
       eventId: 'gambleChoice',
       scoreDelta: win ? CFG.gambleWinReward : CFG.gambleLoseReward,
-      diagnostic: { category: 'impulse', score: CFG.gambleScore, weight: CFG.diagnosticWeight },
+      diagnostics: [{ category: 'impulse', score: CFG.gambleScore, weight: CFG.diagnosticWeight }],
     })
   }
 

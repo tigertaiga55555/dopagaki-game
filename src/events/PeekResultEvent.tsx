@@ -30,14 +30,16 @@ function Content({ ctx, onComplete }: EventComponentProps) {
     onComplete({
       eventId: 'peekResult',
       scoreDelta: 0,
-      diagnostic: {
-        category: 'result',
-        score,
-        crimeText:
-          didPeek && score >= V3_CONFIG.crimeThreshold
-            ? `残り${Math.round(ctx.getRemainingSeconds())}秒で診断結果をチラ見`
-            : undefined,
-      },
+      diagnostics: [
+        {
+          category: 'result',
+          score,
+          crimeText:
+            didPeek && score >= V3_CONFIG.crimeThreshold
+              ? `残り${Math.round(ctx.getRemainingSeconds())}秒で診断結果をチラ見`
+              : undefined,
+        },
+      ],
     })
   }
 

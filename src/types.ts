@@ -15,7 +15,6 @@ export type EventId =
   | 'skipQuiz'
   | 'comboBoost'
   | 'instantReward'
-  | 'notificationReflex'
   | 'sortRush'
   | 'holdRelease'
   | 'adCountdown'
@@ -34,12 +33,16 @@ export interface DiagnosticOutcome {
   crimeText?: string
 }
 
-/** 1イベント終了時にPlayScreenへ返す結果。GAME SCOREへの加算とドパガキ診断は完全に分離する。 */
+/**
+ * 1イベント終了時にPlayScreenへ返す結果。GAME SCOREへの加算とドパガキ診断は完全に分離する。
+ * diagnosticsは配列（1イベントが複数の診断結果を返す場合がある：例えば「乱入ボーナス」を
+ * 無視した場合はホスト本来の診断＋抵抗した診断の2件になる）。
+ */
 export interface EventResult {
   eventId: EventId
   /** GAME SCOREへの加算量（負の値も許容：高速仕分けのミスなど） */
   scoreDelta: number
-  diagnostic?: DiagnosticOutcome
+  diagnostics?: DiagnosticOutcome[]
 }
 
 /** 残り時間などプレイ中の共有情報。一部イベント（Jなど）が参照する。 */
