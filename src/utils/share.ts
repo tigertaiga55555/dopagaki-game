@@ -1,19 +1,19 @@
-import { GAME_CONFIG } from '../config/gameConfig'
-import { buildShareText } from '../config/messages'
+import { V2_CONFIG } from '../config/gameConfigV2'
+import { buildShareText } from '../config/messagesV2'
 
 function getShareUrl(): string {
   if (typeof window !== 'undefined' && window.location?.href) {
     return window.location.href
   }
-  return GAME_CONFIG.shareUrl
+  return V2_CONFIG.shareUrl
 }
 
-export function getShareText(point: number, percent: number, rankName: string): string {
-  return buildShareText(point, percent, rankName)
+export function getShareText(percent: number, typeName: string): string {
+  return buildShareText(percent, typeName)
 }
 
-export async function shareResult(point: number, percent: number, rankName: string): Promise<'native' | 'none'> {
-  const text = getShareText(point, percent, rankName)
+export async function shareResult(percent: number, typeName: string): Promise<'native' | 'none'> {
+  const text = getShareText(percent, typeName)
   const url = getShareUrl()
 
   if (typeof navigator !== 'undefined' && navigator.share) {
@@ -27,22 +27,22 @@ export async function shareResult(point: number, percent: number, rankName: stri
   return 'none'
 }
 
-export function getXShareUrl(point: number, percent: number, rankName: string): string {
-  const text = getShareText(point, percent, rankName)
+export function getXShareUrl(percent: number, typeName: string): string {
+  const text = getShareText(percent, typeName)
   const url = getShareUrl()
   const params = new URLSearchParams({ text, url })
   return `https://twitter.com/intent/tweet?${params.toString()}`
 }
 
-export function getLineShareUrl(point: number, percent: number, rankName: string): string {
-  const text = getShareText(point, percent, rankName)
+export function getLineShareUrl(percent: number, typeName: string): string {
+  const text = getShareText(percent, typeName)
   const url = getShareUrl()
   const params = new URLSearchParams({ text: `${text}\n${url}` })
   return `https://social-plugins.line.me/lineit/share?${params.toString()}`
 }
 
-export async function copyShareText(point: number, percent: number, rankName: string): Promise<boolean> {
-  const text = `${getShareText(point, percent, rankName)}\n${getShareUrl()}`
+export async function copyShareText(percent: number, typeName: string): Promise<boolean> {
+  const text = `${getShareText(percent, typeName)}\n${getShareUrl()}`
   try {
     await navigator.clipboard.writeText(text)
     return true
