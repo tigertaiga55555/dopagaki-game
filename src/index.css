@@ -148,3 +148,26 @@ body {
 .bg-blob {
   animation: float-bg 10s ease-in-out infinite;
 }
+
+@keyframes popup-float {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.9);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0) scale(1.05);
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(-18px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-30px) scale(1);
+  }
+}
+
+.anim-popup-float {
+  animation: popup-float 0.9s ease-out forwards;
+}

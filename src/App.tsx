@@ -1,22 +1,22 @@
 import { useCallback, useState } from 'react'
-import { MeasureScreen } from './screens/MeasureScreen'
+import { PlayScreen } from './screens/PlayScreen'
 import { ResultScreen } from './screens/ResultScreen'
 import { TitleScreen } from './screens/TitleScreen'
-import { computeDopagakiResult } from './engine/resultEngineV2'
-import type { DopagakiResult, EventOutcome, ScreenName } from './types'
+import { computeFinalResult } from './engine/resultEngineV3'
+import type { DiagnosticOutcome, FinalResult, ScreenName } from './types'
 
 export default function App() {
   const [screen, setScreen] = useState<ScreenName>('title')
-  const [result, setResult] = useState<DopagakiResult | null>(null)
+  const [result, setResult] = useState<FinalResult | null>(null)
   const [playKey, setPlayKey] = useState(0)
 
-  const startMeasuring = useCallback(() => {
+  const startPlay = useCallback(() => {
     setPlayKey((k) => k + 1)
-    setScreen('measuring')
+    setScreen('playing')
   }, [])
 
-  const handleFinish = useCallback((outcomes: EventOutcome[]) => {
-    setResult(computeDopagakiResult(outcomes))
+  const handleFinish = useCallback((payload: { gameScore: number; diagnostics: DiagnosticOutcome[] }) => {
+    setResult(computeFinalResult(payload.gameScore, payload.diagnostics))
     setScreen('result')
   }, [])
 
@@ -27,9 +27,9 @@ export default function App() {
         <div className="bg-blob absolute -right-20 top-1/3 h-72 w-72 rounded-full bg-purple-600/20 blur-3xl" />
       </div>
 
-      {screen === 'title' && <TitleScreen onStart={startMeasuring} />}
-      {screen === 'measuring' && <MeasureScreen key={playKey} onFinish={handleFinish} />}
-      {screen === 'result' && result && <ResultScreen result={result} onRetry={startMeasuring} />}
+      {screen === 'title' && <TitleScreen onStart={startPlay} />}
+      {screen === 'playing' && <PlayScreen key={playKey} onFinish={handleFinish} />}
+      {screen === 'result' && result && <ResultScreen result={result} onRetry={startPlay} />}
     </div>
   )
 }
