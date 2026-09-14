@@ -1,60 +1,62 @@
+import type { ComponentType } from 'react'
+
 export type ScreenName = 'title' | 'playing' | 'result'
 
-/** ドパガキ診断の内部カテゴリー */
-export type DiagnosticCategory =
-  | 'skip'
-  | 'speed'
-  | 'impulse'
-  | 'stimulation'
-  | 'notification'
-  | 'patience'
-  | 'result'
+export type Judgement = 'PERFECT' | 'GREAT' | 'GOOD' | 'MISS'
 
-export type EventId =
-  | 'videoMemory'
-  | 'skipQuiz'
-  | 'comboBoost'
-  | 'instantReward'
-  | 'sortRush'
-  | 'holdRelease'
-  | 'adCountdown'
-  | 'treasureBox'
-  | 'peekResult'
-  | 'gambleChoice'
+export type QuestionTypeId =
+  | 'color'
+  | 'oddOneOut'
+  | 'maxNumber'
+  | 'minNumber'
+  | 'differentOne'
+  | 'sameOne'
+  | 'moreSide'
+  | 'biggerShape'
+  | 'simpleMath'
+  | 'swipe'
+  | 'repeatTap'
+  | 'holdPress'
+  | 'noPress'
 
-/** 1イベント終了時の診断（ドパガキ判定用）データ。診断対象にならないイベント/結果はundefined。 */
-export interface DiagnosticOutcome {
-  category: DiagnosticCategory
-  /** 0〜100のドパガキ傾向スコア */
-  score: number
-  /** 集計時の重み（既定1。K（安全策vs一発逆転）のように影響を弱めたい場合に使う） */
-  weight?: number
-  /** スコアが高いときだけ入る「犯行記録」用の一文 */
-  crimeText?: string
+export type DifficultyPhaseId = 'warmup' | 'ramp' | 'fake' | 'boost' | 'overload' | 'finalRush'
+
+/** 1問ぶんの出題データ。type固有の内容はdataに詰める。 */
+export interface QuestionSpec {
+  instanceId: string
+  type: QuestionTypeId
+  targetTimeMs: number
+  data: Record<string, unknown>
 }
 
-/**
- * 1イベント終了時にPlayScreenへ返す結果。GAME SCOREへの加算とドパガキ診断は完全に分離する。
- * diagnosticsは配列（1イベントが複数の診断結果を返す場合がある：例えば「乱入ボーナス」を
- * 無視した場合はホスト本来の診断＋抵抗した診断の2件になる）。
- */
-export interface EventResult {
-  eventId: EventId
-  /** GAME SCOREへの加算量（負の値も許容：高速仕分けのミスなど） */
-  scoreDelta: number
-  diagnostics?: DiagnosticOutcome[]
+/** 1問終了時にエンジンへ返す結果 */
+export interface QuestionResult {
+  correct: boolean
+  /** 出題からの反応時間（ms）。hold/noPressなど「速さ」で測れない問題は0や固定値でよい。 */
+  reactionMs: number
+  /** 通常はreactionMs/targetTimeMsの比率で判定するが、明示的にtierを指定したい問題用 */
+  tierOverride?: Judgement
+  meta?: {
+    /** repeatTapで指定回数を超えてタップした数など、余計な操作の回数 */
+    extraTaps?: number
+    /** noPress中に触れてしまった／hold前にフライングしたなど */
+    forbiddenTouch?: boolean
+  }
 }
 
-/** 残り時間などプレイ中の共有情報。一部イベント（Jなど）が参照する。 */
-export interface PlayContext {
-  getRemainingSeconds: () => number
-  /** ここまでの診断結果から算出した、現時点のドパガキ度の粗い推定値（0〜100） */
-  getCurrentDopagakiEstimate: () => number
+export interface QuestionComponentProps {
+  spec: QuestionSpec
+  /** 演出レベル（0〜5）。問題側の派手さ調整に使ってよい */
+  visualLevel: number
+  onResult: (result: QuestionResult) => void
 }
 
-export interface EventComponentProps {
-  ctx: PlayContext
-  onComplete: (result: EventResult) => void
+export interface QuestionModule {
+  id: QuestionTypeId
+  /** ベースとなる制限時間（ms）。実際はフェーズのspeedMultiplierを掛けて使う */
+  baseTargetTimeMs: number
+  generate: () => Record<string, unknown>
+  Component: ComponentType<QuestionComponentProps>
 }
 
 export interface DopagakiTypeDef {
@@ -62,17 +64,35 @@ export interface DopagakiTypeDef {
   name: string
 }
 
-export interface FinalResult {
-  gameScore: number
-  dopagakiPercent: number
+/** 1プレイの統計ログ。犯行記録・タイプ判定・OVERDRIVE判定に使う。 */
+export interface PlayStats {
+  totalAnswered: number
+  correctCount: number
+  missCount: number
+  maxCombo: number
+  reactionSamples: { type: QuestionTypeId; reactionMs: number; targetTimeMs: number; correct: boolean }[]
+  fastestReactionMs: number | null
+  noPressTotal: number
+  noPressFails: number
+  hastyTapCount: number
+  maxTapsInOneSecond: number
+  comboLostToNoPress: number
+  /** 問題タイプ別の成績。タイプ判定（連打が強い／スワイプが強い等）に使う。 */
+  typeStats: Partial<Record<QuestionTypeId, { correct: number; total: number }>>
+}
+
+export interface FinalResultV4 {
+  percent: number
+  rawPercent: number
+  overdriveActive: boolean
   type: DopagakiTypeDef
   comment: string
   crimeRecords: string[]
+  maxCombo: number
+  fastestReactionMs: number | null
+  accuracy: number
   isFirstPlay: boolean
-  isNewLowDopagaki: boolean
-  isNewHighScore: boolean
-  firstDopagaki: number
-  lowestDopagaki: number
-  bestGameScore: number
+  isNewBest: boolean
+  bestPercent: number
   playCount: number
 }

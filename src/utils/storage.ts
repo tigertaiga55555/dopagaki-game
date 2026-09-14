@@ -1,7 +1,5 @@
-const FIRST_DOPAGAKI_KEY = 'dopagaki:firstDopagaki'
-const LOWEST_DOPAGAKI_KEY = 'dopagaki:lowestDopagaki'
-const HIGH_SCORE_KEY = 'dopagaki:gameHighScore'
-const PLAY_COUNT_KEY = 'dopagaki:playCount'
+const BEST_PERCENT_KEY = 'dopagaki:bestPercentV4'
+const PLAY_COUNT_KEY = 'dopagaki:playCountV4'
 
 function readNumber(key: string): number | null {
   try {
@@ -14,48 +12,16 @@ function readNumber(key: string): number | null {
   }
 }
 
-/** 初回プレイのドパガキ度（一度だけ保存される） */
-export function getFirstDopagaki(): number | null {
-  return readNumber(FIRST_DOPAGAKI_KEY)
+export function getBestPercent(): number {
+  return readNumber(BEST_PERCENT_KEY) ?? 0
 }
 
-export function saveFirstDopagakiIfAbsent(percent: number): void {
+/** 自己ベストを更新する。更新されたら true を返す */
+export function updateBestPercent(percent: number): boolean {
   try {
-    if (localStorage.getItem(FIRST_DOPAGAKI_KEY) === null) {
-      localStorage.setItem(FIRST_DOPAGAKI_KEY, String(percent))
-    }
-  } catch {
-    // localStorageが使えない環境では何もしない
-  }
-}
-
-/** 自己最低ドパガキ度（低いほど「良い」記録） */
-export function getLowestDopagaki(): number {
-  return readNumber(LOWEST_DOPAGAKI_KEY) ?? Infinity
-}
-
-export function updateLowestDopagaki(percent: number): boolean {
-  try {
-    const current = getLowestDopagaki()
-    if (percent < current) {
-      localStorage.setItem(LOWEST_DOPAGAKI_KEY, String(percent))
-      return true
-    }
-    return false
-  } catch {
-    return false
-  }
-}
-
-export function getBestGameScore(): number {
-  return readNumber(HIGH_SCORE_KEY) ?? 0
-}
-
-export function updateBestGameScore(score: number): boolean {
-  try {
-    const current = getBestGameScore()
-    if (score > current) {
-      localStorage.setItem(HIGH_SCORE_KEY, String(score))
+    const current = getBestPercent()
+    if (percent > current) {
+      localStorage.setItem(BEST_PERCENT_KEY, String(percent))
       return true
     }
     return false

@@ -120,6 +120,10 @@ body {
   animation: shake 0.5s ease-in-out;
 }
 
+.anim-shake-fast {
+  animation: shake 0.25s ease-in-out;
+}
+
 .anim-spike {
   animation: spike-pop 0.5s ease-out;
 }
@@ -170,4 +174,115 @@ body {
 
 .anim-popup-float {
   animation: popup-float 0.9s ease-out forwards;
+}
+
+/* ==== Ver.4: ラッシュゲーム用の演出 ==== */
+
+@keyframes final-blink {
+  0%,
+  100% {
+    opacity: 0.12;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.anim-final-blink {
+  animation: final-blink 1s ease-in-out infinite;
+}
+
+@keyframes gold-burst {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  25% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+.anim-gold-burst {
+  animation: gold-burst 0.65s ease-out forwards;
+}
+
+@keyframes glitch-flash {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  10%,
+  30%,
+  50% {
+    opacity: 0.8;
+  }
+  20%,
+  40% {
+    opacity: 0;
+  }
+}
+
+.anim-glitch {
+  animation: glitch-flash 0.5s steps(2) forwards;
+}
+
+@keyframes judgement-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+.anim-judgement {
+  animation: judgement-pop 0.5s ease-out forwards;
+}
+
+@keyframes particle-drift {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-120px) scale(0.4);
+    opacity: 0;
+  }
+}
+
+.anim-particle {
+  animation: particle-drift 1.6s ease-out infinite;
+}
+
+.glow-frame {
+  box-shadow: 0 0 40px rgba(217, 70, 239, 0.35);
+}
+
+.neon-frame {
+  box-shadow:
+    0 0 30px rgba(217, 70, 239, 0.5),
+    0 0 60px rgba(56, 189, 248, 0.25);
+}
+
+.gold-frame {
+  box-shadow:
+    0 0 45px rgba(250, 204, 21, 0.45),
+    0 0 90px rgba(217, 70, 239, 0.3);
+}
+
+.intense-frame {
+  box-shadow:
+    0 0 55px rgba(250, 204, 21, 0.6),
+    0 0 110px rgba(236, 72, 153, 0.5);
 }
