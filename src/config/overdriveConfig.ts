@@ -5,12 +5,13 @@
 export const OVERDRIVE_CONFIG = {
   /** 100%を突破できる最大値 */
   maxPercent: 120,
-  /** 「高精度」とみなす正答率の下限 */
-  accuracyThreshold: 0.85,
+  /** 「高精度」とみなす正答率の下限。Ver.4.1で平均ベースのスコアに変更したため、
+   *  ここを高めに保たないと100%到達自体は簡単になった分OVERDRIVEが乱発してしまう。 */
+  accuracyThreshold: 0.92,
   /** 「高反応」とみなす、反応時間/制限時間比率の上限（小さいほど速い） */
-  reactionRatioThreshold: 0.45,
+  reactionRatioThreshold: 0.4,
   /** 「高COMBO」とみなす最大COMBOの下限 */
-  comboThreshold: 12,
+  comboThreshold: 14,
   /** 「せっかち行動」とみなす、ゲーム内の先走りタップ回数の下限 */
   hastyTapThreshold: 4,
   /** 「待てなさ」とみなす、「押すな」失敗回数の下限 */

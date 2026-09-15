@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
+import { TIMING_SAFETY } from '../config/timingConfig'
 import { randInt } from '../engine/random'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
 function generate() {
   return { requiredMs: randInt(500, 900) }
+}
+
+function computeMinTargetTimeMs(data: Record<string, unknown>) {
+  const { requiredMs } = data as { requiredMs: number }
+  return requiredMs + TIMING_SAFETY.hold.reactionBufferMs + TIMING_SAFETY.hold.safetyMarginMs
 }
 
 function Component({ spec, onResult }: QuestionComponentProps) {
@@ -77,4 +83,5 @@ export const HoldPressQuestionModule: QuestionModule = {
   baseTargetTimeMs: 1500,
   generate,
   Component,
+  computeMinTargetTimeMs,
 }

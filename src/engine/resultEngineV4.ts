@@ -1,5 +1,5 @@
 import { getNearMissComment } from '../config/messagesV4'
-import { NORMAL_TYPES, getOverdriveTitle } from '../config/resultTypesV4'
+import { NORMAL_TYPES, TYPE_THRESHOLDS, getOverdriveTitle } from '../config/resultTypesV4'
 import { getBestPercent, getPlayCount, incrementPlayCount, updateBestPercent } from '../utils/storage'
 import type { RushFinishPayload } from './useRushGame'
 import type { DopagakiTypeDef, FinalResultV4, PlayStats, QuestionTypeId } from '../types'
@@ -16,10 +16,12 @@ const SPEED_TYPES = new Set<QuestionTypeId>([
   'simpleMath',
 ])
 
-function computeSpeedRatio(stats: PlayStats): number {
+function computeSpeedStats(stats: PlayStats): { avgRatio: number; avgMs: number; count: number } {
   const samples = stats.reactionSamples.filter((s) => SPEED_TYPES.has(s.type))
-  if (samples.length === 0) return 1
-  return samples.reduce((sum, s) => sum + s.reactionMs / s.targetTimeMs, 0) / samples.length
+  if (samples.length === 0) return { avgRatio: 1, avgMs: Infinity, count: 0 }
+  const avgRatio = samples.reduce((sum, s) => sum + s.reactionMs / s.targetTimeMs, 0) / samples.length
+  const avgMs = samples.reduce((sum, s) => sum + s.reactionMs, 0) / samples.length
+  return { avgRatio, avgMs, count: samples.length }
 }
 
 function typeAccuracy(stats: PlayStats, type: QuestionTypeId): number | null {
@@ -33,20 +35,48 @@ function determineType(finalPercent: number, overdriveActive: boolean, stats: Pl
   if (finalPercent >= 100) return NORMAL_TYPES.complete
 
   const accuracy = stats.totalAnswered > 0 ? stats.correctCount / stats.totalAnswered : 0
-  const speedRatio = computeSpeedRatio(stats)
+  const { avgRatio, avgMs, count } = computeSpeedStats(stats)
   const repeatTapAcc = typeAccuracy(stats, 'repeatTap')
+  const repeatTapCount = stats.typeStats.repeatTap?.total ?? 0
   const swipeAcc = typeAccuracy(stats, 'swipe')
+  const swipeCount = stats.typeStats.swipe?.total ?? 0
   const noPressFailRate = stats.noPressTotal > 0 ? stats.noPressFails / stats.noPressTotal : 0
 
-  if (stats.noPressTotal >= 2 && noPressFailRate >= 0.5) return NORMAL_TYPES.impatient
-  if (accuracy >= 0.75 && speedRatio <= 0.5) return NORMAL_TYPES.machine
-  if (repeatTapAcc !== null && repeatTapAcc >= 0.7 && (stats.typeStats.repeatTap?.total ?? 0) >= 2 && repeatTapAcc >= (swipeAcc ?? 0)) {
+  // 待てない型: 「押すな」を実際に何度も押してしまった場合のみ。最も納得感のある判定なので最優先。
+  if (stats.noPressTotal >= TYPE_THRESHOLDS.impatient.minNoPressTotal && noPressFailRate >= TYPE_THRESHOLDS.impatient.minFailRate) {
+    return NORMAL_TYPES.impatient
+  }
+  // 刺激処理マシーン: サンプル数が十分な上で正答率・速度の両方が突出している場合のみ。
+  if (
+    count >= TYPE_THRESHOLDS.minSamplesForSpecialType &&
+    accuracy >= TYPE_THRESHOLDS.machine.minAccuracy &&
+    avgRatio <= TYPE_THRESHOLDS.machine.maxAvgRatio
+  ) {
+    return NORMAL_TYPES.machine
+  }
+  // 連打中毒型 / 高速フリック型: そのタイプの出題を複数回こなし、かつ高精度だった場合のみ。
+  if (
+    repeatTapCount >= TYPE_THRESHOLDS.repeatTap.minSamples &&
+    repeatTapAcc !== null &&
+    repeatTapAcc >= TYPE_THRESHOLDS.repeatTap.minAccuracy &&
+    repeatTapAcc >= (swipeAcc ?? 0)
+  ) {
     return NORMAL_TYPES.repeatTap
   }
-  if (swipeAcc !== null && swipeAcc >= 0.7 && (stats.typeStats.swipe?.total ?? 0) >= 2) return NORMAL_TYPES.swipe
-  if (speedRatio <= 0.55) return NORMAL_TYPES.speed
-  if (finalPercent < 40) return NORMAL_TYPES.novice
-  return NORMAL_TYPES.speed
+  if (swipeCount >= TYPE_THRESHOLDS.swipe.minSamples && swipeAcc !== null && swipeAcc >= TYPE_THRESHOLDS.swipe.minAccuracy) {
+    return NORMAL_TYPES.swipe
+  }
+  // 脳直高速処理型: 比率・絶対反応時間(ms)・正答率・サンプル数の4条件すべてを満たす場合のみ。
+  if (
+    count >= TYPE_THRESHOLDS.minSamplesForSpecialType &&
+    avgRatio <= TYPE_THRESHOLDS.speed.maxAvgRatio &&
+    avgMs <= TYPE_THRESHOLDS.speed.maxAvgReactionMs &&
+    accuracy >= TYPE_THRESHOLDS.speed.minAccuracy
+  ) {
+    return NORMAL_TYPES.speed
+  }
+  if (finalPercent < TYPE_THRESHOLDS.noviceMaxPercent) return NORMAL_TYPES.novice
+  return NORMAL_TYPES.balanced
 }
 
 function buildCrimeRecords(stats: PlayStats): string[] {

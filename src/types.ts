@@ -57,6 +57,13 @@ export interface QuestionModule {
   baseTargetTimeMs: number
   generate: () => Record<string, unknown>
   Component: ComponentType<QuestionComponentProps>
+  /**
+   * 生成したdataから「これ以上は絶対に短くしてはいけない」制限時間を返す（任意）。
+   * 実際のtargetTimeMsは max(baseTargetTimeMs×speedMultiplier, この値) になる。
+   * HOLDの必要保持時間や連打の必要回数など、速度倍率だけでは表現できない
+   * 物理的な下限がある問題タイプはこれを実装する。
+   */
+  computeMinTargetTimeMs?: (data: Record<string, unknown>) => number
 }
 
 export interface DopagakiTypeDef {

@@ -9,6 +9,42 @@ export const NORMAL_TYPES = {
   impatient: { id: 'impatient', name: '待てない型ドパガキ' } satisfies DopagakiTypeDef,
   machine: { id: 'machine', name: '刺激処理マシーン' } satisfies DopagakiTypeDef,
   complete: { id: 'complete', name: '完全体ドパガキ' } satisfies DopagakiTypeDef,
+  /** どの特徴も突出しなかった場合の汎用タイプ。「なんとなく高速型」のような誤判定を避けるための受け皿。 */
+  balanced: { id: 'balanced', name: 'バランス型ドパガキ' } satisfies DopagakiTypeDef,
+}
+
+/**
+ * タイプ判定の閾値。Ver.4では反応時間/制限時間の比率だけで緩く判定していたため、
+ * 「最速反応0.73秒でも脳直高速処理型」のような誤判定が起きていた。
+ * Ver.4.1では最低サンプル数・絶対時間・正答率の3条件を組み合わせて厳格化する。
+ */
+export const TYPE_THRESHOLDS = {
+  /** speed/machine判定に必要な「お題系」問題の最低サンプル数 */
+  minSamplesForSpecialType: 5,
+  speed: {
+    /** 反応時間/制限時間比率の上限 */
+    maxAvgRatio: 0.42,
+    /** 平均反応時間(ms)の絶対上限。比率だけでなく実際の速さも要求する */
+    maxAvgReactionMs: 480,
+    minAccuracy: 0.8,
+  },
+  repeatTap: {
+    minSamples: 3,
+    minAccuracy: 0.75,
+  },
+  swipe: {
+    minSamples: 3,
+    minAccuracy: 0.75,
+  },
+  impatient: {
+    minNoPressTotal: 2,
+    minFailRate: 0.5,
+  },
+  machine: {
+    minAccuracy: 0.88,
+    maxAvgRatio: 0.38,
+  },
+  noviceMaxPercent: 40,
 }
 
 /** 100%超え（OVERDRIVE）の称号。percentの範囲で決まる。 */

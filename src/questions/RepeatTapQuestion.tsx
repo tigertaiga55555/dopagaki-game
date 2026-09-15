@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
+import { TIMING_SAFETY } from '../config/timingConfig'
 import { randInt } from '../engine/random'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
 function generate() {
   return { required: randInt(3, 7) }
+}
+
+function computeMinTargetTimeMs(data: Record<string, unknown>) {
+  const { required } = data as { required: number }
+  return required * TIMING_SAFETY.repeatTap.perTapMs + TIMING_SAFETY.repeatTap.reactionBufferMs
 }
 
 function Component({ spec, onResult }: QuestionComponentProps) {
@@ -53,4 +59,5 @@ export const RepeatTapQuestionModule: QuestionModule = {
   baseTargetTimeMs: 1800,
   generate,
   Component,
+  computeMinTargetTimeMs,
 }

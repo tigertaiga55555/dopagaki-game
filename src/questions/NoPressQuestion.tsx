@@ -42,4 +42,7 @@ export const NoPressQuestionModule: QuestionModule = {
   baseTargetTimeMs: 1000,
   generate,
   Component,
+  // Componentは自前でdata.waitMsのタイマーを持つため、speedMultiplierの影響を受けない。
+  // ここではtargetTimeMs（判定比率などに使われる値）がwaitMsを下回らないようにしておく。
+  computeMinTargetTimeMs: (data) => (data as { waitMs: number }).waitMs,
 }

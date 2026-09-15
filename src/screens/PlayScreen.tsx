@@ -116,16 +116,26 @@ export function PlayScreen({ onFinish }: Props) {
           <p key={snapshot.preCountdown} className="anim-pop text-8xl font-black text-white">
             {snapshot.preCountdown}
           </p>
-        ) : CurrentQuestion && snapshot.currentSpec ? (
-          <div key={snapshot.currentSpec.instanceId} className="h-full w-full">
-            <CurrentQuestion spec={snapshot.currentSpec} visualLevel={snapshot.visualLevel} onResult={handleQuestionResult} />
-          </div>
-        ) : snapshot.lastJudgement ? (
-          <div key={snapshot.judgementKey} className="anim-judgement flex flex-col items-center gap-1">
-            <p className={`text-5xl font-black ${JUDGEMENT_COLOR[snapshot.lastJudgement]}`}>{snapshot.lastJudgement}</p>
-            {snapshot.comboBrokenFrom >= 2 && <p className="text-sm font-black text-red-300">COMBO BREAK</p>}
-          </div>
-        ) : null}
+        ) : (
+          <>
+            {CurrentQuestion && snapshot.currentSpec && (
+              <div key={snapshot.currentSpec.instanceId} className="h-full w-full">
+                <CurrentQuestion spec={snapshot.currentSpec} visualLevel={snapshot.visualLevel} onResult={handleQuestionResult} />
+              </div>
+            )}
+            {snapshot.lastJudgement && (
+              <div
+                key={snapshot.judgementKey}
+                className="anim-judgement pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-1"
+              >
+                <p className={`text-5xl font-black drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)] ${JUDGEMENT_COLOR[snapshot.lastJudgement]}`}>
+                  {snapshot.lastJudgement}
+                </p>
+                {snapshot.comboBrokenFrom >= 2 && <p className="text-sm font-black text-red-300">COMBO BREAK</p>}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {showFinalBanner && (

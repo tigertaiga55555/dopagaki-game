@@ -1,4 +1,5 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
+import { TIMING_SAFETY } from '../config/timingConfig'
 import { pick } from '../engine/random'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
@@ -63,4 +64,5 @@ export const SwipeQuestionModule: QuestionModule = {
   baseTargetTimeMs: 1500,
   generate,
   Component,
+  computeMinTargetTimeMs: () => TIMING_SAFETY.swipe.minTimeMs,
 }

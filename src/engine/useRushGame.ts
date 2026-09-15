@@ -1,13 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { COUNTDOWN_START_SEC, FINAL_RUSH_START_SEC, TOTAL_GAME_SEC, getPhaseAt } from '../config/difficultyConfig'
 import { OVERDRIVE_CONFIG, evaluateOverdriveEligibility } from '../config/overdriveConfig'
-import { SCORE_CONFIG, judgeByRatio } from '../config/scoreConfigV4'
+import { SCORE_CONFIG, getAccuracyCap, judgeByRatio } from '../config/scoreConfigV4'
 import { generateNextQuestion } from './questionPicker'
 import { sfx } from '../utils/sound'
 import type { DifficultyPhaseId, Judgement, PlayStats, QuestionResult, QuestionSpec, QuestionTypeId } from '../types'
 
 const PRE_COUNTDOWN_MS = 1800
-const GAP_MS = 190
+/** 100%/OVERDRIVE到達演出のときだけ、次の問題を意図的に少し遅らせる（それ以外は即座に次へ進む） */
+const MILESTONE_FREEZE_MS = 650
+/** PERFECT/GREAT/GOOD/MISSのオーバーレイ表示時間。次の問題の上に重ねるだけでゲーム進行は止めない。 */
+const JUDGEMENT_OVERLAY_MS = 380
+
+/** 反応速度をベースにした比率算出から除外する問題タイプ（「速さ」の概念が当てはまらないため） */
+const NON_SPEED_TYPES = new Set<QuestionTypeId>(['holdPress', 'noPress'])
 
 export interface RushSnapshot {
   phaseId: DifficultyPhaseId
@@ -56,10 +62,6 @@ function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3)
 }
 
-function rawScoreToPercent(rawScore: number): number {
-  return (rawScore / SCORE_CONFIG.targetRawScoreFor100) * 100
-}
-
 export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
   const [snapshot, setSnapshot] = useState<RushSnapshot>({
     phaseId: 'warmup',
@@ -83,7 +85,10 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
   const startTimeRef = useRef<number | null>(null)
   const endedRef = useRef(false)
 
-  const rawScoreRef = useRef(0)
+  // rawScoreは「1問ごとの質スコア（0〜100）＋COMBOボーナス」の合計。answeredCountで割った平均が
+  // ドパガキ度の元になる（累積カウンターにしない＝出題数を稼いでも数値が積み上がらないようにする）。
+  const qualitySumRef = useRef(0)
+  const answeredCountRef = useRef(0)
   const percentTweenRef = useRef({ from: 0, to: 0, startedAt: 0 })
   const displayPercentRef = useRef(0)
 
@@ -99,6 +104,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
   const judgementKeyRef = useRef(0)
   const alarmedSecondsRef = useRef(new Set<number>())
   const nextQuestionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const overlayHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // グローバルなタップ監視：先走り操作・1秒間の最大タップ数を記録する
   useEffect(() => {
@@ -115,6 +121,11 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     return () => window.removeEventListener('pointerdown', handlePointerDown)
   }, [])
 
+  function currentAccuracy(): number {
+    const s = statsRef.current
+    return s.totalAnswered > 0 ? s.correctCount / s.totalAnswered : 0
+  }
+
   function currentEligibility() {
     const s = statsRef.current
     const avgRatio =
@@ -122,7 +133,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         ? s.reactionSamples.reduce((sum, r) => sum + r.reactionMs / r.targetTimeMs, 0) / s.reactionSamples.length
         : 1
     return evaluateOverdriveEligibility({
-      accuracy: s.totalAnswered > 0 ? s.correctCount / s.totalAnswered : 0,
+      accuracy: currentAccuracy(),
       avgReactionRatio: avgRatio,
       maxCombo: maxComboRef.current,
       hastyTapCount: s.hastyTapCount,
@@ -130,11 +141,15 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     })
   }
 
-  function setPercentTarget(nextRaw: number) {
-    rawScoreRef.current = nextRaw
+  function currentAvgPercent(): number {
+    return answeredCountRef.current > 0 ? qualitySumRef.current / answeredCountRef.current : 0
+  }
+
+  function setPercentTarget() {
     const eligible = currentEligibility().eligible
-    const cap = eligible ? OVERDRIVE_CONFIG.maxPercent : 100
-    const target = Math.max(0, Math.min(cap, rawScoreToPercent(nextRaw)))
+    const avgPercent = currentAvgPercent()
+    const cap = eligible ? OVERDRIVE_CONFIG.maxPercent : getAccuracyCap(currentAccuracy())
+    const target = Math.max(0, Math.min(cap, avgPercent))
 
     const wasHundred = hundredReachedRef.current
     const crossingHundred = !wasHundred && target >= 100
@@ -146,34 +161,32 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
       hundredReachedRef.current = true
       sfx.hundred()
       setSnapshot((s) => ({ ...s, showHundredBurst: true }))
-      setTimeout(() => setSnapshot((s) => ({ ...s, showHundredBurst: false })), 650)
+      setTimeout(() => setSnapshot((s) => ({ ...s, showHundredBurst: false })), MILESTONE_FREEZE_MS)
     }
     if (crossingOverdrive) {
       overdriveActiveRef.current = true
       sfx.overdrive()
       setSnapshot((s) => ({ ...s, showOverdriveBurst: true, overdriveActive: true }))
-      setTimeout(() => setSnapshot((s) => ({ ...s, showOverdriveBurst: false })), 650)
+      setTimeout(() => setSnapshot((s) => ({ ...s, showOverdriveBurst: false })), MILESTONE_FREEZE_MS)
     }
     return { crossingHundred, crossingOverdrive }
   }
 
-  function spawnNextQuestion() {
-    if (endedRef.current || startTimeRef.current === null) return
+  function buildNextQuestionSpec(): QuestionSpec | null {
+    if (endedRef.current || startTimeRef.current === null) return null
     const elapsedSec = (performance.now() - startTimeRef.current) / 1000
-    if (elapsedSec >= TOTAL_GAME_SEC) return
+    if (elapsedSec >= TOTAL_GAME_SEC) return null
     const phase = getPhaseAt(elapsedSec)
     const spec = generateNextQuestion(phase, lastTypeRef.current)
     lastTypeRef.current = spec.type
     currentSpecRef.current = spec
-    gapActiveRef.current = false
-    setSnapshot((s) => ({ ...s, currentSpec: spec }))
+    return spec
   }
 
   function handleQuestionResult(result: QuestionResult) {
     const spec = currentSpecRef.current
     if (!spec || endedRef.current) return
     currentSpecRef.current = null
-    gapActiveRef.current = true
 
     const tier: Judgement = result.tierOverride ?? (result.correct ? judgeByRatio(result.reactionMs, spec.targetTimeMs) : 'MISS')
     const stats = statsRef.current
@@ -197,8 +210,8 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
       sfx.miss()
     } else {
       stats.correctCount += 1
-      stats.reactionSamples.push({ type: spec.type, reactionMs: result.reactionMs, targetTimeMs: spec.targetTimeMs, correct: true })
-      if (spec.type !== 'holdPress' && spec.type !== 'noPress') {
+      if (!NON_SPEED_TYPES.has(spec.type)) {
+        stats.reactionSamples.push({ type: spec.type, reactionMs: result.reactionMs, targetTimeMs: spec.targetTimeMs, correct: true })
         if (stats.fastestReactionMs === null || result.reactionMs < stats.fastestReactionMs) {
           stats.fastestReactionMs = result.reactionMs
         }
@@ -212,26 +225,50 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
       else sfx.good()
     }
 
-    const comboBonus = tier === 'MISS' ? 0 : Math.min(comboRef.current, SCORE_CONFIG.comboBonusCapCount) * SCORE_CONFIG.comboBonusPoints
-    const basePoints = SCORE_CONFIG.basePoints * SCORE_CONFIG.tierMultiplier[tier]
-    const delta = tier === 'MISS' ? -SCORE_CONFIG.missPenalty : basePoints + comboBonus
-    const nextRaw = Math.max(0, rawScoreRef.current + delta)
+    const comboBonus =
+      tier === 'MISS' ? 0 : Math.min(comboRef.current, SCORE_CONFIG.comboBonusCapCount) * SCORE_CONFIG.comboBonusPerStack
+    qualitySumRef.current += SCORE_CONFIG.qualityByTier[tier] + comboBonus
+    answeredCountRef.current += 1
 
-    const { crossingHundred } = setPercentTarget(nextRaw)
+    const { crossingHundred, crossingOverdrive } = setPercentTarget()
     judgementKeyRef.current += 1
+    const judgementKey = judgementKeyRef.current
 
+    if (crossingHundred || crossingOverdrive) {
+      // 節目の演出のときだけ、意図的に少し間を置いてから次の問題を出す
+      gapActiveRef.current = true
+      if (nextQuestionTimerRef.current) clearTimeout(nextQuestionTimerRef.current)
+      setSnapshot((s) => ({
+        ...s,
+        currentSpec: null,
+        combo: comboRef.current,
+        lastJudgement: tier,
+        judgementKey,
+        comboBrokenFrom,
+      }))
+      nextQuestionTimerRef.current = setTimeout(() => {
+        const spec2 = buildNextQuestionSpec()
+        gapActiveRef.current = false
+        setSnapshot((s) => ({ ...s, currentSpec: spec2 }))
+      }, MILESTONE_FREEZE_MS)
+      return
+    }
+
+    // 通常時：次の問題をすぐ出し、判定表示はその上に短時間だけ重ねる（ゲームのテンポを止めない）
+    const nextSpec = buildNextQuestionSpec()
     setSnapshot((s) => ({
       ...s,
-      currentSpec: null,
+      currentSpec: nextSpec,
       combo: comboRef.current,
       lastJudgement: tier,
-      judgementKey: judgementKeyRef.current,
+      judgementKey,
       comboBrokenFrom,
     }))
 
-    const gapMs = crossingHundred ? 650 : GAP_MS
-    if (nextQuestionTimerRef.current) clearTimeout(nextQuestionTimerRef.current)
-    nextQuestionTimerRef.current = setTimeout(spawnNextQuestion, gapMs)
+    if (overlayHideTimerRef.current) clearTimeout(overlayHideTimerRef.current)
+    overlayHideTimerRef.current = setTimeout(() => {
+      setSnapshot((s) => (s.judgementKey === judgementKey ? { ...s, lastJudgement: null } : s))
+    }, JUDGEMENT_OVERLAY_MS)
   }
 
   function finishGame() {
@@ -239,9 +276,11 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     endedRef.current = true
     currentSpecRef.current = null
     if (nextQuestionTimerRef.current) clearTimeout(nextQuestionTimerRef.current)
+    if (overlayHideTimerRef.current) clearTimeout(overlayHideTimerRef.current)
     const eligibility = currentEligibility()
-    const rawPercent = rawScoreToPercent(rawScoreRef.current)
-    const finalPercent = Math.max(0, Math.round(Math.min(eligibility.eligible ? OVERDRIVE_CONFIG.maxPercent : 100, rawPercent)))
+    const rawPercent = currentAvgPercent()
+    const cap = eligibility.eligible ? OVERDRIVE_CONFIG.maxPercent : getAccuracyCap(currentAccuracy())
+    const finalPercent = Math.max(0, Math.round(Math.min(cap, rawPercent)))
     onFinish({
       rawPercent,
       finalPercent,
@@ -264,7 +303,8 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         if (remaining <= 0) {
           startTimeRef.current = now
           gapActiveRef.current = false
-          spawnNextQuestion()
+          const spec = buildNextQuestionSpec()
+          setSnapshot((s) => ({ ...s, currentSpec: spec }))
         }
         raf = requestAnimationFrame(tick)
         return
@@ -315,6 +355,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     return () => {
       cancelAnimationFrame(raf)
       if (nextQuestionTimerRef.current) clearTimeout(nextQuestionTimerRef.current)
+      if (overlayHideTimerRef.current) clearTimeout(overlayHideTimerRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
