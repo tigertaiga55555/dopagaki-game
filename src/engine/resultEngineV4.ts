@@ -18,6 +18,11 @@ const SPEED_TYPES = new Set<QuestionTypeId>([
   'skipWait',
   'spotChange',
   'clearNotifications',
+  'sequenceTap',
+  'findTarget',
+  'flashSpot',
+  'colorWord',
+  'notifRush',
 ])
 
 function computeSpeedStats(stats: PlayStats): { avgRatio: number; avgMs: number; count: number } {
@@ -119,6 +124,32 @@ function buildCrimeRecords(stats: PlayStats): string[] {
   if (stats.notificationClearSamples.length > 0) {
     const fastest = stats.notificationClearSamples.reduce((a, b) => (b.ms < a.ms ? b : a))
     candidates.push({ text: `赤い通知${fastest.count}個を${(fastest.ms / 1000).toFixed(2)}秒で全消し`, weight: 25 })
+  }
+  if (stats.sequenceTapSamples.length > 0) {
+    const fastest = stats.sequenceTapSamples.reduce((a, b) => (b.ms < a.ms ? b : a))
+    candidates.push({ text: `1→4を${(fastest.ms / 1000).toFixed(2)}秒で処理`, weight: 25 })
+  }
+  if (stats.findTargetSamples.length > 0) {
+    const fastest = stats.findTargetSamples.reduce((a, b) => (b.ms < a.ms ? b : a))
+    candidates.push({ text: `${fastest.icon}を${(fastest.ms / 1000).toFixed(2)}秒で発見`, weight: 25 })
+  }
+  if (stats.releaseZoneOverMs.length > 0) {
+    const worst = Math.max(...stats.releaseZoneOverMs)
+    candidates.push({ text: `緑ゾーンを${worst}msオーバー`, weight: 25 })
+  }
+  if (stats.shortVideoSamples.length > 0) {
+    const fastest = stats.shortVideoSamples.reduce((a, b) => (b.ms < a.ms ? b : a))
+    candidates.push({ text: `ショート動画3本を${(fastest.ms / 1000).toFixed(2)}秒でスキップ`, weight: 25 })
+  }
+  if (stats.colorWordFooledCount > 0) {
+    candidates.push({ text: `文字の色に${stats.colorWordFooledCount}回騙されました`, weight: 45 + stats.colorWordFooledCount * 6 })
+  }
+  if (stats.notifRushSamples.length > 0) {
+    const fastest = stats.notifRushSamples.reduce((a, b) => (b.ms < a.ms ? b : a))
+    candidates.push({ text: `通知${fastest.count}個を${(fastest.ms / 1000).toFixed(2)}秒で全消し`, weight: 25 })
+  }
+  if (stats.rapidStopRedTaps > 0) {
+    candidates.push({ text: `STOP中に${stats.rapidStopRedTaps}回押しました`, weight: 55 + stats.rapidStopRedTaps * 6 })
   }
 
   candidates.sort((a, b) => b.weight - a.weight)

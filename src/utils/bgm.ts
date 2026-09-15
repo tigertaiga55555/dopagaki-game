@@ -23,7 +23,9 @@ let schedulerTimer: ReturnType<typeof setInterval> | null = null
 let nextNoteTime = 0
 let stepIndex = 0
 let stageRef = 0
-let comboLevelRef = 0
+/** 現在のCOMBO数（生値）。5/10/15/20/25の節目で段階的にレイヤーを追加する（Ver.4.5）。
+ *  MISSでcomboRefが0に戻ると、この値も次のtickで即座に0へ戻り、追加レイヤーも自動的に消える。 */
+let comboCountRef = 0
 let overdriveMode = false
 let noiseBuffer: AudioBuffer | null = null
 
@@ -163,6 +165,74 @@ function playShimmer(time: number, intensity: number) {
   }
 }
 
+/** COMBO5〜：軽い追加シンセ */
+function playComboSynth(time: number) {
+  const ctx = getAudioContext()
+  const out = getBgmGain()
+  if (!ctx || !out) return
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = 'sine'
+  osc.frequency.value = 660
+  gain.gain.setValueAtTime(0.001, time)
+  gain.gain.linearRampToValueAtTime(0.03, time + 0.03)
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.16)
+  osc.connect(gain)
+  gain.connect(out)
+  osc.start(time)
+  osc.stop(time + 0.18)
+  osc.onended = () => {
+    osc.disconnect()
+    gain.disconnect()
+  }
+}
+
+/** COMBO10〜：低音アクセント */
+function playComboBassAccent(time: number) {
+  const ctx = getAudioContext()
+  const out = getBgmGain()
+  if (!ctx || !out) return
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = 'triangle'
+  osc.frequency.setValueAtTime(90, time)
+  osc.frequency.exponentialRampToValueAtTime(50, time + 0.1)
+  gain.gain.setValueAtTime(0.1, time)
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.14)
+  osc.connect(gain)
+  gain.connect(out)
+  osc.start(time)
+  osc.stop(time + 0.16)
+  osc.onended = () => {
+    osc.disconnect()
+    gain.disconnect()
+  }
+}
+
+/** COMBO15〜：高音アルペジオ（3音の駆け上がり） */
+function playComboArpeggio(time: number) {
+  const ctx = getAudioContext()
+  const out = getBgmGain()
+  if (!ctx || !out) return
+  ;[1320, 1568, 1760].forEach((freq, i) => {
+    const t = time + i * 0.06
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'triangle'
+    osc.frequency.value = freq
+    gain.gain.setValueAtTime(0.035, t)
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1)
+    osc.connect(gain)
+    gain.connect(out)
+    osc.start(t)
+    osc.stop(t + 0.12)
+    osc.onended = () => {
+      osc.disconnect()
+      gain.disconnect()
+    }
+  })
+}
+
 function playOverdriveStab(time: number) {
   const ctx = getAudioContext()
   const out = getBgmGain()
@@ -231,10 +301,26 @@ function scheduleStep(step: number, time: number) {
   if (stage >= 3 && step % STEPS_PER_BAR === STEPS_PER_BAR - 1) {
     playPerc(time)
   }
-  // COMBOによるきらめき：高COMBO時にオフビートで追加
-  if (comboLevelRef > 0.5 && sub === 2 && beat % 2 === 1) {
-    playShimmer(time, comboLevelRef)
+
+  // Ver.4.5: COMBOの節目ごとに段階的にレイヤーを積む。MISSでcomboCountRefが0に戻れば
+  // 次のtickから自動的にすべて消える（正解を積み直すとまた戻ってくる）。
+  const combo = comboCountRef
+  if (combo >= 5 && step % 8 === 4) {
+    playComboSynth(time)
   }
+  if (combo >= 10 && sub === 0 && beat === 1) {
+    playComboBassAccent(time)
+  }
+  if (combo >= 15 && step % STEPS_PER_BAR === 8) {
+    playComboArpeggio(time)
+  }
+  if (combo >= 20 && sub === 2) {
+    playPerc(time)
+  }
+  if (combo >= 25 && sub === 2 && beat % 2 === 1) {
+    playShimmer(time, Math.min(1, combo / 30))
+  }
+
   // OVERDRIVE：拍頭に高音シンセを重ねる
   if (overdriveMode && sub === 0) {
     playOverdriveStab(time)
@@ -258,7 +344,7 @@ export function startBgm() {
   running = true
   overdriveMode = false
   stageRef = 0
-  comboLevelRef = 0
+  comboCountRef = 0
   stepIndex = 0
   nextNoteTime = ctx.currentTime + 0.08
   schedulerTimer = setInterval(scheduler, SCHEDULER_INTERVAL_MS)
@@ -273,12 +359,41 @@ export function stopBgm() {
   }
 }
 
-/** stage: 0〜5（フェーズ番号と対応）。comboLevel: 0〜1（COMBOに応じた演出強度）。 */
-export function setBgmProgress(stage: number, comboLevel: number) {
+/** stage: 0〜5（フェーズ番号と対応）。comboCount: 現在のCOMBO数（生値、5/10/15/20/25の節目でレイヤー追加）。 */
+export function setBgmProgress(stage: number, comboCount: number) {
   stageRef = stage
-  comboLevelRef = Math.max(0, Math.min(1, comboLevel))
+  comboCountRef = Math.max(0, comboCount)
 }
 
 export function setOverdriveMode(active: boolean) {
   overdriveMode = active
+}
+
+/**
+ * Ver.4.5: 残り20秒付近から薄いライザー／上昇音を足し、「終盤に向かっている」感触を
+ * プレイヤーが明確に意識しなくても伝える。FINAL DOPA RUSH本編のsirenとは別の、
+ * もっと控えめなレイヤー。
+ */
+export function playLateGameSweetener(): void {
+  if (isMuted()) return
+  const ctx = getAudioContext()
+  const out = getBgmGain()
+  if (!ctx || !out) return
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = 'sine'
+  const now = ctx.currentTime
+  osc.frequency.setValueAtTime(500, now)
+  osc.frequency.linearRampToValueAtTime(900, now + 1.2)
+  gain.gain.setValueAtTime(0.001, now)
+  gain.gain.linearRampToValueAtTime(0.025, now + 0.6)
+  gain.gain.linearRampToValueAtTime(0.001, now + 1.3)
+  osc.connect(gain)
+  gain.connect(out)
+  osc.start(now)
+  osc.stop(now + 1.35)
+  osc.onended = () => {
+    osc.disconnect()
+    gain.disconnect()
+  }
 }

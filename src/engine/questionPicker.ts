@@ -21,10 +21,20 @@ function filterByCategoryStreak(pool: QuestionTypeId[], recentTypes: QuestionTyp
   return filtered.length > 0 ? filtered : pool
 }
 
+/**
+ * Ver.4.5: 直前1問だけでなく、直近数問のタイプもゆるく避ける（完全禁止ではなく、
+ * 候補が尽きたら通常のプールへフォールバックする程度の抑制）。単調な繰り返しを防ぐのが目的。
+ */
+function filterByRecentTypes(pool: QuestionTypeId[], recentTypes: QuestionTypeId[]): QuestionTypeId[] {
+  if (recentTypes.length === 0) return pool
+  const recentSet = new Set(recentTypes)
+  const filtered = pool.filter((t) => !recentSet.has(t))
+  return filtered.length > 0 ? filtered : pool
+}
+
 export function generateNextQuestion(phase: DifficultyPhase, recentTypes: QuestionTypeId[]): QuestionSpec {
   const lastType = recentTypes[0]
-  const withoutImmediateRepeat = lastType !== undefined ? phase.pool.filter((t) => t !== lastType) : phase.pool
-  const candidatePool = withoutImmediateRepeat.length > 0 ? withoutImmediateRepeat : phase.pool
+  const candidatePool = filterByRecentTypes(phase.pool, recentTypes)
   const finalPool = filterByCategoryStreak(candidatePool, recentTypes)
 
   const type = finalPool.length > 0 ? pick(finalPool) : pickExcluding(phase.pool, lastType)

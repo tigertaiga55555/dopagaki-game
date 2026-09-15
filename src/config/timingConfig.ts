@@ -45,9 +45,9 @@ export const TIMING_SAFETY = {
     minReactionWindowMs: 650,
     safetyMarginMs: 150,
   },
+  /** Ver.4.5: 信号連打（緑→赤→緑→赤の4フェーズ）。実際の所要時間はdataのphases合計そのものなので、
+   *  ここでは安全マージンのみ持つ。 */
   rapidStop: {
-    /** 停止確認（「止まれ！」後、追加タップなしを確認する時間） */
-    stopHoldMs: 700,
     safetyMarginMs: 200,
   },
   stopAt100: {
@@ -67,6 +67,36 @@ export const TIMING_SAFETY = {
   /** 高速仕分け（Ver.4.3で復活）：見て仕分けて指を動かし切るまでの最低時間 */
   foodSort: {
     minTimeMs: 700,
+  },
+  /** Ver.4.5で追加した新お題の最低制限時間ルール */
+  sequenceTap: {
+    /** 1〜4の各数字を探してタップするのに現実的に必要な時間 */
+    perNumberMs: 260,
+    reactionBufferMs: 350,
+  },
+  findTarget: {
+    minTimeMs: 900,
+  },
+  releaseZone: {
+    /** 押してからゲージが動き出すまでに見込む反応時間 */
+    reactionBufferMs: 350,
+    safetyMarginMs: 200,
+  },
+  shortVideoSwipe: {
+    perSwipeMs: 480,
+    reactionBufferMs: 300,
+  },
+  colorWord: {
+    minTimeMs: 900,
+  },
+  flashSpot: {
+    minReactionWindowMs: 500,
+    safetyMarginMs: 150,
+  },
+  notifRush: {
+    /** 赤1個あたり、出現待ち～発見～タップを現実的に見込む時間（スポーン間隔のブレを吸収する余裕込み） */
+    perRedMs: 520,
+    reactionBufferMs: 500,
   },
   /** どの問題タイプにも適用する絶対最小値（暴走防止の安全弁） */
   absoluteFloorMs: 450,

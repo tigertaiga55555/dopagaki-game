@@ -25,17 +25,26 @@ export type QuestionTypeId =
   | 'clearNotifications'
   | 'spotChange'
   | 'foodSort'
+  | 'sequenceTap'
+  | 'findTarget'
+  | 'releaseZone'
+  | 'shortVideoSwipe'
+  | 'colorWord'
+  | 'flashSpot'
+  | 'notifRush'
 
 /**
- * お題のカテゴリ（Ver.4.2）。同じカテゴリの出題が連続しすぎないよう
+ * お題のカテゴリ（Ver.4.2、Ver.4.5で拡張）。同じカテゴリの出題が連続しすぎないよう
  * questionPickerで参照する。
  * - reaction: 認知・反応系（見て即座に選ぶ）
  * - rapid: 高速入力系（連打）
  * - inhibition: 止まる・待つ系（衝動を抑える）
  * - visual: 視覚探索系（探して見つける）
  * - timing: タイミング系（狙った瞬間を当てる）
+ * - sorting: 仕分け・選別系（対象だけを選び分ける）
+ * - memory: 記憶・順序系（順番や位置を覚えて処理する）
  */
-export type QuestionCategory = 'reaction' | 'rapid' | 'inhibition' | 'visual' | 'timing'
+export type QuestionCategory = 'reaction' | 'rapid' | 'inhibition' | 'visual' | 'timing' | 'sorting' | 'memory'
 
 export type DifficultyPhaseId = 'warmup' | 'ramp' | 'fake' | 'boost' | 'overload' | 'finalRush'
 
@@ -72,6 +81,14 @@ export interface QuestionResult {
     /** 「通知を消せ」で消せた対象数と対象総数 */
     targetsCleared?: number
     targetsTotal?: number
+    /** Ver.4.5: 信号連打で赤フェーズ中にタップしてしまった */
+    redPhaseTap?: boolean
+    /** Ver.4.5: 1→4などの順序お題で、順番を間違えた */
+    wrongOrder?: boolean
+    /** Ver.4.5: 緑で離せで、ゾーンを外れた向き（1=通り過ぎ、-1=早すぎ）とオーバー量(ms) */
+    releaseOffsetMs?: number
+    /** Ver.4.5: 文字の色で、文字の意味の色を選んでしまった（騙された） */
+    fooledByWord?: boolean
   }
 }
 
@@ -127,6 +144,20 @@ export interface PlayStats {
   stopAt100Samples: { stopped: number; diff: number }[]
   /** 「通知を消せ」の記録（直近10件まで保持） */
   notificationClearSamples: { count: number; ms: number }[]
+  /** Ver.4.5: 信号連打の赤フェーズ中に誤タップした回数の合計 */
+  rapidStopRedTaps: number
+  /** Ver.4.5: 「1→4」を正しく処理できた際の所要時間（直近10件） */
+  sequenceTapSamples: { ms: number }[]
+  /** Ver.4.5: 「ターゲットを探せ」で正解を発見した際の反応時間（直近10件、アイコン付き） */
+  findTargetSamples: { icon: string; ms: number }[]
+  /** Ver.4.5: 「緑で離せ」でゾーンを外した量（ms、通り過ぎ側のみ、直近10件） */
+  releaseZoneOverMs: number[]
+  /** Ver.4.5: 「ショート動画」3本を飛ばすのにかかった時間（直近10件） */
+  shortVideoSamples: { ms: number }[]
+  /** Ver.4.5: 「文字の色」で文字の意味の色を選んで騙された回数 */
+  colorWordFooledCount: number
+  /** Ver.4.5: 「通知ラッシュ」で規定数の赤を消すのにかかった時間（直近10件） */
+  notifRushSamples: { count: number; ms: number }[]
 }
 
 export interface FinalResultV4 {

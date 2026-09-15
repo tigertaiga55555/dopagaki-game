@@ -70,6 +70,23 @@ function comboMilestone(level: 1 | 2 | 3 | 4 | 5) {
   if (level >= 4) setTimeout(() => beep(base * 2, 140, 'sine', 0.1), 150)
 }
 
+/**
+ * Ver.4.5: 連続正解時の判定SE。comboが伸びるほど音程が少しずつ上がっていく簡単な音階。
+ * 耳障りにならないよう、上限で頭打ちにして高音になりすぎないようにする。
+ */
+function comboPitchedTier(tier: 'PERFECT' | 'GREAT' | 'GOOD', combo: number) {
+  const step = Math.min(combo, 12)
+  const pitchMul = 1 + step * 0.025
+  if (tier === 'PERFECT') {
+    beep(1200 * pitchMul, 100, 'sine', 0.12)
+    setTimeout(() => beep(1600 * pitchMul, 100, 'sine', 0.1), 60)
+  } else if (tier === 'GREAT') {
+    beep(950 * pitchMul, 90, 'sine', 0.1)
+  } else {
+    beep(760 * pitchMul, 80, 'sine', 0.08)
+  }
+}
+
 export const sfx = {
   tap: () => beep(600, 50, 'square', 0.05),
   perfect: () => {
@@ -89,9 +106,22 @@ export const sfx = {
     beep(520, 90, 'square', 0.08)
     setTimeout(() => beep(700, 110, 'square', 0.08), 100)
   },
+  /** Ver.4.5: 残り5秒で一度だけ鳴らす、サイレンとは別レイヤーの警告ビープ */
+  finalWarningBeep: () => {
+    beep(1400, 90, 'square', 0.12)
+    setTimeout(() => beep(1400, 90, 'square', 0.12), 160)
+  },
+  /** Ver.4.5: 残り3・2・1の画面カウントに合わせて鳴らす強めのカウント音 */
+  countdownBeep: (value: number) => {
+    const freq = value <= 1 ? 2000 : value === 2 ? 1700 : 1450
+    beep(freq, 140, 'square', 0.18)
+  },
   hundred: () => {
+    // Ver.4.5: 60秒で一番気持ちいい瞬間にするため、爆発後にもう一段華やかなきらめきを重ねる
     beep(1400, 160, 'sine', 0.14)
     setTimeout(() => beep(1900, 240, 'sine', 0.14), 140)
+    setTimeout(() => beep(2400, 200, 'sine', 0.1), 260)
+    setTimeout(() => beep(3000, 260, 'triangle', 0.08), 340)
   },
   overdrive: () => {
     beep(2100, 100, 'sawtooth', 0.16)
@@ -121,4 +151,18 @@ export const sfx = {
   holdComplete: () => beep(1700, 90, 'sine', 0.13),
   /** 連続正解の節目（5/10/15/20/25） */
   comboMilestone,
+  /** 連続正解時の判定音（音程がcomboに応じて少しずつ上がる） */
+  comboPitchedTier,
+  /** Ver.4.5「1→4」：タップごとに音程が上がる */
+  sequenceTap: (value: number) => beep(700 + value * 130, 55, 'square', 0.07),
+  /** Ver.4.5「ターゲットを探せ」：発見時の短い音 */
+  targetFound: () => beep(1300, 60, 'sine', 0.09),
+  /** Ver.4.5「緑で離せ」：ゾーン内で離せた瞬間の成功音 */
+  zoneRelease: () => beep(1500, 100, 'sine', 0.12),
+  /** Ver.4.5「文字の色」：正答時の短い認知正解音 */
+  colorWordHit: () => beep(1050, 65, 'triangle', 0.08),
+  /** Ver.4.5「光ったやつ」：発光時の軽いキラッ */
+  flashTick: () => beep(1900, 45, 'sine', 0.05),
+  /** Ver.4.5「通知ラッシュ」：バッジ出現音（ごく軽く） */
+  notifSpawn: () => beep(650, 20, 'sine', 0.02),
 }

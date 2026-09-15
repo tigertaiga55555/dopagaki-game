@@ -303,3 +303,31 @@ body {
     0 0 55px rgba(250, 204, 21, 0.6),
     0 0 110px rgba(236, 72, 153, 0.5);
 }
+
+/* Ver.4.5: 信号連打。色の切り替え自体を文章より強く見せるための発光とパルス */
+@keyframes signal-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.signal-pulse {
+  animation: signal-pulse 0.5s ease-in-out infinite;
+}
+
+.signal-green-glow {
+  box-shadow:
+    0 0 30px rgba(16, 185, 129, 0.85),
+    0 0 60px rgba(16, 185, 129, 0.45);
+}
+
+.signal-red-glow {
+  box-shadow:
+    0 0 35px rgba(239, 68, 68, 0.95),
+    0 0 70px rgba(239, 68, 68, 0.55);
+}
+

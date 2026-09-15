@@ -32,6 +32,7 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
     // Ver.4.2: GOまで押すな／100で止めろ／通知を消せ／変わったやつ、をここから解禁
     // Ver.4.3: 方向のみのswipeは初見で操作方法が伝わりづらいためプールから除外し、
     // 「← 食べ物  それ以外 →」の高速仕分け(foodSort)に置き換えた
+    // Ver.4.5: 1→4／ターゲット探し／光ったやつ、をここから解禁
     pool: [
       'color',
       'maxNumber',
@@ -44,6 +45,9 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'stopAt100',
       'clearNotifications',
       'spotChange',
+      'sequenceTap',
+      'findTarget',
+      'flashSpot',
     ],
     visualLevel: 1,
   },
@@ -54,6 +58,7 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
     endSec: 30,
     speedMultiplier: 0.9,
     // Ver.4.2: SKIP待ち／連打→急停止、をここから解禁
+    // Ver.4.5: 文字の色／ショート動画／緑で離せ、をここから解禁（信号連打は新仕様のままここで継続登場）
     pool: [
       'color',
       'maxNumber',
@@ -69,6 +74,12 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'spotChange',
       'skipWait',
       'rapidStop',
+      'sequenceTap',
+      'findTarget',
+      'flashSpot',
+      'colorWord',
+      'shortVideoSwipe',
+      'releaseZone',
     ],
     visualLevel: 2,
   },
@@ -79,6 +90,7 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
     endSec: 40,
     speedMultiplier: 0.78,
     // Ver.4.2: ここから全問題タイプを対象に幅広く出題
+    // Ver.4.5: 通知ラッシュをここから解禁（新お題は全種類がここで出揃う）
     pool: [
       'color',
       'maxNumber',
@@ -97,6 +109,13 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'stopAt100',
       'clearNotifications',
       'spotChange',
+      'sequenceTap',
+      'findTarget',
+      'flashSpot',
+      'colorWord',
+      'shortVideoSwipe',
+      'releaseZone',
+      'notifRush',
     ],
     visualLevel: 3,
   },
@@ -126,6 +145,13 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'stopAt100',
       'clearNotifications',
       'spotChange',
+      'sequenceTap',
+      'findTarget',
+      'flashSpot',
+      'colorWord',
+      'shortVideoSwipe',
+      'releaseZone',
+      'notifRush',
     ],
     visualLevel: 4,
   },
@@ -137,6 +163,7 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
     speedMultiplier: 0.58,
     // Ver.4.2: 新問題も含め全タイプから高速出題。ただし各問題のcomputeMinTargetTimeMsにより
     // 「速すぎて物理的にクリア不能」にはならない
+    // Ver.4.5: 新お題7種もここから全て対象（同様にcomputeMinTargetTimeMsで物理的な最低時間を保証）
     pool: [
       'color',
       'oddOneOut',
@@ -157,6 +184,13 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'stopAt100',
       'clearNotifications',
       'spotChange',
+      'sequenceTap',
+      'findTarget',
+      'flashSpot',
+      'colorWord',
+      'shortVideoSwipe',
+      'releaseZone',
+      'notifRush',
     ],
     visualLevel: 5,
   },

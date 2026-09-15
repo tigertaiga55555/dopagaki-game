@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { COUNTDOWN_START_SEC, DIFFICULTY_PHASES, FINAL_RUSH_START_SEC, TOTAL_GAME_SEC, getPhaseAt } from '../config/difficultyConfig'
 import { OVERDRIVE_CONFIG, evaluateOverdriveEligibility } from '../config/overdriveConfig'
 import { SCORE_CONFIG, getAccuracyCap, judgeByRatio } from '../config/scoreConfigV4'
+import { setCurrentStageIndex } from './difficultyStage'
 import { generateNextQuestion } from './questionPicker'
 import { duckAudio } from '../utils/audioContext'
-import { playRiser, setBgmProgress, setOverdriveMode, startBgm, stopBgm } from '../utils/bgm'
+import { playLateGameSweetener, playRiser, setBgmProgress, setOverdriveMode, startBgm, stopBgm } from '../utils/bgm'
 import { sfx } from '../utils/sound'
 import type { DifficultyPhaseId, Judgement, PlayStats, QuestionResult, QuestionSpec, QuestionTypeId } from '../types'
 
@@ -27,11 +28,15 @@ const RISER_LEAD_SEC = 2
 /**
  * 反応速度をベースにした比率算出から除外する問題タイプ（「速さ」の概念が当てはまらないため）。
  * repeatTap/rapidStopはratioWindowMsで公平な反応比率を計算できるためここには含めない。
+ * Ver.4.5: releaseZoneも「タイミングの正確さ」でratioWindowMsを使うため除外はしない。
  */
 const NON_SPEED_TYPES = new Set<QuestionTypeId>(['holdPress', 'noPress', 'stopAt100'])
 
-/** 直近何問分のタイプを覚えておくか（questionPickerのカテゴリ連続回避に使う） */
-const RECENT_TYPES_LENGTH = 2
+/** Ver.4.5: 残り20秒からBGMに薄いライザーを足すタイミング（残り秒） */
+const LATE_GAME_SWEETENER_SEC = 20
+
+/** 直近何問分のタイプを覚えておくか（questionPickerのカテゴリ連続回避・直近タイプ回避に使う） */
+const RECENT_TYPES_LENGTH = 3
 
 function comboVisualBonus(combo: number): number {
   if (combo >= 20) return 3
@@ -98,6 +103,13 @@ function createStats(): PlayStats {
     overPressCount: 0,
     stopAt100Samples: [],
     notificationClearSamples: [],
+    rapidStopRedTaps: 0,
+    sequenceTapSamples: [],
+    findTargetSamples: [],
+    releaseZoneOverMs: [],
+    shortVideoSamples: [],
+    colorWordFooledCount: 0,
+    notifRushSamples: [],
   }
 }
 
@@ -158,6 +170,9 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
   const comboMilestoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const riserFiredRef = useRef(false)
   const bgmStartedRef = useRef(false)
+  const lateGameSweetenerFiredRef = useRef(false)
+  const warningBeep5sFiredRef = useRef(false)
+  const lastCountdownValueRef = useRef<number | null>(null)
 
   // グローバルなタップ監視：先走り操作・1秒間の最大タップ数を記録する
   useEffect(() => {
@@ -268,8 +283,32 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
       if (stats.stopAt100Samples.length > SAMPLE_LOG_CAP) stats.stopAt100Samples.shift()
     }
     if (tier !== 'MISS' && result.meta?.targetsCleared !== undefined) {
-      stats.notificationClearSamples.push({ count: result.meta.targetsCleared, ms: result.reactionMs })
-      if (stats.notificationClearSamples.length > SAMPLE_LOG_CAP) stats.notificationClearSamples.shift()
+      if (spec.type === 'notifRush') {
+        stats.notifRushSamples.push({ count: result.meta.targetsCleared, ms: result.reactionMs })
+        if (stats.notifRushSamples.length > SAMPLE_LOG_CAP) stats.notifRushSamples.shift()
+      } else {
+        stats.notificationClearSamples.push({ count: result.meta.targetsCleared, ms: result.reactionMs })
+        if (stats.notificationClearSamples.length > SAMPLE_LOG_CAP) stats.notificationClearSamples.shift()
+      }
+    }
+    if (result.meta?.redPhaseTap) stats.rapidStopRedTaps += 1
+    if (result.meta?.fooledByWord) stats.colorWordFooledCount += 1
+    if (result.meta?.releaseOffsetMs !== undefined && result.meta.releaseOffsetMs > 0) {
+      stats.releaseZoneOverMs.push(result.meta.releaseOffsetMs)
+      if (stats.releaseZoneOverMs.length > SAMPLE_LOG_CAP) stats.releaseZoneOverMs.shift()
+    }
+    if (tier !== 'MISS' && spec.type === 'sequenceTap') {
+      stats.sequenceTapSamples.push({ ms: result.reactionMs })
+      if (stats.sequenceTapSamples.length > SAMPLE_LOG_CAP) stats.sequenceTapSamples.shift()
+    }
+    if (tier !== 'MISS' && spec.type === 'findTarget') {
+      const icon = (spec.data as { target?: string }).target ?? '🔥'
+      stats.findTargetSamples.push({ icon, ms: result.reactionMs })
+      if (stats.findTargetSamples.length > SAMPLE_LOG_CAP) stats.findTargetSamples.shift()
+    }
+    if (tier !== 'MISS' && spec.type === 'shortVideoSwipe') {
+      stats.shortVideoSamples.push({ ms: result.reactionMs })
+      if (stats.shortVideoSamples.length > SAMPLE_LOG_CAP) stats.shortVideoSamples.shift()
     }
 
     const typeEntry = stats.typeStats[spec.type] ?? { correct: 0, total: 0 }
@@ -306,11 +345,12 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
       maxComboRef.current = Math.max(maxComboRef.current, comboRef.current)
       stats.maxCombo = maxComboRef.current
       if (comboRef.current > 1) sfx.comboUp()
-      if (tier === 'PERFECT') {
-        if (spec.type === 'stopAt100') sfx.stopAt100(true)
-        else sfx.perfect()
-      } else if (tier === 'GREAT') sfx.great()
-      else sfx.good()
+      if (tier === 'PERFECT' && spec.type === 'stopAt100') {
+        sfx.stopAt100(true)
+      } else {
+        // Ver.4.5: 連続正解が伸びるほど判定音の音程が少しずつ上がる
+        sfx.comboPitchedTier(tier, comboRef.current)
+      }
 
       if (COMBO_MILESTONES.includes(comboRef.current)) {
         sfx.comboMilestone(comboMilestoneLevel(comboRef.current))
@@ -438,8 +478,22 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         const bucket = Math.floor(remainingSec)
         if (bucket <= 10 && !alarmedSecondsRef.current.has(bucket)) {
           alarmedSecondsRef.current.add(bucket)
-          if (bucket % 2 === 0 || bucket <= 3) sfx.finalRushAlarm()
+          // Ver.4.5: 残り5秒台で警告ビープを一度追加し、通常のサイレンより緊迫感を強める
+          if (bucket % 2 === 0 || bucket <= 5) sfx.finalRushAlarm()
         }
+        if (!warningBeep5sFiredRef.current && remainingSec <= 5) {
+          warningBeep5sFiredRef.current = true
+          sfx.finalWarningBeep()
+        }
+      }
+      if (countdownValue !== null && countdownValue !== lastCountdownValueRef.current && countdownValue <= 3) {
+        lastCountdownValueRef.current = countdownValue
+        sfx.countdownBeep(countdownValue)
+      }
+      // Ver.4.5: 残り20秒付近から薄いライザーを一度だけ足し、終盤への予感を演出する
+      if (!lateGameSweetenerFiredRef.current && remainingSec <= LATE_GAME_SWEETENER_SEC) {
+        lateGameSweetenerFiredRef.current = true
+        playLateGameSweetener()
       }
       if (!riserFiredRef.current && remainingSec <= TOTAL_GAME_SEC - FINAL_RUSH_START_SEC + RISER_LEAD_SEC) {
         riserFiredRef.current = true
@@ -447,8 +501,8 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
       }
 
       const stageIndex = DIFFICULTY_PHASES.findIndex((p) => p.id === phase.id)
-      const comboLevel = Math.min(1, comboRef.current / 15)
-      setBgmProgress(stageIndex < 0 ? 0 : stageIndex, comboLevel)
+      setCurrentStageIndex(stageIndex < 0 ? 0 : stageIndex)
+      setBgmProgress(stageIndex < 0 ? 0 : stageIndex, comboRef.current)
 
       const tween = percentTweenRef.current
       const tweenElapsed = now - tween.startedAt
