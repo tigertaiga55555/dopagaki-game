@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { pick } from '../engine/random'
+import { sfx } from '../utils/sound'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
 const FOOD_ICONS = ['🍎', '🍌', '🍇', '🍕', '🍔', '🍣', '🍩', '🍞']
@@ -51,7 +52,9 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     setDragX(0)
     if (Math.abs(dx) < SWIPE_THRESHOLD_PX) return
     const wentLeft = dx < 0
-    finish(wentLeft === isFood)
+    const correct = wentLeft === isFood
+    if (correct) sfx.swipeSuccess()
+    finish(correct)
   }
 
   return (

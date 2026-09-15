@@ -95,6 +95,23 @@ body {
   }
 }
 
+/* Ver.4.4: 大きいCOMBOを切った瞬間の「怯み」演出（画面が一瞬暗転する） */
+@keyframes flash-dark {
+  0% {
+    background-color: rgba(0, 0, 0, 0);
+  }
+  30% {
+    background-color: rgba(0, 0, 0, 0.75);
+  }
+  100% {
+    background-color: rgba(0, 0, 0, 0);
+  }
+}
+
+.flash-dark-overlay {
+  animation: flash-dark 0.22s ease-out;
+}
+
 @keyframes pop-in {
   0% {
     opacity: 0;

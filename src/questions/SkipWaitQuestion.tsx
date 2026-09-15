@@ -58,6 +58,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
       finish(false, true)
       return
     }
+    sfx.skipHit()
     finish(true)
   }
 

@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { COUNTDOWN_START_SEC, FINAL_RUSH_START_SEC, TOTAL_GAME_SEC, getPhaseAt } from '../config/difficultyConfig'
+import { COUNTDOWN_START_SEC, DIFFICULTY_PHASES, FINAL_RUSH_START_SEC, TOTAL_GAME_SEC, getPhaseAt } from '../config/difficultyConfig'
 import { OVERDRIVE_CONFIG, evaluateOverdriveEligibility } from '../config/overdriveConfig'
 import { SCORE_CONFIG, getAccuracyCap, judgeByRatio } from '../config/scoreConfigV4'
 import { generateNextQuestion } from './questionPicker'
+import { duckAudio } from '../utils/audioContext'
+import { playRiser, setBgmProgress, setOverdriveMode, startBgm, stopBgm } from '../utils/bgm'
 import { sfx } from '../utils/sound'
 import type { DifficultyPhaseId, Judgement, PlayStats, QuestionResult, QuestionSpec, QuestionTypeId } from '../types'
 
@@ -11,6 +13,16 @@ const PRE_COUNTDOWN_MS = 1800
 const MILESTONE_FREEZE_MS = 650
 /** PERFECT/GREAT/GOOD/MISSのオーバーレイ表示時間。次の問題の上に重ねるだけでゲーム進行は止めない。 */
 const JUDGEMENT_OVERLAY_MS = 380
+/** 100%到達時、BGM/SEを静める→バースト演出までの静寂の長さ */
+const HUNDRED_SILENCE_MS = 300
+/** 大きいCOMBOを切った瞬間の「怯み」演出（画面暗転・BGMダック）の長さ */
+const COMBO_BREAK_FLINCH_MS = 200
+/** COMBO BREAK演出の文言を強めに出す最低COMBO数 */
+const BIG_COMBO_BREAK_THRESHOLD = 10
+/** 連続正解の節目。値ごとの演出レベルは comboVisualBonus / comboMilestoneLevel で決める */
+const COMBO_MILESTONES: number[] = [5, 10, 15, 20, 25]
+/** FINAL DOPA RUSH突入前にライザーSEを鳴らすタイミング（残り秒） */
+const RISER_LEAD_SEC = 2
 
 /**
  * 反応速度をベースにした比率算出から除外する問題タイプ（「速さ」の概念が当てはまらないため）。
@@ -20,6 +32,22 @@ const NON_SPEED_TYPES = new Set<QuestionTypeId>(['holdPress', 'noPress', 'stopAt
 
 /** 直近何問分のタイプを覚えておくか（questionPickerのカテゴリ連続回避に使う） */
 const RECENT_TYPES_LENGTH = 2
+
+function comboVisualBonus(combo: number): number {
+  if (combo >= 20) return 3
+  if (combo >= 15) return 2
+  if (combo >= 10) return 1
+  if (combo >= 5) return 1
+  return 0
+}
+
+function comboMilestoneLevel(combo: number): 1 | 2 | 3 | 4 | 5 {
+  if (combo >= 25) return 5
+  if (combo >= 20) return 4
+  if (combo >= 15) return 3
+  if (combo >= 10) return 2
+  return 1
+}
 
 export interface RushSnapshot {
   phaseId: DifficultyPhaseId
@@ -35,9 +63,14 @@ export interface RushSnapshot {
   judgementKey: number
   /** MISSでCOMBOが切れた場合、切れる直前のCOMBO数（2以上のときだけCOMBO BREAK表示に使う） */
   comboBrokenFrom: number
+  /** comboBrokenFromが大きいときだけtrue。画面暗転など強めのCOMBO BREAK演出に使う */
+  comboBreakBig: boolean
   showHundredBurst: boolean
   showOverdriveBurst: boolean
   overdriveActive: boolean
+  /** 連続正解の節目（10/20など）で短時間だけ表示するバナー文言 */
+  comboMilestoneLabel: string | null
+  comboMilestoneKey: number
 }
 
 export interface RushFinishPayload {
@@ -88,9 +121,12 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     lastJudgement: null,
     judgementKey: 0,
     comboBrokenFrom: 0,
+    comboBreakBig: false,
     showHundredBurst: false,
     showOverdriveBurst: false,
     overdriveActive: false,
+    comboMilestoneLabel: null,
+    comboMilestoneKey: 0,
   })
 
   const preStartRef = useRef(performance.now())
@@ -118,6 +154,10 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
   const alarmedSecondsRef = useRef(new Set<number>())
   const nextQuestionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const overlayHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const comboMilestoneKeyRef = useRef(0)
+  const comboMilestoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const riserFiredRef = useRef(false)
+  const bgmStartedRef = useRef(false)
 
   // グローバルなタップ監視：先走り操作・1秒間の最大タップ数を記録する
   useEffect(() => {
@@ -172,13 +212,27 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
 
     if (crossingHundred) {
       hundredReachedRef.current = true
-      sfx.hundred()
-      setSnapshot((s) => ({ ...s, showHundredBurst: true }))
-      setTimeout(() => setSnapshot((s) => ({ ...s, showHundredBurst: false })), MILESTONE_FREEZE_MS)
-    }
-    if (crossingOverdrive) {
+      // 演出のクライマックス：騒がしいBGM/SEを一瞬静める→静寂の後にバースト音と演出を同時に出す
+      duckAudio(HUNDRED_SILENCE_MS, 1)
+      setTimeout(() => {
+        sfx.hundred()
+        if (crossingOverdrive) {
+          overdriveActiveRef.current = true
+          sfx.overdrive()
+          setOverdriveMode(true)
+        }
+        setSnapshot((s) => ({
+          ...s,
+          showHundredBurst: true,
+          showOverdriveBurst: crossingOverdrive,
+          overdriveActive: overdriveActiveRef.current,
+        }))
+        setTimeout(() => setSnapshot((s) => ({ ...s, showHundredBurst: false, showOverdriveBurst: false })), MILESTONE_FREEZE_MS)
+      }, HUNDRED_SILENCE_MS)
+    } else if (crossingOverdrive) {
       overdriveActiveRef.current = true
       sfx.overdrive()
+      setOverdriveMode(true)
       setSnapshot((s) => ({ ...s, showOverdriveBurst: true, overdriveActive: true }))
       setTimeout(() => setSnapshot((s) => ({ ...s, showOverdriveBurst: false })), MILESTONE_FREEZE_MS)
     }
@@ -224,6 +278,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     stats.typeStats[spec.type] = typeEntry
 
     let comboBrokenFrom = 0
+    let comboBreakBig = false
     if (tier === 'MISS') {
       stats.missCount += 1
       if (spec.type === 'noPress' && result.meta?.forbiddenTouch) stats.noPressFails += 1
@@ -231,8 +286,14 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         stats.comboLostToNoPress = Math.max(stats.comboLostToNoPress, comboRef.current)
       }
       if (comboRef.current >= 2) comboBrokenFrom = comboRef.current
+      if (comboRef.current >= BIG_COMBO_BREAK_THRESHOLD) {
+        comboBreakBig = true
+        duckAudio(COMBO_BREAK_FLINCH_MS, 0.6)
+        sfx.comboBreak()
+      } else {
+        sfx.miss()
+      }
       comboRef.current = 0
-      sfx.miss()
     } else {
       stats.correctCount += 1
       if (!NON_SPEED_TYPES.has(spec.type)) {
@@ -250,6 +311,20 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         else sfx.perfect()
       } else if (tier === 'GREAT') sfx.great()
       else sfx.good()
+
+      if (COMBO_MILESTONES.includes(comboRef.current)) {
+        sfx.comboMilestone(comboMilestoneLevel(comboRef.current))
+        if (comboRef.current === 10 || comboRef.current === 20) {
+          comboMilestoneKeyRef.current += 1
+          const milestoneKey = comboMilestoneKeyRef.current
+          const label = `${comboRef.current}問連続正解！`
+          if (comboMilestoneTimerRef.current) clearTimeout(comboMilestoneTimerRef.current)
+          setSnapshot((s) => ({ ...s, comboMilestoneLabel: label, comboMilestoneKey: milestoneKey }))
+          comboMilestoneTimerRef.current = setTimeout(() => {
+            setSnapshot((s) => (s.comboMilestoneKey === milestoneKey ? { ...s, comboMilestoneLabel: null } : s))
+          }, 900)
+        }
+      }
     }
 
     const comboBonus =
@@ -262,7 +337,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     const judgementKey = judgementKeyRef.current
 
     if (crossingHundred || crossingOverdrive) {
-      // 節目の演出のときだけ、意図的に少し間を置いてから次の問題を出す
+      // 節目の演出のときだけ、意図的に少し間を置いてから次の問題を出す（100%到達時は静寂の分だけ長くする）
       gapActiveRef.current = true
       if (nextQuestionTimerRef.current) clearTimeout(nextQuestionTimerRef.current)
       setSnapshot((s) => ({
@@ -272,12 +347,14 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         lastJudgement: tier,
         judgementKey,
         comboBrokenFrom,
+        comboBreakBig,
       }))
+      const freezeMs = crossingHundred ? HUNDRED_SILENCE_MS + MILESTONE_FREEZE_MS : MILESTONE_FREEZE_MS
       nextQuestionTimerRef.current = setTimeout(() => {
         const spec2 = buildNextQuestionSpec()
         gapActiveRef.current = false
         setSnapshot((s) => ({ ...s, currentSpec: spec2 }))
-      }, MILESTONE_FREEZE_MS)
+      }, freezeMs)
       return
     }
 
@@ -290,11 +367,12 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
       lastJudgement: tier,
       judgementKey,
       comboBrokenFrom,
+      comboBreakBig,
     }))
 
     if (overlayHideTimerRef.current) clearTimeout(overlayHideTimerRef.current)
     overlayHideTimerRef.current = setTimeout(() => {
-      setSnapshot((s) => (s.judgementKey === judgementKey ? { ...s, lastJudgement: null } : s))
+      setSnapshot((s) => (s.judgementKey === judgementKey ? { ...s, lastJudgement: null, comboBreakBig: false } : s))
     }, JUDGEMENT_OVERLAY_MS)
   }
 
@@ -304,6 +382,8 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     currentSpecRef.current = null
     if (nextQuestionTimerRef.current) clearTimeout(nextQuestionTimerRef.current)
     if (overlayHideTimerRef.current) clearTimeout(overlayHideTimerRef.current)
+    if (comboMilestoneTimerRef.current) clearTimeout(comboMilestoneTimerRef.current)
+    stopBgm()
     const eligibility = currentEligibility()
     const rawPercent = currentAvgPercent()
     const cap = eligibility.eligible ? OVERDRIVE_CONFIG.maxPercent : getAccuracyCap(currentAccuracy())
@@ -330,6 +410,10 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         if (remaining <= 0) {
           startTimeRef.current = now
           gapActiveRef.current = false
+          if (!bgmStartedRef.current) {
+            bgmStartedRef.current = true
+            startBgm()
+          }
           const spec = buildNextQuestionSpec()
           setSnapshot((s) => ({ ...s, currentSpec: spec }))
         }
@@ -357,6 +441,14 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
           if (bucket % 2 === 0 || bucket <= 3) sfx.finalRushAlarm()
         }
       }
+      if (!riserFiredRef.current && remainingSec <= TOTAL_GAME_SEC - FINAL_RUSH_START_SEC + RISER_LEAD_SEC) {
+        riserFiredRef.current = true
+        playRiser()
+      }
+
+      const stageIndex = DIFFICULTY_PHASES.findIndex((p) => p.id === phase.id)
+      const comboLevel = Math.min(1, comboRef.current / 15)
+      setBgmProgress(stageIndex < 0 ? 0 : stageIndex, comboLevel)
 
       const tween = percentTweenRef.current
       const tweenElapsed = now - tween.startedAt
@@ -370,7 +462,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         remainingSec,
         displayPercent: Math.round(displayPercentRef.current * 10) / 10,
         combo: comboRef.current,
-        visualLevel: phase.visualLevel + (visualBasis >= 95 ? 1 : 0),
+        visualLevel: phase.visualLevel + (visualBasis >= 95 ? 1 : 0) + comboVisualBonus(comboRef.current),
         finalRushActive,
         countdownValue,
       }))
@@ -383,6 +475,8 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
       cancelAnimationFrame(raf)
       if (nextQuestionTimerRef.current) clearTimeout(nextQuestionTimerRef.current)
       if (overlayHideTimerRef.current) clearTimeout(overlayHideTimerRef.current)
+      if (comboMilestoneTimerRef.current) clearTimeout(comboMilestoneTimerRef.current)
+      stopBgm()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

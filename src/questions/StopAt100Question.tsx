@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { randFloat, randInt } from '../engine/random'
+import { sfx } from '../utils/sound'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
@@ -68,6 +69,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
 
   function handleStop() {
     if (doneRef.current) return
+    sfx.stopClick()
     finish(display)
   }
 

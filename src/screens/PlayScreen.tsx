@@ -86,6 +86,9 @@ export function PlayScreen({ onFinish }: Props) {
       {isMiss && (
         <div key={`flash-${snapshot.judgementKey}`} className="flash-red-overlay pointer-events-none fixed inset-0 z-20" />
       )}
+      {snapshot.comboBreakBig && (
+        <div key={`flash-dark-${snapshot.judgementKey}`} className="flash-dark-overlay pointer-events-none fixed inset-0 z-20" />
+      )}
 
       <div className="relative z-30 flex items-start justify-between px-5 pt-3 pb-1">
         <button onClick={toggleMute} className="text-lg opacity-70" aria-label="ミュート切り替え">
@@ -104,8 +107,26 @@ export function PlayScreen({ onFinish }: Props) {
         </div>
       </div>
 
-      <div className="relative z-30 h-5 text-center">
-        {snapshot.combo >= 2 && <p className="anim-pop text-sm font-black text-amber-300">COMBO ×{snapshot.combo}</p>}
+      <div className="relative z-30 flex h-8 items-center justify-center">
+        {snapshot.combo >= 5 ? (
+          <p key={`fire-${snapshot.combo}`} className="anim-pop text-lg font-black text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.7)]">
+            🔥 {snapshot.combo}問連続正解中！
+          </p>
+        ) : (
+          snapshot.combo >= 2 && (
+            <p key={`combo-${snapshot.combo}`} className="anim-pop text-sm font-black text-amber-200/80">
+              {snapshot.combo}問連続
+            </p>
+          )
+        )}
+        {snapshot.comboMilestoneLabel && (
+          <p
+            key={snapshot.comboMilestoneKey}
+            className="anim-pop absolute text-xl font-black text-amber-300 drop-shadow-[0_0_10px_rgba(251,191,36,0.8)]"
+          >
+            {snapshot.comboMilestoneLabel}
+          </p>
+        )}
       </div>
 
       <div
@@ -128,10 +149,19 @@ export function PlayScreen({ onFinish }: Props) {
                 key={snapshot.judgementKey}
                 className="anim-judgement pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-1"
               >
-                <p className={`text-5xl font-black drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)] ${JUDGEMENT_COLOR[snapshot.lastJudgement]}`}>
+                {snapshot.lastJudgement === 'PERFECT' && (
+                  <div className="anim-gold-burst pointer-events-none absolute h-40 w-40 rounded-full bg-amber-300/60 blur-2xl" />
+                )}
+                <p
+                  className={`relative text-5xl font-black drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)] ${JUDGEMENT_COLOR[snapshot.lastJudgement]}`}
+                >
                   {snapshot.lastJudgement}
                 </p>
-                {snapshot.comboBrokenFrom >= 2 && <p className="text-sm font-black text-red-300">COMBO BREAK</p>}
+                {snapshot.comboBrokenFrom >= 2 && (
+                  <p className="relative text-sm font-black text-red-300">
+                    {snapshot.comboBreakBig ? `${snapshot.comboBrokenFrom}問連続で終了` : 'COMBO BREAK'}
+                  </p>
+                )}
               </div>
             )}
           </>

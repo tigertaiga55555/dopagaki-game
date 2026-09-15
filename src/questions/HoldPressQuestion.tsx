@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { randInt } from '../engine/random'
+import { sfx } from '../utils/sound'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
@@ -29,12 +30,15 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   const doneRef = useRef(false)
   const rafRef = useRef<number | undefined>(undefined)
   const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const stopChargeRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     failTimerRef.current = setTimeout(finishAsFailureUnlessComplete, spec.targetTimeMs)
     return () => {
       if (failTimerRef.current) clearTimeout(failTimerRef.current)
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      // ゲーム終了などでHOLD未確定のままアンマウントされた場合、充填音を鳴らし続けないようにする
+      if (stopChargeRef.current) stopChargeRef.current()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -43,6 +47,11 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     if (doneRef.current) return
     doneRef.current = true
     if (failTimerRef.current) clearTimeout(failTimerRef.current)
+    if (stopChargeRef.current) {
+      stopChargeRef.current()
+      stopChargeRef.current = null
+    }
+    if (correct) sfx.holdComplete()
     onResult({ correct, reactionMs: performance.now() - questionStartRef.current })
   }
 
@@ -66,6 +75,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     if (doneRef.current) return
     setHolding(true)
     holdStartRef.current = performance.now()
+    stopChargeRef.current = sfx.startHoldCharge(requiredMs)
 
     // 保持を開始した瞬間、必要時間+完了安全余裕を確実に確保できるようdeadlineを引き直す。
     // これにより「必要時間を満たしたのにtimeoutが先に発火する」レースを構造的に防ぐ。

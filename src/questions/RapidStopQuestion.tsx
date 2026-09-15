@@ -92,11 +92,11 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell sub="連打 → STOPで止まれ" instruction={phase === 'stop' ? 'STOP！' : '連打！！！'}>
+    <QuestionShell sub="緑は連打　赤で止まれ" instruction={phase === 'stop' ? 'STOP！' : '連打！！！'}>
       <button
         onPointerDown={handleTap}
         className={`flex h-28 w-28 items-center justify-center rounded-full text-3xl font-black text-white active:scale-95 ${
-          phase === 'stop' ? 'bg-gradient-to-b from-red-500 to-rose-600' : 'bg-gradient-to-b from-orange-400 to-red-500'
+          phase === 'stop' ? 'bg-gradient-to-b from-red-500 to-rose-700' : 'bg-gradient-to-b from-emerald-400 to-green-600'
         }`}
       >
         {tapCount}
