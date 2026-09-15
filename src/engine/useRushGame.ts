@@ -12,8 +12,14 @@ const MILESTONE_FREEZE_MS = 650
 /** PERFECT/GREAT/GOOD/MISSのオーバーレイ表示時間。次の問題の上に重ねるだけでゲーム進行は止めない。 */
 const JUDGEMENT_OVERLAY_MS = 380
 
-/** 反応速度をベースにした比率算出から除外する問題タイプ（「速さ」の概念が当てはまらないため） */
-const NON_SPEED_TYPES = new Set<QuestionTypeId>(['holdPress', 'noPress'])
+/**
+ * 反応速度をベースにした比率算出から除外する問題タイプ（「速さ」の概念が当てはまらないため）。
+ * repeatTap/rapidStopはratioWindowMsで公平な反応比率を計算できるためここには含めない。
+ */
+const NON_SPEED_TYPES = new Set<QuestionTypeId>(['holdPress', 'noPress', 'stopAt100'])
+
+/** 直近何問分のタイプを覚えておくか（questionPickerのカテゴリ連続回避に使う） */
+const RECENT_TYPES_LENGTH = 2
 
 export interface RushSnapshot {
   phaseId: DifficultyPhaseId
@@ -55,8 +61,14 @@ function createStats(): PlayStats {
     maxTapsInOneSecond: 0,
     comboLostToNoPress: 0,
     typeStats: {},
+    earlyPressCount: 0,
+    overPressCount: 0,
+    stopAt100Samples: [],
+    notificationClearSamples: [],
   }
 }
+
+const SAMPLE_LOG_CAP = 10
 
 function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3)
@@ -94,7 +106,8 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
 
   const comboRef = useRef(0)
   const maxComboRef = useRef(0)
-  const lastTypeRef = useRef<QuestionTypeId | null>(null)
+  /** 直近に出題したタイプ（先頭が最新）。questionPickerのカテゴリ連続回避に使う。 */
+  const recentTypesRef = useRef<QuestionTypeId[]>([])
   const currentSpecRef = useRef<QuestionSpec | null>(null)
   const statsRef = useRef<PlayStats>(createStats())
   const tapTimestampsRef = useRef<number[]>([])
@@ -177,8 +190,8 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     const elapsedSec = (performance.now() - startTimeRef.current) / 1000
     if (elapsedSec >= TOTAL_GAME_SEC) return null
     const phase = getPhaseAt(elapsedSec)
-    const spec = generateNextQuestion(phase, lastTypeRef.current)
-    lastTypeRef.current = spec.type
+    const spec = generateNextQuestion(phase, recentTypesRef.current)
+    recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, RECENT_TYPES_LENGTH)
     currentSpecRef.current = spec
     return spec
   }
@@ -188,10 +201,22 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     if (!spec || endedRef.current) return
     currentSpecRef.current = null
 
-    const tier: Judgement = result.tierOverride ?? (result.correct ? judgeByRatio(result.reactionMs, spec.targetTimeMs) : 'MISS')
+    const ratioWindowMs = result.ratioWindowMs ?? spec.targetTimeMs
+    const tier: Judgement = result.tierOverride ?? (result.correct ? judgeByRatio(result.reactionMs, ratioWindowMs) : 'MISS')
     const stats = statsRef.current
     stats.totalAnswered += 1
     if (spec.type === 'noPress') stats.noPressTotal += 1
+    if (result.meta?.earlyPress) stats.earlyPressCount += 1
+    if (result.meta?.extraTaps) stats.overPressCount += result.meta.extraTaps
+    if (result.meta?.stoppedAtValue !== undefined) {
+      const stoppedAtValue = result.meta.stoppedAtValue
+      stats.stopAt100Samples.push({ stopped: stoppedAtValue, diff: Math.abs(stoppedAtValue - 100) })
+      if (stats.stopAt100Samples.length > SAMPLE_LOG_CAP) stats.stopAt100Samples.shift()
+    }
+    if (tier !== 'MISS' && result.meta?.targetsCleared !== undefined) {
+      stats.notificationClearSamples.push({ count: result.meta.targetsCleared, ms: result.reactionMs })
+      if (stats.notificationClearSamples.length > SAMPLE_LOG_CAP) stats.notificationClearSamples.shift()
+    }
 
     const typeEntry = stats.typeStats[spec.type] ?? { correct: 0, total: 0 }
     typeEntry.total += 1
@@ -211,7 +236,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     } else {
       stats.correctCount += 1
       if (!NON_SPEED_TYPES.has(spec.type)) {
-        stats.reactionSamples.push({ type: spec.type, reactionMs: result.reactionMs, targetTimeMs: spec.targetTimeMs, correct: true })
+        stats.reactionSamples.push({ type: spec.type, reactionMs: result.reactionMs, targetTimeMs: ratioWindowMs, correct: true })
         if (stats.fastestReactionMs === null || result.reactionMs < stats.fastestReactionMs) {
           stats.fastestReactionMs = result.reactionMs
         }
@@ -220,8 +245,10 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
       maxComboRef.current = Math.max(maxComboRef.current, comboRef.current)
       stats.maxCombo = maxComboRef.current
       if (comboRef.current > 1) sfx.comboUp()
-      if (tier === 'PERFECT') sfx.perfect()
-      else if (tier === 'GREAT') sfx.great()
+      if (tier === 'PERFECT') {
+        if (spec.type === 'stopAt100') sfx.stopAt100(true)
+        else sfx.perfect()
+      } else if (tier === 'GREAT') sfx.great()
       else sfx.good()
     }
 

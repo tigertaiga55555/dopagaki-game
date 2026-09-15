@@ -61,6 +61,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
 
 export const SwipeQuestionModule: QuestionModule = {
   id: 'swipe',
+  category: 'reaction',
   baseTargetTimeMs: 1500,
   generate,
   Component,

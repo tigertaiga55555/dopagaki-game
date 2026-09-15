@@ -53,6 +53,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
 
 export const MathQuestionModule: QuestionModule = {
   id: 'simpleMath',
+  category: 'reaction',
   baseTargetTimeMs: 2200,
   generate,
   Component,

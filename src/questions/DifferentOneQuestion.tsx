@@ -53,6 +53,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
 
 export const DifferentOneQuestionModule: QuestionModule = {
   id: 'differentOne',
+  category: 'visual',
   baseTargetTimeMs: 1800,
   generate,
   Component,

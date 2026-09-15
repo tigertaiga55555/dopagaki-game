@@ -39,6 +39,8 @@ export const TYPE_THRESHOLDS = {
   impatient: {
     minNoPressTotal: 2,
     minFailRate: 0.5,
+    /** Ver.4.2: GO/SKIPフライング＋指定回数オーバーの合計がこの値以上でも待てない型（もう1つの経路） */
+    minImpulseEvents: 3,
   },
   machine: {
     minAccuracy: 0.88,

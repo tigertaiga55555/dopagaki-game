@@ -56,6 +56,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
 
 export const OddOneOutQuestionModule: QuestionModule = {
   id: 'oddOneOut',
+  category: 'visual',
   baseTargetTimeMs: 2200,
   generate,
   Component,

@@ -48,6 +48,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
 
 export const MoreSideQuestionModule: QuestionModule = {
   id: 'moreSide',
+  category: 'reaction',
   baseTargetTimeMs: 1800,
   generate,
   Component,

@@ -71,4 +71,17 @@ export const sfx = {
     beep(2100, 100, 'sawtooth', 0.16)
     setTimeout(() => beep(2600, 260, 'sawtooth', 0.16), 90)
   },
+  /** GOまで押すな：GO表示の合図音 */
+  go: () => beep(1300, 70, 'sine', 0.1),
+  /** SKIP待ち：SKIP表示の合図音 */
+  skip: () => beep(1000, 60, 'square', 0.08),
+  /** 連打→急停止：「止まれ！」に切り替わる瞬間のブレーキ音 */
+  brake: () => beep(220, 120, 'sawtooth', 0.11),
+  /** 100で止めろ：停止した瞬間の音（ピッタリ100ならより派手に） */
+  stopAt100: (isPerfect: boolean) => {
+    beep(isPerfect ? 1500 : 850, isPerfect ? 130 : 70, 'sine', isPerfect ? 0.14 : 0.08)
+    if (isPerfect) setTimeout(() => beep(2000, 150, 'sine', 0.12), 80)
+  },
+  /** 通知を消せ：1個消すたびのポン */
+  notifPop: () => beep(700 + Math.random() * 200, 45, 'triangle', 0.06),
 }

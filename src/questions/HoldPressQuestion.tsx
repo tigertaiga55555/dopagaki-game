@@ -80,6 +80,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
 
 export const HoldPressQuestionModule: QuestionModule = {
   id: 'holdPress',
+  category: 'inhibition',
   baseTargetTimeMs: 1500,
   generate,
   Component,

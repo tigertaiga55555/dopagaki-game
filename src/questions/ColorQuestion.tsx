@@ -49,6 +49,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
 
 export const ColorQuestionModule: QuestionModule = {
   id: 'color',
+  category: 'reaction',
   baseTargetTimeMs: 1400,
   generate,
   Component,

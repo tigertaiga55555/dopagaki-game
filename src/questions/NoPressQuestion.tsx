@@ -39,6 +39,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
 
 export const NoPressQuestionModule: QuestionModule = {
   id: 'noPress',
+  category: 'inhibition',
   baseTargetTimeMs: 1000,
   generate,
   Component,

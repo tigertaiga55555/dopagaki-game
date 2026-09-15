@@ -14,6 +14,10 @@ const SPEED_TYPES = new Set<QuestionTypeId>([
   'moreSide',
   'biggerShape',
   'simpleMath',
+  'goWait',
+  'skipWait',
+  'spotChange',
+  'clearNotifications',
 ])
 
 function computeSpeedStats(stats: PlayStats): { avgRatio: number; avgMs: number; count: number } {
@@ -42,8 +46,13 @@ function determineType(finalPercent: number, overdriveActive: boolean, stats: Pl
   const swipeCount = stats.typeStats.swipe?.total ?? 0
   const noPressFailRate = stats.noPressTotal > 0 ? stats.noPressFails / stats.noPressTotal : 0
 
-  // 待てない型: 「押すな」を実際に何度も押してしまった場合のみ。最も納得感のある判定なので最優先。
-  if (stats.noPressTotal >= TYPE_THRESHOLDS.impatient.minNoPressTotal && noPressFailRate >= TYPE_THRESHOLDS.impatient.minFailRate) {
+  // 待てない型: 「押すな」を実際に何度も押した、またはGO/SKIPのフライングや指定回数オーバーが
+  // 積み重なった場合。最も納得感のある判定なので最優先。
+  const impulseEvents = stats.earlyPressCount + stats.overPressCount
+  if (
+    (stats.noPressTotal >= TYPE_THRESHOLDS.impatient.minNoPressTotal && noPressFailRate >= TYPE_THRESHOLDS.impatient.minFailRate) ||
+    impulseEvents >= TYPE_THRESHOLDS.impatient.minImpulseEvents
+  ) {
     return NORMAL_TYPES.impatient
   }
   // 刺激処理マシーン: サンプル数が十分な上で正答率・速度の両方が突出している場合のみ。
@@ -96,6 +105,20 @@ function buildCrimeRecords(stats: PlayStats): string[] {
   }
   if (stats.maxCombo >= 5) {
     candidates.push({ text: `最大COMBO ${stats.maxCombo}`, weight: 20 + stats.maxCombo })
+  }
+  if (stats.earlyPressCount > 0) {
+    candidates.push({ text: `GOやSKIPを待てずに${stats.earlyPressCount}回フライングしました`, weight: 55 + stats.earlyPressCount * 6 })
+  }
+  if (stats.overPressCount > 0) {
+    candidates.push({ text: `指定回数を${stats.overPressCount}回オーバーして押しました`, weight: 50 + stats.overPressCount * 5 })
+  }
+  if (stats.stopAt100Samples.length > 0) {
+    const worst = stats.stopAt100Samples.reduce((a, b) => (b.diff > a.diff ? b : a))
+    if (worst.diff > 0) candidates.push({ text: `100で止めろ→${worst.stopped}で停止しました`, weight: 30 + worst.diff })
+  }
+  if (stats.notificationClearSamples.length > 0) {
+    const fastest = stats.notificationClearSamples.reduce((a, b) => (b.ms < a.ms ? b : a))
+    candidates.push({ text: `赤い通知${fastest.count}個を${(fastest.ms / 1000).toFixed(2)}秒で全消し`, weight: 25 })
   }
 
   candidates.sort((a, b) => b.weight - a.weight)

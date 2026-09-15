@@ -50,7 +50,7 @@ function makeModule(mode: 'max' | 'min'): QuestionModule {
     )
   }
 
-  return { id: mode === 'max' ? 'maxNumber' : 'minNumber', baseTargetTimeMs: 1600, generate, Component }
+  return { id: mode === 'max' ? 'maxNumber' : 'minNumber', category: 'reaction', baseTargetTimeMs: 1600, generate, Component }
 }
 
 export const MaxNumberQuestionModule = makeModule('max')

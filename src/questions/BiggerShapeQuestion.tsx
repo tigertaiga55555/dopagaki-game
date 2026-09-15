@@ -49,6 +49,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
 
 export const BiggerShapeQuestionModule: QuestionModule = {
   id: 'biggerShape',
+  category: 'reaction',
   baseTargetTimeMs: 1500,
   generate,
   Component,
