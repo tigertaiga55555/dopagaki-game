@@ -30,6 +30,8 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
     endSec: 20,
     speedMultiplier: 1.0,
     // Ver.4.2: GOまで押すな／100で止めろ／通知を消せ／変わったやつ、をここから解禁
+    // Ver.4.3: 方向のみのswipeは初見で操作方法が伝わりづらいためプールから除外し、
+    // 「← 食べ物  それ以外 →」の高速仕分け(foodSort)に置き換えた
     pool: [
       'color',
       'maxNumber',
@@ -37,7 +39,7 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'oddOneOut',
       'simpleMath',
       'repeatTap',
-      'swipe',
+      'foodSort',
       'goWait',
       'stopAt100',
       'clearNotifications',
@@ -58,7 +60,7 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'minNumber',
       'simpleMath',
       'repeatTap',
-      'swipe',
+      'foodSort',
       'noPress',
       'differentOne',
       'goWait',
@@ -83,7 +85,7 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'minNumber',
       'simpleMath',
       'repeatTap',
-      'swipe',
+      'foodSort',
       'noPress',
       'differentOne',
       'sameOne',
@@ -114,7 +116,7 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'moreSide',
       'biggerShape',
       'simpleMath',
-      'swipe',
+      'foodSort',
       'repeatTap',
       'holdPress',
       'noPress',
@@ -145,7 +147,7 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'moreSide',
       'biggerShape',
       'simpleMath',
-      'swipe',
+      'foodSort',
       'repeatTap',
       'holdPress',
       'noPress',

@@ -2,6 +2,7 @@ import { BiggerShapeQuestionModule } from './BiggerShapeQuestion'
 import { ClearNotificationsQuestionModule } from './ClearNotificationsQuestion'
 import { ColorQuestionModule } from './ColorQuestion'
 import { DifferentOneQuestionModule } from './DifferentOneQuestion'
+import { FoodSortQuestionModule } from './FoodSortQuestion'
 import { GoWaitQuestionModule } from './GoWaitQuestion'
 import { HoldPressQuestionModule } from './HoldPressQuestion'
 import { MathQuestionModule } from './MathQuestion'
@@ -38,4 +39,5 @@ export const QUESTION_MODULES: Record<QuestionTypeId, QuestionModule> = {
   stopAt100: StopAt100QuestionModule,
   clearNotifications: ClearNotificationsQuestionModule,
   spotChange: SpotChangeQuestionModule,
+  foodSort: FoodSortQuestionModule,
 }

@@ -13,6 +13,13 @@ function computeMinTargetTimeMs(data: Record<string, unknown>) {
   return requiredMs + TIMING_SAFETY.hold.reactionBufferMs + TIMING_SAFETY.hold.safetyMarginMs
 }
 
+/**
+ * Ver.4.3で修正：外側の自動失敗タイマーは元々「問題表示からの固定時間」で発火していたため、
+ * 反応してから指を置くまでの時間が想定より長いと、正しく持続して押しているのに
+ * ゲージ完了直前でtimeout側が先に発火してMISSになる不具合があった。
+ * 指を置いた瞬間にタイマーを requiredMs + completionSafetyMs で引き直すことで、
+ * 一度保持を開始した後は必ず十分な時間内にSUCCESS判定が行われるようにする。
+ */
 function Component({ spec, onResult }: QuestionComponentProps) {
   const { requiredMs } = spec.data as { requiredMs: number }
   const [holding, setHolding] = useState(false)
@@ -21,11 +28,12 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   const holdStartRef = useRef<number | null>(null)
   const doneRef = useRef(false)
   const rafRef = useRef<number | undefined>(undefined)
+  const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    const timer = setTimeout(() => finish(false), spec.targetTimeMs)
+    failTimerRef.current = setTimeout(finishAsFailureUnlessComplete, spec.targetTimeMs)
     return () => {
-      clearTimeout(timer)
+      if (failTimerRef.current) clearTimeout(failTimerRef.current)
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -34,13 +42,36 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   function finish(correct: boolean) {
     if (doneRef.current) return
     doneRef.current = true
+    if (failTimerRef.current) clearTimeout(failTimerRef.current)
     onResult({ correct, reactionMs: performance.now() - questionStartRef.current })
+  }
+
+  /**
+   * 「失敗扱いにしてよいか」を判定する共通処理。rAFのtickだけに完了判定を頼ると、
+   * タブの状態や描画負荷でrAFが間引かれた場合に「必要時間はとっくに満たしているのに
+   * 判定がそれより先に走ってMISSになる」レースが起こり得る。そのため、保持開始からの
+   * 実経過時間を直接見て、満たしていれば必ず成功を優先する。呼び出し元はtick（rAF）、
+   * pointerup/pointercancel、外側の安全弁タイマーの3箇所。
+   */
+  function finishAsFailureUnlessComplete() {
+    if (doneRef.current) return
+    if (holdStartRef.current !== null && performance.now() - holdStartRef.current >= requiredMs) {
+      finish(true)
+      return
+    }
+    finish(false)
   }
 
   function handleDown() {
     if (doneRef.current) return
     setHolding(true)
     holdStartRef.current = performance.now()
+
+    // 保持を開始した瞬間、必要時間+完了安全余裕を確実に確保できるようdeadlineを引き直す。
+    // これにより「必要時間を満たしたのにtimeoutが先に発火する」レースを構造的に防ぐ。
+    if (failTimerRef.current) clearTimeout(failTimerRef.current)
+    failTimerRef.current = setTimeout(finishAsFailureUnlessComplete, requiredMs + TIMING_SAFETY.hold.completionSafetyMs)
+
     const tick = () => {
       if (doneRef.current || holdStartRef.current === null) return
       const held = performance.now() - holdStartRef.current
@@ -54,18 +85,17 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     rafRef.current = requestAnimationFrame(tick)
   }
 
-  function handleUp() {
-    if (doneRef.current) return
+  function handleRelease() {
     if (holdStartRef.current === null) return
-    finish(false)
+    finishAsFailureUnlessComplete()
   }
 
   return (
-    <QuestionShell instruction="HOLD">
+    <QuestionShell instruction="長押し！">
       <button
         onPointerDown={handleDown}
-        onPointerUp={handleUp}
-        onPointerLeave={handleUp}
+        onPointerUp={handleRelease}
+        onPointerCancel={handleRelease}
         className="relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-white/70 active:scale-95"
       >
         <span

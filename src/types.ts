@@ -24,6 +24,7 @@ export type QuestionTypeId =
   | 'stopAt100'
   | 'clearNotifications'
   | 'spotChange'
+  | 'foodSort'
 
 /**
  * お題のカテゴリ（Ver.4.2）。同じカテゴリの出題が連続しすぎないよう

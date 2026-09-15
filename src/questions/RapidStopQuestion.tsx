@@ -92,7 +92,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction={phase === 'stop' ? '止まれ！！！' : '連打しろ！！！'}>
+    <QuestionShell sub="連打 → STOPで止まれ" instruction={phase === 'stop' ? 'STOP！' : '連打！！！'}>
       <button
         onPointerDown={handleTap}
         className={`flex h-28 w-28 items-center justify-center rounded-full text-3xl font-black text-white active:scale-95 ${

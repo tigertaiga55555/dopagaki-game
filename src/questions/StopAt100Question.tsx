@@ -15,11 +15,18 @@ function computeMinTargetTimeMs(data: Record<string, unknown>) {
   return timeToHundredMs + TIMING_SAFETY.stopAt100.reactionBufferMs + TIMING_SAFETY.stopAt100.safetyMarginMs
 }
 
+/**
+ * Ver.4.3: 「100でSTOP！」だと成功範囲が伝わらず、内部条件と表示が一致していなかった。
+ * 画面表示（GOOD_RANGEの幅から動的に組み立てる「98〜102でSTOP！」）と
+ * 実際の成功判定を完全に一致させる。
+ */
+const GOOD_RANGE = 2
+
 function judgeStop(value: number): { tier: 'PERFECT' | 'GREAT' | 'GOOD' | 'MISS'; correct: boolean } {
   const diff = Math.abs(value - 100)
   if (diff === 0) return { tier: 'PERFECT', correct: true }
-  if (diff <= 2) return { tier: 'GREAT', correct: true }
-  if (diff <= 5) return { tier: 'GOOD', correct: true }
+  if (diff === 1) return { tier: 'GREAT', correct: true }
+  if (diff <= GOOD_RANGE) return { tier: 'GOOD', correct: true }
   return { tier: 'MISS', correct: false }
 }
 
@@ -65,7 +72,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction="100でSTOP！">
+    <QuestionShell instruction={`${100 - GOOD_RANGE}〜${100 + GOOD_RANGE}でSTOP！`}>
       <button
         onPointerDown={handleStop}
         className="flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-b from-cyan-400 to-blue-600 text-3xl font-black tabular-nums text-white active:scale-95"

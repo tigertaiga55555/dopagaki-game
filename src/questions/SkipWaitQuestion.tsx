@@ -62,7 +62,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction="広告">
+    <QuestionShell instruction="SKIPが出たら押せ！">
       <button
         onPointerDown={handlePress}
         className="flex h-24 w-full max-w-xs items-center justify-center rounded-xl border border-white/20 bg-black/40 text-lg font-bold text-white/80 active:scale-95"

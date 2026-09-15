@@ -6,10 +6,19 @@
  */
 export const TIMING_SAFETY = {
   hold: {
-    /** 反応してから指を置くまでに見込む時間 */
-    reactionBufferMs: 450,
+    /**
+     * 反応してから指を置くまでに見込む時間。Ver.4.3で引き上げ：
+     * 直前の問題タイプから「押す」動作→「押し続ける」動作への切り替えコストを考慮すると
+     * 450msでは実機で反応が間に合わないケースがあった。
+     */
+    reactionBufferMs: 700,
     /** 誤差・通信遅延などに対する余裕 */
-    safetyMarginMs: 200,
+    safetyMarginMs: 300,
+    /**
+     * Ver.4.3: 指を置いた瞬間、外側の自動失敗タイマーをrequiredMs+この値で引き直す。
+     * rAFの取りこぼし対策の猶予であり、「必要時間を満たしたのにtimeoutが先に発火する」を構造的に防ぐ。
+     */
+    completionSafetyMs: 250,
   },
   repeatTap: {
     /** 1タップあたりに現実的に必要な最短間隔（連打の限界を考慮） */
@@ -54,6 +63,10 @@ export const TIMING_SAFETY = {
   spotChange: {
     minReactionWindowMs: 650,
     safetyMarginMs: 150,
+  },
+  /** 高速仕分け（Ver.4.3で復活）：見て仕分けて指を動かし切るまでの最低時間 */
+  foodSort: {
+    minTimeMs: 700,
   },
   /** どの問題タイプにも適用する絶対最小値（暴走防止の安全弁） */
   absoluteFloorMs: 450,

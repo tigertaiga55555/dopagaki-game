@@ -5,7 +5,12 @@ import { sfx } from '../utils/sound'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
-/** 「GOまで押すな」：早く押したいのに待たないといけない、というドパガキの衝動そのもの。 */
+/**
+ * 「緑になったら押せ！」（信号ゲーム）：早く押したいのに待たないといけない、という
+ * ドパガキの衝動そのもの。Ver.4.3で「READY...→GO!」という文字切り替えから、
+ * 信号機の色が変わる形に再設計した。指示文が常に固定されるため、
+ * 何を待っているのかが初見でも視覚だけで理解できる。
+ */
 function generate() {
   return { waitMs: randInt(500, 1300) }
 }
@@ -17,7 +22,7 @@ function computeMinTargetTimeMs(data: Record<string, unknown>) {
 
 function Component({ spec, onResult }: QuestionComponentProps) {
   const { waitMs } = spec.data as { waitMs: number }
-  const [isGo, setIsGo] = useState(false)
+  const [isGreen, setIsGreen] = useState(false)
   const startRef = useRef(performance.now())
   const goAtRef = useRef<number | null>(null)
   const doneRef = useRef(false)
@@ -25,7 +30,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   useEffect(() => {
     const goTimer = setTimeout(() => {
       goAtRef.current = performance.now()
-      setIsGo(true)
+      setIsGreen(true)
       sfx.go()
     }, waitMs)
     const failTimer = setTimeout(() => finish(false), spec.targetTimeMs)
@@ -51,7 +56,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
 
   function handlePress() {
     if (doneRef.current) return
-    if (!isGo) {
+    if (!isGreen) {
       finish(false, true)
       return
     }
@@ -59,15 +64,13 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction={isGo ? 'GO!' : 'READY...'}>
+    <QuestionShell instruction="緑になったら押せ！">
       <button
         onPointerDown={handlePress}
-        className={`flex h-28 w-28 items-center justify-center rounded-full text-2xl font-black text-white active:scale-95 ${
-          isGo ? 'bg-gradient-to-b from-emerald-400 to-green-600' : 'bg-white/10'
+        className={`h-28 w-28 rounded-full border-4 text-2xl font-black text-white transition-colors active:scale-95 ${
+          isGreen ? 'border-emerald-300 bg-gradient-to-b from-emerald-400 to-green-600' : 'border-white/10 bg-gray-500/40'
         }`}
-      >
-        {isGo ? 'GO' : '…'}
-      </button>
+      />
     </QuestionShell>
   )
 }

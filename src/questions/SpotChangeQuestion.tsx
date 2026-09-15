@@ -68,7 +68,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction={changed ? '変わったやつ！' : 'よく見て…'}>
+    <QuestionShell instruction={changed ? '変わったやつ！' : '変わったら押せ！'}>
       <div className="grid grid-cols-2 gap-4">
         {[0, 1, 2, 3].map((i) => (
           <button
