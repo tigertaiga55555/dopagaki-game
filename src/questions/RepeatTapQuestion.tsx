@@ -21,6 +21,12 @@ function computeMinTargetTimeMs(data: Record<string, unknown>) {
 
 type Phase = 'counting' | 'holding'
 
+/**
+ * Ver.4.6: 外側の汎用タイムアウトはマウント時にspec.targetTimeMsで一度だけセットされていたため、
+ * 反応してから規定回数に到達するまでが想定よりわずかに遅いだけでも、正しく「止まれ」を
+ * 待っている最中にタイムアウトが先に発火してMISSになるレースがあった（HOLDと同種の不具合）。
+ * 規定回数に到達した瞬間、外側タイマーをstopConfirmMs基準で引き直すことでこれを防ぐ。
+ */
 function Component({ spec, onResult }: QuestionComponentProps) {
   const { required, stopConfirmMs } = spec.data as { required: number; stopConfirmMs: number }
   const [count, setCount] = useState(0)
@@ -29,11 +35,12 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   const reachedAtRef = useRef<number | null>(null)
   const doneRef = useRef(false)
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    const timer = setTimeout(() => finish(false, 0), spec.targetTimeMs)
+    failTimerRef.current = setTimeout(() => finish(false, 0), spec.targetTimeMs)
     return () => {
-      clearTimeout(timer)
+      if (failTimerRef.current) clearTimeout(failTimerRef.current)
       if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -42,6 +49,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   function finish(correct: boolean, extraTaps: number, reactionMsOverride?: number) {
     if (doneRef.current) return
     doneRef.current = true
+    if (failTimerRef.current) clearTimeout(failTimerRef.current)
     if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
     const reactionMs = reactionMsOverride ?? performance.now() - startRef.current
     if (!correct) {
@@ -72,6 +80,13 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     if (next === required) {
       reachedAtRef.current = performance.now()
       setPhase('holding')
+      // 規定回数に到達した瞬間、外側タイマーをstopConfirmMs+安全マージン基準に引き直す。
+      // これにより「必要な停止確認を満たしたのにtimeoutが先に発火する」レースを構造的に防ぐ。
+      if (failTimerRef.current) clearTimeout(failTimerRef.current)
+      failTimerRef.current = setTimeout(
+        () => finish(false, 1),
+        stopConfirmMs + TIMING_SAFETY.repeatTap.stopSafetyMarginMs,
+      )
       holdTimerRef.current = setTimeout(() => {
         finish(true, 0, (reachedAtRef.current ?? performance.now()) - startRef.current)
       }, stopConfirmMs)

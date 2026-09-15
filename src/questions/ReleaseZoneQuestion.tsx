@@ -8,6 +8,12 @@ import type { QuestionComponentProps, QuestionModule } from '../types'
 /**
  * 「緑で離せ！」：HOLDの派生。押し続けるとゲージが進み、緑ゾーン内で指を離せば成功。
  * 早すぎても（緑ゾーン前）、通り過ぎても（緑ゾーン後）MISS。
+ *
+ * Ver.4.6の重要な修正：外側の汎用タイムアウトはマウント時にspec.targetTimeMsで一度だけ
+ * セットされていたため、反応してから指を置くまでにわずかでも想定より時間がかかると、
+ * 正しくゲージを進めている最中にタイムアウトが先に発火してMISSになるレースがあった
+ * （Ver.4.3でHOLDに適用した修正と同種）。指を置いた瞬間、外側タイマーを
+ * cycleMs基準で引き直すことでこれを防ぐ。
  */
 function generate() {
   const cycleMs = randInt(1300, 1900)
@@ -68,6 +74,9 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     setHolding(true)
     holdStartRef.current = performance.now()
     stopChargeRef.current = sfx.startHoldCharge(cycleMs)
+    // 指を置いた瞬間、外側タイマーをcycleMs+安全マージン基準に引き直す。
+    if (failTimerRef.current) clearTimeout(failTimerRef.current)
+    failTimerRef.current = setTimeout(() => finish(false), cycleMs + TIMING_SAFETY.releaseZone.safetyMarginMs)
     const tick = () => {
       if (doneRef.current || holdStartRef.current === null) return
       const held = performance.now() - holdStartRef.current

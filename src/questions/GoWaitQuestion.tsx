@@ -1,18 +1,40 @@
 import { useEffect, useRef, useState } from 'react'
 import { TIMING_SAFETY } from '../config/timingConfig'
-import { randInt } from '../engine/random'
+import { pickExcluding, randInt } from '../engine/random'
 import { sfx } from '../utils/sound'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
 /**
- * 「緑になったら押せ！」（信号ゲーム）：早く押したいのに待たないといけない、という
- * ドパガキの衝動そのもの。Ver.4.3で「READY...→GO!」という文字切り替えから、
- * 信号機の色が変わる形に再設計した。指示文が常に固定されるため、
- * 何を待っているのかが初見でも視覚だけで理解できる。
+ * Ver.4.6: 「緑で押せ！」（信号ゲーム）を全面再設計。
+ * これまでは「灰色→緑」の一発切替だったため、見た瞬間すでに緑に見えてしまい
+ * 「待つ・反応する」ゲームとして成立しないケースがあった。
+ * 今回は非緑色（青/赤/黄）を2〜5回ランダムに高速切替してから、必ず緑で終わる
+ * シーケンスに構造化することで、「初手緑」を型として発生し得ないようにした。
  */
+const NON_GREEN_COLORS = [
+  { id: 'blue', hex: '#3b82f6' },
+  { id: 'red', hex: '#ef4444' },
+  { id: 'yellow', hex: '#eab308' },
+] as const
+const GREEN_HEX = '#22c55e'
+
+interface Step {
+  hex: string
+  durationMs: number
+}
+
 function generate() {
-  return { waitMs: randInt(500, 1300) }
+  const stepCount = randInt(2, 5)
+  const steps: Step[] = []
+  let prev: (typeof NON_GREEN_COLORS)[number] | undefined
+  for (let i = 0; i < stepCount; i++) {
+    const color = pickExcluding(NON_GREEN_COLORS, prev)
+    prev = color
+    steps.push({ hex: color.hex, durationMs: randInt(260, 420) })
+  }
+  const waitMs = steps.reduce((sum, s) => sum + s.durationMs, 0)
+  return { steps, waitMs }
 }
 
 function computeMinTargetTimeMs(data: Record<string, unknown>) {
@@ -21,22 +43,34 @@ function computeMinTargetTimeMs(data: Record<string, unknown>) {
 }
 
 function Component({ spec, onResult }: QuestionComponentProps) {
-  const { waitMs } = spec.data as { waitMs: number }
+  const { steps, waitMs } = spec.data as { steps: Step[]; waitMs: number }
+  const [stepIndex, setStepIndex] = useState(0)
   const [isGreen, setIsGreen] = useState(false)
   const startRef = useRef(performance.now())
   const goAtRef = useRef<number | null>(null)
   const doneRef = useRef(false)
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
 
   useEffect(() => {
+    let cumulative = 0
+    steps.forEach((step, i) => {
+      if (i > 0) {
+        const t = setTimeout(() => setStepIndex(i), cumulative)
+        timersRef.current.push(t)
+      }
+      cumulative += step.durationMs
+    })
     const goTimer = setTimeout(() => {
       goAtRef.current = performance.now()
       setIsGreen(true)
       sfx.go()
     }, waitMs)
+    timersRef.current.push(goTimer)
     const failTimer = setTimeout(() => finish(false), spec.targetTimeMs)
+    timersRef.current.push(failTimer)
     return () => {
-      clearTimeout(goTimer)
-      clearTimeout(failTimer)
+      timersRef.current.forEach(clearTimeout)
+      timersRef.current = []
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -44,6 +78,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   function finish(correct: boolean, earlyPress = false) {
     if (doneRef.current) return
     doneRef.current = true
+    timersRef.current.forEach(clearTimeout)
     if (!correct) {
       onResult({ correct: false, reactionMs: performance.now() - startRef.current, meta: earlyPress ? { earlyPress: true } : undefined })
       return
@@ -63,13 +98,16 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     finish(true)
   }
 
+  const currentHex = isGreen ? GREEN_HEX : steps[stepIndex].hex
+
   return (
-    <QuestionShell instruction="緑になったら押せ！">
+    <QuestionShell instruction="緑で押せ！">
       <button
         onPointerDown={handlePress}
-        className={`h-28 w-28 rounded-full border-4 text-2xl font-black text-white transition-colors active:scale-95 ${
-          isGreen ? 'border-emerald-300 bg-gradient-to-b from-emerald-400 to-green-600' : 'border-white/10 bg-gray-500/40'
+        className={`h-32 w-32 rounded-full border-4 transition-colors duration-75 active:scale-95 ${
+          isGreen ? 'signal-pulse signal-green-glow border-emerald-200' : 'border-white/20'
         }`}
+        style={{ backgroundColor: currentHex }}
       />
     </QuestionShell>
   )

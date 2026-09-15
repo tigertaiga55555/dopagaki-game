@@ -38,6 +38,37 @@ const LATE_GAME_SWEETENER_SEC = 20
 /** 直近何問分のタイプを覚えておくか（questionPickerのカテゴリ連続回避・直近タイプ回避に使う） */
 const RECENT_TYPES_LENGTH = 3
 
+/**
+ * Ver.4.6: 開発時だけMISSの原因を追跡できるようにするデバッグログ。本番UIには一切表示しない
+ * （console.debugのみ、かつ開発ビルドでのみ出力）。「本当にユーザー操作が間違っていたのか、
+ * タイムアウトなのか」を切り分けられるよう、meta由来の明確な理由を優先し、それ以外は
+ * reactionMsがtargetTimeMsにどれだけ近いかで汎用タイムアウトらしさを推定する。
+ */
+function inferFailureReason(spec: QuestionSpec, result: QuestionResult): string {
+  const meta = result.meta
+  if (meta?.redPhaseTap) return 'red-phase-tap'
+  if (meta?.forbiddenTouch) return 'forbidden-touch'
+  if (meta?.earlyPress) return 'early-press'
+  if (meta?.wrongOrder) return 'wrong-order'
+  if (meta?.releaseOffsetMs !== undefined) return meta.releaseOffsetMs > 0 ? 'release-too-late' : 'release-too-early'
+  if (meta?.extraTaps) return 'extra-taps'
+  if (result.reactionMs >= spec.targetTimeMs * 0.95) return 'likely-generic-timeout'
+  return 'explicit-wrong-action'
+}
+
+function logQuestionMiss(spec: QuestionSpec, result: QuestionResult): void {
+  if (!import.meta.env.DEV) return
+  console.debug('[dopagaki:miss]', {
+    questionType: spec.type,
+    result: 'MISS',
+    failureReason: inferFailureReason(spec, result),
+    elapsedMs: Math.round(result.reactionMs),
+    targetTimeMs: spec.targetTimeMs,
+    ratioWindowMs: result.ratioWindowMs ?? spec.targetTimeMs,
+    meta: result.meta,
+  })
+}
+
 function comboVisualBonus(combo: number): number {
   if (combo >= 20) return 3
   if (combo >= 15) return 2
@@ -319,6 +350,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     let comboBrokenFrom = 0
     let comboBreakBig = false
     if (tier === 'MISS') {
+      logQuestionMiss(spec, result)
       stats.missCount += 1
       if (spec.type === 'noPress' && result.meta?.forbiddenTouch) stats.noPressFails += 1
       if (spec.type === 'noPress' && comboRef.current >= 8) {

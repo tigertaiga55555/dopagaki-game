@@ -3,7 +3,6 @@ import { TIMING_SAFETY } from '../config/timingConfig'
 import { getCurrentStageIndex } from '../engine/difficultyStage'
 import { randInt } from '../engine/random'
 import { sfx } from '../utils/sound'
-import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
 /**
@@ -138,7 +137,17 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   const isRed = phases[phaseIndex].color === 'red'
 
   return (
-    <QuestionShell sub="緑は連打　赤は止まれ" instruction={isRed ? 'STOP！' : '連打！！！'}>
+    <div className="flex h-full w-full flex-col items-center justify-center gap-6 px-6 py-4 text-center select-none">
+      <div
+        className={`flex items-center gap-3 rounded-full border-2 px-4 py-1.5 text-sm font-black tracking-wide transition-colors ${
+          isRed ? 'border-red-400/70 bg-red-500/10' : 'border-emerald-300/70 bg-emerald-500/10'
+        }`}
+      >
+        <span className={isRed ? 'opacity-40' : 'text-emerald-300'}>🟢 連打</span>
+        <span className="text-white/30">｜</span>
+        <span className={isRed ? 'text-red-300' : 'opacity-40'}>🔴 STOP</span>
+      </div>
+      <p className={`text-4xl font-black ${isRed ? 'text-red-400' : 'text-emerald-300'}`}>{isRed ? 'STOP！' : '連打！'}</p>
       <button
         onPointerDown={handleTap}
         className={`signal-pulse flex h-32 w-32 items-center justify-center rounded-full text-3xl font-black text-white active:scale-95 ${
@@ -147,7 +156,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
       >
         {isRed ? 'STOP' : tapCount}
       </button>
-    </QuestionShell>
+    </div>
   )
 }
 

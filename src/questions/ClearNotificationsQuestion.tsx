@@ -13,7 +13,14 @@ interface Badge {
   hex: string
 }
 
-/** 「通知を消せ」：通知バッジを見ると全部消したくなる、というドパガキの衝動を狙う。 */
+/**
+ * 「通知を消せ」：通知バッジを見ると全部消したくなる、というドパガキの衝動を狙う。
+ *
+ * Ver.4.6の重要な修正：外側の汎用タイムアウトが一度きりだったため、1個目を見つけるのに
+ * 想定よりわずかに時間がかかっただけで、正しく消し続けている最中にタイムアウトが
+ * 先に発火してMISSになるレースがあった。正しく1個消すたびに、残り対象数ぶんの猶予で
+ * タイマーを引き直すことでこれを防ぐ。
+ */
 function generate() {
   const targetCount = randInt(3, 4)
   const distractorCount = randInt(2, 3)
@@ -38,16 +45,20 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   const [cleared, setCleared] = useState<Set<number>>(new Set())
   const startRef = useRef(performance.now())
   const doneRef = useRef(false)
+  const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    const timer = setTimeout(() => finish(false), spec.targetTimeMs)
-    return () => clearTimeout(timer)
+    failTimerRef.current = setTimeout(() => finish(false), spec.targetTimeMs)
+    return () => {
+      if (failTimerRef.current) clearTimeout(failTimerRef.current)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function finish(correct: boolean, clearedCount = 0) {
     if (doneRef.current) return
     doneRef.current = true
+    if (failTimerRef.current) clearTimeout(failTimerRef.current)
     onResult({
       correct,
       reactionMs: performance.now() - startRef.current,
@@ -65,7 +76,17 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     next.add(badge.id)
     setCleared(next)
     sfx.notifPop()
-    if (next.size >= targetCount) finish(true, next.size)
+    if (next.size >= targetCount) {
+      finish(true, next.size)
+      return
+    }
+    // 正しく1個消すたびに、残り対象数ぶんの猶予で外側タイマーを引き直す。
+    if (failTimerRef.current) clearTimeout(failTimerRef.current)
+    const remaining = targetCount - next.size
+    failTimerRef.current = setTimeout(
+      () => finish(false, next.size),
+      remaining * TIMING_SAFETY.clearNotifications.perTargetMs + TIMING_SAFETY.clearNotifications.reactionBufferMs,
+    )
   }
 
   return (

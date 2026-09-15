@@ -24,7 +24,14 @@ interface Badge {
   hex: string
 }
 
-/** 「赤だけ消せ！」：通知バッジが次々出現する。赤だけタップして規定数消せば成功、赤以外は即MISS。 */
+/**
+ * 「赤だけ消せ！」：通知バッジが次々出現する。赤だけタップして規定数消せば成功、赤以外は即MISS。
+ *
+ * Ver.4.6の重要な修正：外側の汎用タイムアウトが一度きりだったため、赤の出現運が悪く
+ * 1個目を消すまでに想定より時間がかかっただけで、正しく消し続けている最中にタイムアウトが
+ * 先に発火してMISSになるレースがあった。正しく1個消すたびに、残り対象数ぶんの猶予で
+ * タイマーを引き直すことでこれを防ぐ。
+ */
 function generate() {
   const targetRedCount = randInt(4, 5)
   const spawnIntervalMs = randInt(200, 350)
@@ -120,7 +127,14 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     setBadges((prev) => prev.filter((b) => b.id !== badge.id))
     clearedRedRef.current += 1
     sfx.notifPop()
-    if (clearedRedRef.current >= targetRedCount) finish(true)
+    if (clearedRedRef.current >= targetRedCount) {
+      finish(true)
+      return
+    }
+    // 正しく1個消すたびに、残り対象数ぶんの猶予で外側タイマーを引き直す。
+    if (failTimerRef.current) clearTimeout(failTimerRef.current)
+    const remaining = targetRedCount - clearedRedRef.current
+    failTimerRef.current = setTimeout(() => finish(false), remaining * TIMING_SAFETY.notifRush.perRedMs + TIMING_SAFETY.notifRush.reactionBufferMs)
   }
 
   return (

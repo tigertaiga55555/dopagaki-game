@@ -21,7 +21,14 @@ interface NumberSlot {
   y: number
 }
 
-/** 「1→4！」：4つの数字を順番通りに素早く見つけてタップする。 */
+/**
+ * 「1→4！」：4つの数字を順番通りに素早く見つけてタップする。
+ *
+ * Ver.4.6の重要な修正：外側の汎用タイムアウトが一度きりだったため、1つ目を見つけるのに
+ * 想定よりわずかに時間がかかっただけで、正しく順番通りタップしている最中にタイムアウトが
+ * 先に発火してMISSになるレースがあった。正しくタップするたびに、残りの数字ぶんの猶予で
+ * タイマーを引き直すことでこれを防ぐ。
+ */
 function generate() {
   const slots = shuffle(SLOTS).slice(0, 4)
   const numbers: NumberSlot[] = shuffle([1, 2, 3, 4]).map((value, i) => ({ value, x: slots[i].x, y: slots[i].y }))
@@ -38,16 +45,20 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   const nextExpectedRef = useRef(1)
   const startRef = useRef(performance.now())
   const doneRef = useRef(false)
+  const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    const timer = setTimeout(() => finish(false), spec.targetTimeMs)
-    return () => clearTimeout(timer)
+    failTimerRef.current = setTimeout(() => finish(false), spec.targetTimeMs)
+    return () => {
+      if (failTimerRef.current) clearTimeout(failTimerRef.current)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function finish(correct: boolean, wrongOrder = false) {
     if (doneRef.current) return
     doneRef.current = true
+    if (failTimerRef.current) clearTimeout(failTimerRef.current)
     onResult({
       correct,
       reactionMs: performance.now() - startRef.current,
@@ -68,6 +79,13 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     }
     nextExpectedRef.current = value + 1
     setNextExpected(value + 1)
+    // 正しくタップするたびに、残りの数字ぶんの猶予で外側タイマーを引き直す。
+    if (failTimerRef.current) clearTimeout(failTimerRef.current)
+    const remaining = 4 - value
+    failTimerRef.current = setTimeout(
+      () => finish(false),
+      remaining * TIMING_SAFETY.sequenceTap.perNumberMs + TIMING_SAFETY.sequenceTap.reactionBufferMs,
+    )
   }
 
   return (

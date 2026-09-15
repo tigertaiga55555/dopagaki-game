@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { getVisualLevelDef } from '../config/visualConfig'
 import { MILESTONE_TEXT } from '../config/messagesV4'
 import { useRushGame, type RushFinishPayload } from '../engine/useRushGame'
@@ -21,17 +21,6 @@ const PARTICLE_POSITIONS = Array.from({ length: 8 }).map((_, i) => ({ x: (i * 12
 export function PlayScreen({ onFinish }: Props) {
   const { snapshot, handleQuestionResult } = useRushGame(onFinish)
   const [muted, setMutedState] = useState(isMuted())
-  const [showFinalBanner, setShowFinalBanner] = useState(false)
-  const finalBannerShownRef = useRef(false)
-
-  useEffect(() => {
-    if (snapshot.finalRushActive && !finalBannerShownRef.current) {
-      finalBannerShownRef.current = true
-      setShowFinalBanner(true)
-      const t = setTimeout(() => setShowFinalBanner(false), 1400)
-      return () => clearTimeout(t)
-    }
-  }, [snapshot.finalRushActive])
 
   const visual = getVisualLevelDef(snapshot.visualLevel)
   const CurrentQuestion = snapshot.currentSpec ? QUESTION_MODULES[snapshot.currentSpec.type].Component : null
@@ -103,9 +92,28 @@ export function PlayScreen({ onFinish }: Props) {
         </div>
         <div className="text-right">
           <p className="text-[10px] font-bold tracking-widest text-white/50">TIME</p>
-          <p className="text-xl font-black tabular-nums text-white">{Math.max(0, snapshot.remainingSec).toFixed(1)}</p>
+          {snapshot.countdownValue !== null ? (
+            <p
+              key={snapshot.countdownValue}
+              className="anim-pop text-3xl font-black tabular-nums text-red-400 drop-shadow-[0_0_12px_rgba(239,68,68,0.8)]"
+            >
+              {snapshot.countdownValue}
+            </p>
+          ) : (
+            <p className="text-xl font-black tabular-nums text-white">{Math.max(0, snapshot.remainingSec).toFixed(1)}</p>
+          )}
         </div>
       </div>
+
+      {snapshot.finalRushActive && (
+        <div className="relative z-30 mx-4 mb-1 flex items-center justify-center gap-2 rounded-full bg-red-950/70 py-1 pointer-events-none">
+          <span className="text-xs">🚨</span>
+          <p className="text-[11px] font-black tracking-widest text-red-300">
+            {MILESTONE_TEXT.finalRush} ・残り{Math.max(0, Math.ceil(snapshot.remainingSec))}秒
+          </p>
+          <span className="text-xs">🚨</span>
+        </div>
+      )}
 
       <div className="relative z-30 flex h-8 items-center justify-center">
         {snapshot.combo >= 5 ? (
@@ -167,24 +175,6 @@ export function PlayScreen({ onFinish }: Props) {
           </>
         )}
       </div>
-
-      {showFinalBanner && (
-        <div className="pointer-events-none absolute inset-0 z-40 flex flex-col items-center justify-center gap-2 bg-black/55">
-          <p className="anim-pop whitespace-pre-line text-center text-4xl font-black text-red-400">{MILESTONE_TEXT.finalRush}</p>
-          <p className="text-lg font-bold text-white">残り10秒</p>
-        </div>
-      )}
-
-      {snapshot.countdownValue !== null && (
-        <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
-          <p
-            key={snapshot.countdownValue}
-            className="anim-pop text-9xl font-black text-red-400 drop-shadow-[0_0_30px_rgba(239,68,68,0.8)]"
-          >
-            {snapshot.countdownValue}
-          </p>
-        </div>
-      )}
 
       {snapshot.showHundredBurst && (
         <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/75">
