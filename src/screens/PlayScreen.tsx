@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  Confetti120Overlay,
   getOverdriveFrameClass,
   getOverdriveTier,
   Golden120Overlay,
   LimitErrorOverlay,
   OverdriveAmbience,
   OverdriveRevealOverlay,
+  RainbowShockwaveOverlay,
+  Sparkle120Overlay,
   WhiteFlashOverlay,
 } from '../components/OverdriveFx'
 import { getVisualLevelDef } from '../config/visualConfig'
@@ -80,7 +83,9 @@ export function PlayScreen({ onFinish }: Props) {
   } ${getOverdriveFrameClass(overdriveTier)}`.trim()
 
   return (
-    <div className={`relative flex min-h-dvh flex-col overflow-hidden ${frameClass}`}>
+    <div
+      className={`relative flex min-h-dvh flex-col overflow-hidden ${frameClass} ${snapshot.showMaxBurst ? 'anim-climax-shake' : ''}`}
+    >
       {visual.particles && (
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           {PARTICLE_POSITIONS.map((p, i) => (
@@ -233,6 +238,9 @@ export function PlayScreen({ onFinish }: Props) {
       <OverdriveRevealOverlay show={snapshot.showOverdriveBurst} showTimeBonus />
       <WhiteFlashOverlay show={snapshot.showMaxFlash} />
       <Golden120Overlay show={snapshot.showMaxBurst} title={getOverdriveTitle(OVERDRIVE_CONFIG.maxPercent).name} />
+      <RainbowShockwaveOverlay show={snapshot.showMaxBurst} />
+      <Confetti120Overlay show={snapshot.showMaxBurst} />
+      <Sparkle120Overlay show={snapshot.showMaxBurst} />
     </div>
   )
 }

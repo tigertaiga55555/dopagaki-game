@@ -25,6 +25,56 @@ function beep(freq: number, durationMs: number, type: OscillatorType = 'sine', g
   }
 }
 
+/** 短い周波数スイープ音（上昇/下降）を1つ鳴らす。beep()と違い周波数自体が滑らかに動く。 */
+function sweep(fromFreq: number, toFreq: number, durationMs: number, type: OscillatorType = 'sine', gainValue = 0.14) {
+  if (isMuted()) return
+  const ctx = getAudioContext()
+  const gainOut = getSfxGain()
+  if (!ctx || !gainOut) return
+  if (ctx.state === 'suspended') void ctx.resume()
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = type
+  const now = ctx.currentTime
+  osc.frequency.setValueAtTime(fromFreq, now)
+  osc.frequency.exponentialRampToValueAtTime(toFreq, now + durationMs / 1000)
+  gain.gain.setValueAtTime(gainValue, now)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + durationMs / 1000)
+  osc.connect(gain)
+  gain.connect(gainOut)
+  osc.start(now)
+  osc.stop(now + durationMs / 1000)
+  osc.onended = () => {
+    osc.disconnect()
+    gain.disconnect()
+  }
+}
+
+/**
+ * Ver.4.11: 120% PERFECT CLEAR専用のオリジナル勝利ファンファーレ。既存作品のメロディは
+ * 一切模倣せず、「短い上昇音（テッ）→明るいメジャーコード（テレーン！）→bell/sparkleの
+ * 余韻」の3部構成で作る。低音impact＋brass風sawtoothのコード＋sine/triangleのベル成分を
+ * 組み合わせたオリジナル構成。overdriveMax（衝撃SE）と同時に鳴らすことを想定し、
+ * こちらは「祝福感」だけを担当する。
+ */
+function victoryFanfare() {
+  // 1. 短い上昇プレップ音（テッ）
+  sweep(420, 880, 140, 'triangle', 0.13)
+  // 2. 明るいメジャーコード（テレーン！）：低音impact＋brass風コード＋sine上音
+  setTimeout(() => {
+    beep(98, 380, 'sine', 0.22)
+    beep(523.25, 420, 'sawtooth', 0.1)
+    beep(659.25, 420, 'sawtooth', 0.09)
+    beep(784.0, 420, 'sawtooth', 0.09)
+    beep(1046.5, 460, 'sine', 0.1)
+  }, 150)
+  // 3. bell / sparkleの余韻（高次倍音を少しずつ遅らせて鳴らし、自然な余韻を作る）
+  setTimeout(() => beep(1568.0, 500, 'sine', 0.08), 380)
+  setTimeout(() => beep(1975.5, 550, 'sine', 0.07), 460)
+  setTimeout(() => beep(2349.3, 650, 'sine', 0.06), 560)
+  setTimeout(() => beep(3136.0, 700, 'triangle', 0.05), 680)
+}
+
 /** HOLD中の「充填音」。押している間ずっと鳴り続け、requiredMsで音程が上がりきるように設計。 */
 function startHoldCharge(durationMs: number): () => void {
   if (isMuted()) return () => {}
@@ -135,6 +185,8 @@ export const sfx = {
     setTimeout(() => beep(2800, 220, 'triangle', 0.11), 200)
     setTimeout(() => beep(3400, 280, 'sine', 0.09), 320)
   },
+  /** Ver.4.11: 120% PERFECT CLEAR専用のオリジナル勝利ファンファーレ（overdriveMaxの直後に鳴らす） */
+  victoryFanfare,
   /** GOまで押すな：GO表示の合図音 */
   go: () => beep(1300, 70, 'sine', 0.1),
   /**

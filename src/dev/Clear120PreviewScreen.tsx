@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { getOverdriveFrameClass, getOverdriveTier, Golden120Overlay, OverdriveAmbience, WhiteFlashOverlay } from '../components/OverdriveFx'
+import {
+  Confetti120Overlay,
+  getOverdriveFrameClass,
+  getOverdriveTier,
+  Golden120Overlay,
+  OverdriveAmbience,
+  RainbowShockwaveOverlay,
+  Sparkle120Overlay,
+  WhiteFlashOverlay,
+} from '../components/OverdriveFx'
 import { OVERDRIVE_CONFIG } from '../config/overdriveConfig'
 import { getOverdriveTitle } from '../config/resultTypesV4'
 import { ResultScreen } from '../screens/ResultScreen'
@@ -14,18 +23,20 @@ import type { FinalResultV4 } from '../types'
  * 本番の隠し発動条件（overdriveConfig.ts）やスコア計算（scoreConfigV4.ts）、
  * 実際の60秒ゲームループ（useRushGame.ts）は一切経由しない。かわりに、
  * useRushGame.tsのsetPercentTarget()内のrunMaxClimax()が120%到達時に実行している
- * 演出シーケンス（duckAudio→一瞬の静寂→白閃光(showMaxFlash)→sfx.overdriveMax→
- * 黄金爆発(showMaxBurst)→保持→終了）と全く同じ関数呼び出し順で、
+ * 演出シーケンス（duckAudio→一瞬の静寂→白閃光(showMaxFlash)→sfx.overdriveMax＋
+ * sfx.victoryFanfare→黄金爆発(showMaxBurst)→保持→終了）と全く同じ関数呼び出し順で、
  * 「OVERDRIVE状態(117%)→119%→120%」という数字の推移だけをスクリプトで駆動する。
- * 演出コンポーネント（OverdriveAmbience/WhiteFlashOverlay/Golden120Overlay。
- * いずれも src/components/OverdriveFx.tsx ）・SE（sfx.overdriveMax）・
+ * 演出コンポーネント（OverdriveAmbience/WhiteFlashOverlay/Golden120Overlay/
+ * RainbowShockwaveOverlay/Confetti120Overlay/Sparkle120Overlay。いずれも
+ * src/components/OverdriveFx.tsx ）・SE（sfx.overdriveMax/sfx.victoryFanfare）・
  * 結果画面（ResultScreen→ResultCard）は、実ゲームで120%に到達した際に
  * PlayScreen/useRushGame.tsが呼ぶのと同じものをそのまま呼び出す。
- * ゲームロジック・条件判定には一切手を加えていない。
+ * ゲームロジック・条件判定には一切手を加えていない。Preview専用の偽物演出は作らない。
  */
 const MAX_SILENCE_MS = 250
 const WHITE_FLASH_HOLD_MS = 180
-const MAX_BURST_HOLD_MS = 1300
+/** Ver.4.11: 本番のMAX_BURST_HOLD_MSと同じ値（約3〜4秒のCLEAR演出を確認できるようにする） */
+const MAX_BURST_HOLD_MS = 3000
 /** OVERDRIVE状態であることを一瞬見せてから119%へ進めるまでの間 */
 const OVERDRIVE_ESTABLISH_MS = 700
 /** 119%を一瞬保持してから120%クライマックスへ入るまでの間 */
@@ -107,6 +118,7 @@ export function Clear120PreviewScreen() {
         setShowMaxFlash(true)
         schedule(() => {
           sfx.overdriveMax()
+          sfx.victoryFanfare()
           setShowMaxFlash(false)
           setShowMaxBurst(true)
           schedule(() => {
@@ -127,7 +139,9 @@ export function Clear120PreviewScreen() {
   }
 
   return (
-    <div className={`relative flex min-h-dvh flex-col items-center overflow-hidden ${frameClass}`}>
+    <div
+      className={`relative flex min-h-dvh flex-col items-center overflow-hidden ${frameClass} ${showMaxBurst ? 'anim-climax-shake' : ''}`}
+    >
       <OverdriveAmbience tier={overdriveTier} />
 
       <div className="relative z-30 flex w-full items-center justify-between px-5 pt-3 pb-1">
@@ -159,6 +173,9 @@ export function Clear120PreviewScreen() {
 
       <WhiteFlashOverlay show={showMaxFlash} />
       <Golden120Overlay show={showMaxBurst} title={getOverdriveTitle(OVERDRIVE_CONFIG.maxPercent).name} />
+      <RainbowShockwaveOverlay show={showMaxBurst} />
+      <Confetti120Overlay show={showMaxBurst} />
+      <Sparkle120Overlay show={showMaxBurst} />
     </div>
   )
 }

@@ -41,8 +41,12 @@ const HUNDRED_SILENCE_MS = 300
 const LIMIT_ERROR_MS = 550
 /** Ver.4.7: 120%（上限）到達時、一瞬音を引く長さ */
 const MAX_SILENCE_MS = 250
-/** Ver.4.9: 120%到達＝完全攻略CLEARの表示保持時間（通常のOVERDRIVE演出よりさらに長めにして別格感を出す） */
-const MAX_BURST_HOLD_MS = 1300
+/**
+ * Ver.4.11: 120%到達＝完全攻略CLEARの表示保持時間。119%までのOVERDRIVE演出の延長ではなく
+ * 「ゲーム完全クリアのお祭り」として達成感を優先するため、クライマックス全体（静寂→白閃光→
+ * 保持）が約3〜4秒になるよう大幅に延長した（通常のOVERDRIVE演出よりさらに長め）。
+ */
+const MAX_BURST_HOLD_MS = 3000
 /** 大きいCOMBOを切った瞬間の「怯み」演出（画面暗転・BGMダック）の長さ */
 const COMBO_BREAK_FLINCH_MS = 200
 /** COMBO BREAK演出の文言を強めに出す最低COMBO数 */
@@ -364,14 +368,18 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     }
 
     // Ver.4.9: 120%到達＝「ゲームを完全攻略した」ことが一発で分かる専用CLEAR演出。
-    // 通常の時間切れ結果と混同されないよう、一瞬の白閃光→黄金爆発→巨大な「120% CLEAR!!」を
+    // 通常の時間切れ結果と混同されないよう、一瞬の白閃光→黄金爆発→巨大な「120% PERFECT CLEAR!!」を
     // 経てからfinishGame()を呼び、残り時間があっても即座にゲームを終える。
+    // Ver.4.11: showMaxBurstの間だけ、Golden120Overlayに加えて虹ショックウェーブ・紙吹雪・
+    // sparkle（RainbowShockwaveOverlay/Confetti120Overlay/Sparkle120Overlay）も同時に表示する
+    // （PlayScreen/Preview側でsnapshot.showMaxBurstをそのまま流用して合成する）。
     function runMaxClimax() {
       duckAudio(MAX_SILENCE_MS, 1)
       setTimeout(() => {
         setSnapshot((s) => ({ ...s, showMaxFlash: true }))
         setTimeout(() => {
           sfx.overdriveMax()
+          sfx.victoryFanfare()
           setSnapshot((s) => ({ ...s, showMaxFlash: false, showMaxBurst: true }))
           setTimeout(() => {
             setSnapshot((s) => ({ ...s, showMaxBurst: false }))

@@ -126,8 +126,12 @@ export function OverdriveRevealOverlay({ show, showTimeBonus }: { show: boolean;
 /**
  * 120%到達＝「ゲームを完全攻略した」ことが一発で分かる専用CLEAR演出。
  * Ver.4.9: 120%はゲーム開始から完全ノーミスでしか到達できない別格の条件になったため、
- * 通常のOVERDRIVE演出（101〜119%）とはっきり区別できるよう「CLEAR!!」を大きく強調する。
+ * 通常のOVERDRIVE演出（101〜119%）とはっきり区別できるよう「PERFECT CLEAR!!」を大きく強調する。
  * 直前にWhiteFlashOverlay（白閃光）を挟んでから表示することで、「黄金+白の超強力な爆発」を作る。
+ * Ver.4.11: 119%までの黄金OVERDRIVEの延長ではなく「ゲーム完全クリアのお祭り」に格上げするため、
+ * RainbowShockwaveOverlay／Confetti120Overlay／Sparkle120Overlayと合わせて表示する
+ * （このコンポーネント自体は中央のテキスト＋黄金爆発のみを担当し、虹・紙吹雪・sparkleは
+ * それぞれ専用コンポーネントに分離して合成する）。
  */
 export function Golden120Overlay({ show, title }: { show: boolean; title: string }) {
   if (!show) return null
@@ -141,10 +145,11 @@ export function Golden120Overlay({ show, title }: { show: boolean; title: string
       <p className="relative text-5xl font-black tabular-nums leading-none text-amber-300 drop-shadow-[0_0_30px_rgba(250,204,21,0.9)]">
         120<span className="text-2xl">%</span>
       </p>
-      <p className="anim-pop relative text-6xl font-black italic tracking-wider text-white drop-shadow-[0_0_25px_rgba(250,204,21,1)]">
-        CLEAR!!
+      <p className="anim-pop relative px-4 text-center text-4xl font-black italic leading-tight text-white drop-shadow-[0_0_25px_rgba(250,204,21,1)]">
+        PERFECT CLEAR!!
       </p>
-      <p className="anim-pop relative mt-1 text-xl font-black tracking-widest text-amber-200">{title}</p>
+      <p className="anim-pop relative mt-2 text-xl font-black tracking-widest text-amber-200">{title}</p>
+      <p className="anim-pop relative text-sm font-bold tracking-widest text-white/70">完全攻略</p>
     </div>
   )
 }
@@ -153,4 +158,96 @@ export function Golden120Overlay({ show, title }: { show: boolean; title: string
 export function WhiteFlashOverlay({ show }: { show: boolean }) {
   if (!show) return null
   return <div className="flash-white-overlay pointer-events-none absolute inset-0 z-50 bg-white" />
+}
+
+/**
+ * Ver.4.11: 120%到達の瞬間だけ、黄金世界が虹色に割れる2〜3本のリング。常時虹色背景には
+ * せず、あくまで「その瞬間だけ」の演出として中央から外へ広がる（Golden120Overlayと重ねて使う）。
+ * 1本ずつ別の色相の正円リングにすることで、3本まとめて見たときに虹色の印象を作る
+ * （border-imageはborder-radiusを無視して四角くなってしまうため使わない）。
+ */
+const RAINBOW_RING_COLORS = ['#ff5757', '#5cc8ff', '#7dfcae']
+
+export function RainbowShockwaveOverlay({ show }: { show: boolean }) {
+  if (!show) return null
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[51] flex items-center justify-center">
+      {RAINBOW_RING_COLORS.map((color, i) => (
+        <div
+          key={color}
+          className="anim-rainbow-shockwave absolute h-20 w-20"
+          style={{ animationDelay: `${i * 0.18}s`, ['--rainbow-color' as string]: color }}
+        />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Ver.4.11: 120%限定の紙吹雪（黄金・白・虹）。中央のPERFECT CLEAR文字を隠さないよう、
+ * 上部・左右外周にのみ配置し、中央60%の帯には一切かからないようにする。pointer-events-none。
+ */
+const CONFETTI_COLORS = ['#facc15', '#ffffff', '#ff5757', '#7dfcae', '#5cc8ff', '#b98bff', '#ffb347']
+const CONFETTI_SLOTS = [
+  { x: 4, delay: 0 },
+  { x: 12, delay: 0.3 },
+  { x: 20, delay: 0.1 },
+  { x: 80, delay: 0.2 },
+  { x: 88, delay: 0 },
+  { x: 96, delay: 0.35 },
+  { x: 2, delay: 0.5 },
+  { x: 98, delay: 0.5 },
+  { x: 16, delay: 0.6 },
+  { x: 84, delay: 0.6 },
+]
+
+export function Confetti120Overlay({ show }: { show: boolean }) {
+  if (!show) return null
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[52] overflow-hidden">
+      {CONFETTI_SLOTS.map((slot, i) => (
+        <span
+          key={i}
+          className="anim-confetti absolute top-0 h-2.5 w-1.5 rounded-sm"
+          style={{
+            left: `${slot.x}%`,
+            animationDelay: `${slot.delay}s`,
+            backgroundColor: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Ver.4.11: CLEAR直後に増え、徐々に減衰していく星／sparkle／虹色光点。confettiと同様、
+ * 外周・四隅寄りに配置して中央の文字と重ならないようにする。
+ */
+const SPARKLE_SLOTS = [
+  { x: 8, y: 15, delay: 0, glyph: '✦', color: '#facc15' },
+  { x: 92, y: 18, delay: 0.1, glyph: '✧', color: '#ffffff' },
+  { x: 6, y: 55, delay: 0.25, glyph: '✦', color: '#5cc8ff' },
+  { x: 94, y: 58, delay: 0.15, glyph: '✦', color: '#ff5757' },
+  { x: 14, y: 82, delay: 0.4, glyph: '✧', color: '#7dfcae' },
+  { x: 86, y: 84, delay: 0.3, glyph: '✦', color: '#b98bff' },
+  { x: 50, y: 8, delay: 0.2, glyph: '✧', color: '#facc15' },
+  { x: 50, y: 92, delay: 0.45, glyph: '✦', color: '#ffffff' },
+]
+
+export function Sparkle120Overlay({ show }: { show: boolean }) {
+  if (!show) return null
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[52]">
+      {SPARKLE_SLOTS.map((s, i) => (
+        <span
+          key={i}
+          className="anim-sparkle-pop absolute text-2xl"
+          style={{ left: `${s.x}%`, top: `${s.y}%`, animationDelay: `${s.delay}s`, color: s.color }}
+        >
+          {s.glyph}
+        </span>
+      ))}
+    </div>
+  )
 }

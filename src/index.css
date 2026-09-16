@@ -463,3 +463,128 @@ body {
   animation: golden-particle-drift 1.3s ease-out infinite;
 }
 
+/* ==== Ver.4.11: 120% PERFECT CLEAR専用演出（119%までの黄金OVERDRIVEとは別格にする） ==== */
+
+/* 120%到達の瞬間だけ、黄金世界が虹色に割れるショックウェーブ（常時虹背景にはしない） */
+@keyframes rainbow-shockwave {
+  0% {
+    opacity: 0;
+    transform: scale(0.15);
+    border-width: 12px;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.8);
+    border-width: 1px;
+  }
+}
+
+.anim-rainbow-shockwave {
+  animation: rainbow-shockwave 1.1s ease-out forwards;
+  border-style: solid;
+  border-radius: 9999px;
+  /* border-imageはborder-radiusを無視して四角く描画されてしまうため使わない。
+     単色border（呼び出し側でring毎に別の色相を指定）＋border-radiusで、
+     3本それぞれが違う色の正円リングとして広がることで虹色の印象を作る。 */
+  border-color: var(--rainbow-color, #ff5757);
+}
+
+@keyframes rainbow-ring-spin {
+  0% {
+    filter: hue-rotate(0deg);
+  }
+  100% {
+    filter: hue-rotate(360deg);
+  }
+}
+
+/* カード等の縁を回る虹色プレミアムボーダー（静止画スクショでも虹のグラデーションが分かるように） */
+.rainbow-premium-border {
+  position: relative;
+}
+
+.rainbow-premium-border::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(from 0deg, #ff5757, #ffb347, #fff27a, #7dfcae, #5cc8ff, #b98bff, #ff5757);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: rainbow-ring-spin 4s linear infinite;
+  pointer-events: none;
+}
+
+/* 120%限定の紙吹雪。中央の文字を隠さないよう外周・上部・左右にのみ配置して使う */
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-10vh) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(60vh) rotate(340deg);
+    opacity: 0;
+  }
+}
+
+.anim-confetti {
+  animation: confetti-fall 2.6s ease-in forwards;
+}
+
+/* CLEAR直後に増え、徐々に減衰していくsparkle（星／きらめき／虹色光点） */
+@keyframes sparkle-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) rotate(0deg);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1.15) rotate(45deg);
+  }
+  70% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.5) rotate(90deg);
+  }
+}
+
+.anim-sparkle-pop {
+  animation: sparkle-pop 1.8s ease-out forwards;
+}
+
+/* 爆発の瞬間だけの軽い画面shake（Question subtreeのkeyには一切触れない、外枠divへの適用専用） */
+@keyframes climax-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-6px, 2px);
+  }
+  40% {
+    transform: translate(5px, -3px);
+  }
+  60% {
+    transform: translate(-4px, 3px);
+  }
+  80% {
+    transform: translate(3px, -2px);
+  }
+}
+
+.anim-climax-shake {
+  animation: climax-shake 0.18s ease-in-out;
+}
+
