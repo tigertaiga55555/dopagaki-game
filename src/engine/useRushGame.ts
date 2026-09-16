@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { DIFFICULTY_PHASES, FINAL_RUSH_START_SEC, TOTAL_GAME_SEC, getPhaseAt } from '../config/difficultyConfig'
-import { OVERDRIVE_CONFIG, evaluateOverdriveEligibility } from '../config/overdriveConfig'
+import { OVERDRIVE_CONFIG } from '../config/overdriveConfig'
 import {
   MISS_PENALTY,
   SCORE_CONFIG,
@@ -270,7 +270,6 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
   const statsRef = useRef<PlayStats>(createStats())
   const tapTimestampsRef = useRef<number[]>([])
   const gapActiveRef = useRef(true)
-  const hundredReachedRef = useRef(false)
   const overdriveActiveRef = useRef(false)
   const maxReachedRef = useRef(false)
   const judgementKeyRef = useRef(0)
@@ -316,57 +315,43 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     return () => window.removeEventListener('pointerdown', handlePointerDown)
   }, [])
 
-  function currentAccuracy(): number {
-    const s = statsRef.current
-    return s.totalAnswered > 0 ? s.correctCount / s.totalAnswered : 0
-  }
-
-  function currentEligibility() {
-    const s = statsRef.current
-    const avgRatio =
-      s.reactionSamples.length > 0
-        ? s.reactionSamples.reduce((sum, r) => sum + r.reactionMs / r.targetTimeMs, 0) / s.reactionSamples.length
-        : 1
-    return evaluateOverdriveEligibility({
-      accuracy: currentAccuracy(),
-      avgReactionRatio: avgRatio,
-      maxCombo: maxComboRef.current,
-      hastyTapCount: s.hastyTapCount,
-      noPressFails: s.noPressFails,
-    })
-  }
-
   function currentRawScore(): number {
     return rawScoreRef.current
   }
 
   function setPercentTarget() {
-    const eligible = currentEligibility().eligible
     const rawScore = currentRawScore()
-    // Ver.4.9: 正答率による直接キャップ（旧getAccuracyCap）を廃止。非OVERDRIVEは常に100が上限、
-    // OVERDRIVE対象は119（一度でもMISSしている場合）または120（ゲーム開始から完全ノーミスの場合のみ）。
-    const cap = eligible ? (hasEverMissedRef.current ? 119 : OVERDRIVE_CONFIG.maxPercent) : 100
+    // Ver.4.9追加修正: OVERDRIVEの隠しeligibility条件は突入条件として廃止した。
+    // rawScoreがゲーム中で初めて100へ到達した瞬間、無条件でOVERDRIVEへ突入する
+    // （「100%到達したのにOVERDRIVEへ入れない」実機不具合の直接の原因除去）。
+    // overdriveActiveRef.currentは一度trueになったら二度とfalseへ戻らないため、
+    // ここでのフラグ確定と+10秒ボーナス付与は構造的に1ゲーム1回だけになる
+    // （100→MISS→98→100と再到達しても、2回目はenteringOverdriveNowがfalseになる）。
+    const enteringOverdriveNow = !overdriveActiveRef.current && rawScore >= 100
+    if (enteringOverdriveNow) {
+      overdriveActiveRef.current = true
+      overdriveBonusSecRef.current = OVERDRIVE_TIME_BONUS_SEC
+    }
+    // 非OVERDRIVEは常に100が上限、OVERDRIVE突入後は119（一度でもMISSしている場合）
+    // または120（ゲーム開始から完全ノーミスの場合のみ）。
+    const cap = overdriveActiveRef.current ? (hasEverMissedRef.current ? 119 : OVERDRIVE_CONFIG.maxPercent) : 100
     const target = Math.max(0, Math.min(cap, rawScore))
 
-    const wasHundred = hundredReachedRef.current
-    const crossingHundred = !wasHundred && target >= 100
-    const crossingOverdrive = eligible && !overdriveActiveRef.current && target > 100
+    const crossingHundred = enteringOverdriveNow
     // 120%（既存の隠し上限=OVERDRIVE_CONFIG.maxPercent）に初めて到達した瞬間だけの
-    // 完全攻略CLEAR演出。Ver.4.9では一度でもMISSしていると cap が119止まりになるため、
+    // 完全攻略CLEAR演出。一度でもMISSしていると cap が119止まりになるため、
     // ここに到達できるのはゲーム開始から完全ノーミスのプレイだけ。
-    const crossingMax = eligible && !maxReachedRef.current && target >= OVERDRIVE_CONFIG.maxPercent
+    const crossingMax = !maxReachedRef.current && target >= OVERDRIVE_CONFIG.maxPercent
     if (crossingMax) maxReachedRef.current = true
 
     percentTweenRef.current = { from: displayPercentRef.current, to: target, startedAt: performance.now() }
 
     // 「100%という上限を破壊した」演出（数字の震え→グリッチ→LIMIT ERROR→DOPA OVERDRIVE）。
-    // Ver.4.9: OVERDRIVEに正式突入した瞬間、1ゲーム1回だけ残り時間+10秒を加算する
-    // （100%到達が終盤になりやすく、OVERDRIVEに入っても数秒しか遊べない問題への対応）。
+    // 状態変化（overdriveActiveRef/overdriveBonusSecRef/capの引き上げ）は上で既に同期的に
+    // 確定済みで、ここはあくまで視覚・音の演出タイミングだけを担う。
     function runOverdriveBreach() {
       setSnapshot((s) => ({ ...s, showLimitErrorGlitch: true }))
       setTimeout(() => {
-        overdriveActiveRef.current = true
-        overdriveBonusSecRef.current = OVERDRIVE_TIME_BONUS_SEC
         sfx.overdrive()
         setOverdriveMode(true)
         setSnapshot((s) => ({ ...s, showLimitErrorGlitch: false, showOverdriveBurst: true, overdriveActive: true }))
@@ -396,7 +381,6 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     }
 
     if (crossingHundred) {
-      hundredReachedRef.current = true
       // 演出のクライマックス：騒がしいBGM/SEを一瞬静める→静寂の後にバースト音と演出を同時に出す
       duckAudio(HUNDRED_SILENCE_MS, 1)
       setTimeout(() => {
@@ -404,16 +388,15 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         setSnapshot((s) => ({ ...s, showHundredBurst: true }))
         setTimeout(() => {
           setSnapshot((s) => ({ ...s, showHundredBurst: false }))
-          if (crossingOverdrive) runOverdriveBreach()
-          else if (crossingMax) runMaxClimax()
+          // 新仕様では100%到達＝即OVERDRIVE突入のため、runOverdriveBreach()は
+          // crossingHundredの直後に必ず続けて呼ぶ（別条件として分岐させない）。
+          runOverdriveBreach()
         }, MILESTONE_FREEZE_MS)
       }, HUNDRED_SILENCE_MS)
-    } else if (crossingOverdrive) {
-      runOverdriveBreach()
     } else if (crossingMax) {
       runMaxClimax()
     }
-    return { crossingHundred, crossingOverdrive, crossingMax }
+    return { crossingHundred, crossingMax }
   }
 
   function buildNextQuestionSpec(): QuestionSpec | null {
@@ -578,11 +561,11 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
       }
     }
 
-    const { crossingHundred, crossingOverdrive, crossingMax } = setPercentTarget()
+    const { crossingHundred, crossingMax } = setPercentTarget()
     judgementKeyRef.current += 1
     const judgementKey = judgementKeyRef.current
 
-    if (crossingHundred || crossingOverdrive || crossingMax) {
+    if (crossingHundred || crossingMax) {
       // 節目の演出のときだけ、意図的に少し間を置いてから次の問題を出す
       // （どの節目を跨いだかに応じて、それぞれの演出時間ぶんだけ加算する）
       gapActiveRef.current = true
@@ -602,8 +585,9 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         return
       }
       let freezeMs = 0
-      if (crossingHundred) freezeMs += HUNDRED_SILENCE_MS + MILESTONE_FREEZE_MS
-      if (crossingOverdrive) freezeMs += LIMIT_ERROR_MS + MILESTONE_FREEZE_MS
+      // 新仕様では100%到達＝即OVERDRIVE突入が常に同時に起きるため、両方の演出時間を
+      // 合算してcrossingHundredの1本にまとめる（crossingOverdriveは独立の分岐として存在しない）。
+      if (crossingHundred) freezeMs += HUNDRED_SILENCE_MS + MILESTONE_FREEZE_MS + LIMIT_ERROR_MS + MILESTONE_FREEZE_MS
       nextQuestionTimerRef.current = setTimeout(() => {
         const spec2 = buildNextQuestionSpec()
         gapActiveRef.current = false
@@ -638,10 +622,10 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     if (overlayHideTimerRef.current) clearTimeout(overlayHideTimerRef.current)
     if (comboMilestoneTimerRef.current) clearTimeout(comboMilestoneTimerRef.current)
     stopBgm()
-    const eligibility = currentEligibility()
     const rawPercent = currentRawScore()
-    // Ver.4.9: setPercentTarget()と同じcapロジック（正答率による直接キャップは廃止）。
-    const cap = eligibility.eligible ? (hasEverMissedRef.current ? 119 : OVERDRIVE_CONFIG.maxPercent) : 100
+    // setPercentTarget()と同じcapロジック。overdriveActiveRefは「rawScoreが一度でも
+    // 100へ到達したか」の単一の真実源であり、eligibility概念には依存しない。
+    const cap = overdriveActiveRef.current ? (hasEverMissedRef.current ? 119 : OVERDRIVE_CONFIG.maxPercent) : 100
     const finalPercent = Math.max(0, Math.round(Math.min(cap, rawPercent)))
     onFinish({
       rawPercent,

@@ -1,49 +1,17 @@
 /**
- * DOPA OVERDRIVE（100%突破）の隠し発動条件。
- * ユーザーには一切説明しない。高精度＋高反応＋その他3条件中2つを満たした場合のみ発動する。
+ * DOPA OVERDRIVE（100%突破）の設定。
+ *
+ * Ver.4.9までは、ここにあった隠しeligibility条件（高精度＋高反応＋その他2/3）を
+ * 満たさない限りOVERDRIVEへ突入できず、rawScoreが100に到達していても
+ * 「100%止まりでOVERDRIVEに入れない・+10秒も付与されない」という実機報告のある
+ * 不具合につながっていた。Ver.4.9追加修正でこの隠し条件をOVERDRIVE突入条件としては
+ * 廃止し、「rawScoreがゲーム中初めて100%へ到達した瞬間、無条件でOVERDRIVEへ突入する」
+ * 仕様に変更した（判定はuseRushGame.tsのsetPercentTarget()内で完結する）。
+ *
+ * 旧来の高精度・高反応などの概念は、120%（完全ノーミス限定のCLEAR）の判定には使わない
+ * （120%はhasEverMissedRefのみで判定する）ため、このファイルにはOVERDRIVEの上限値だけが残る。
  */
 export const OVERDRIVE_CONFIG = {
-  /** 100%を突破できる最大値 */
+  /** 100%を突破できる最大値。120%は「ゲーム開始から完全ノーミス」の場合のみ到達可能。 */
   maxPercent: 120,
-  /** 「高精度」とみなす正答率の下限。Ver.4.1で平均ベースのスコアに変更したため、
-   *  ここを高めに保たないと100%到達自体は簡単になった分OVERDRIVEが乱発してしまう。 */
-  accuracyThreshold: 0.92,
-  /** 「高反応」とみなす、反応時間/制限時間比率の上限（小さいほど速い） */
-  reactionRatioThreshold: 0.4,
-  /** 「高COMBO」とみなす最大COMBOの下限 */
-  comboThreshold: 14,
-  /** 「せっかち行動」とみなす、ゲーム内の先走りタップ回数の下限 */
-  hastyTapThreshold: 4,
-  /** 「待てなさ」とみなす、「押すな」失敗回数の下限 */
-  impatienceThreshold: 1,
-}
-
-export interface OverdriveEligibility {
-  eligible: boolean
-  hasHighAccuracy: boolean
-  hasFastReaction: boolean
-  extraConditionsMet: number
-}
-
-export function evaluateOverdriveEligibility(stats: {
-  accuracy: number
-  avgReactionRatio: number
-  maxCombo: number
-  hastyTapCount: number
-  noPressFails: number
-}): OverdriveEligibility {
-  const hasHighAccuracy = stats.accuracy >= OVERDRIVE_CONFIG.accuracyThreshold
-  const hasFastReaction = stats.avgReactionRatio <= OVERDRIVE_CONFIG.reactionRatioThreshold
-  const extraConditionsMet = [
-    stats.maxCombo >= OVERDRIVE_CONFIG.comboThreshold,
-    stats.hastyTapCount >= OVERDRIVE_CONFIG.hastyTapThreshold,
-    stats.noPressFails >= OVERDRIVE_CONFIG.impatienceThreshold,
-  ].filter(Boolean).length
-
-  return {
-    eligible: hasHighAccuracy && hasFastReaction && extraConditionsMet >= 2,
-    hasHighAccuracy,
-    hasFastReaction,
-    extraConditionsMet,
-  }
 }
