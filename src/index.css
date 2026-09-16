@@ -331,3 +331,118 @@ body {
     0 0 70px rgba(239, 68, 68, 0.55);
 }
 
+/* ==== Ver.4.7: 黄金DOPA OVERDRIVE演出（FINALの赤サイレンとは明確に別物にする） ==== */
+
+@keyframes golden-siren-sweep {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scaleY(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+.golden-siren-bar {
+  animation: golden-siren-sweep var(--siren-ms, 900ms) ease-in-out infinite;
+  background: linear-gradient(180deg, rgba(250, 204, 21, 0) 0%, rgba(250, 204, 21, 0.9) 50%, rgba(250, 204, 21, 0) 100%);
+}
+
+@keyframes golden-ring-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 40px rgba(250, 204, 21, 0.35),
+      0 0 80px rgba(250, 204, 21, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 70px rgba(250, 204, 21, 0.75),
+      0 0 130px rgba(250, 204, 21, 0.4);
+  }
+}
+
+.overdrive-ring {
+  animation: golden-ring-pulse var(--ring-ms, 1100ms) ease-in-out infinite;
+}
+
+@keyframes golden-shockwave {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+    border-width: 10px;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.4);
+    border-width: 1px;
+  }
+}
+
+.anim-golden-shockwave {
+  animation: golden-shockwave 0.8s ease-out forwards;
+  border-style: solid;
+  border-color: rgba(250, 204, 21, 0.9);
+  border-radius: 9999px;
+}
+
+@keyframes golden-vignette-flash {
+  0% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.anim-golden-vignette {
+  animation: golden-vignette-flash 0.5s ease-out forwards;
+  background: radial-gradient(ellipse at center, rgba(250, 204, 21, 0) 45%, rgba(250, 204, 21, 0.55) 100%);
+}
+
+@keyframes limit-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px) rotate(-1deg);
+  }
+  40% {
+    transform: translateX(4px) rotate(1deg);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+
+.anim-limit-shake {
+  animation: limit-shake 0.12s ease-in-out infinite;
+}
+
+@keyframes golden-particle-drift {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-140px) scale(0.3);
+    opacity: 0;
+  }
+}
+
+.anim-golden-particle {
+  animation: golden-particle-drift 1.3s ease-out infinite;
+}
+

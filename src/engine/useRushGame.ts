@@ -16,6 +16,12 @@ const MILESTONE_FREEZE_MS = 650
 const JUDGEMENT_OVERLAY_MS = 380
 /** 100%到達時、BGM/SEを静める→バースト演出までの静寂の長さ */
 const HUNDRED_SILENCE_MS = 300
+/** Ver.4.7: 100%→101%突破時の「上限を破壊した」演出（数字の震え＋グリッチ＋LIMIT ERROR）の長さ */
+const LIMIT_ERROR_MS = 550
+/** Ver.4.7: 120%（上限）到達時、一瞬音を引く長さ */
+const MAX_SILENCE_MS = 250
+/** Ver.4.7: 120%到達演出の表示保持時間（最大クライマックスなので少し長めに） */
+const MAX_BURST_HOLD_MS = 900
 /** 大きいCOMBOを切った瞬間の「怯み」演出（画面暗転・BGMダック）の長さ */
 const COMBO_BREAK_FLINCH_MS = 200
 /** COMBO BREAK演出の文言を強めに出す最低COMBO数 */
@@ -103,6 +109,10 @@ export interface RushSnapshot {
   comboBreakBig: boolean
   showHundredBurst: boolean
   showOverdriveBurst: boolean
+  /** Ver.4.7: 100%→101%突破の瞬間、数字の震え＋グリッチ＋LIMIT ERRORを表示する */
+  showLimitErrorGlitch: boolean
+  /** Ver.4.7: 120%（上限）到達時の最大クライマックス演出 */
+  showMaxBurst: boolean
   overdriveActive: boolean
   /** 連続正解の節目（10/20など）で短時間だけ表示するバナー文言 */
   comboMilestoneLabel: string | null
@@ -167,6 +177,8 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     comboBreakBig: false,
     showHundredBurst: false,
     showOverdriveBurst: false,
+    showLimitErrorGlitch: false,
+    showMaxBurst: false,
     overdriveActive: false,
     comboMilestoneLabel: null,
     comboMilestoneKey: 0,
@@ -193,6 +205,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
   const gapActiveRef = useRef(true)
   const hundredReachedRef = useRef(false)
   const overdriveActiveRef = useRef(false)
+  const maxReachedRef = useRef(false)
   const judgementKeyRef = useRef(0)
   const alarmedSecondsRef = useRef(new Set<number>())
   const nextQuestionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -253,8 +266,37 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     const wasHundred = hundredReachedRef.current
     const crossingHundred = !wasHundred && target >= 100
     const crossingOverdrive = eligible && !overdriveActiveRef.current && target > 100
+    // Ver.4.7: 120%（既存の隠し上限=OVERDRIVE_CONFIG.maxPercent）に初めて到達した瞬間だけの
+    // 追加クライマックス演出。上限の値・発動条件自体は一切変更していない（観測して演出するだけ）。
+    const crossingMax = eligible && !maxReachedRef.current && target >= OVERDRIVE_CONFIG.maxPercent
+    if (crossingMax) maxReachedRef.current = true
 
     percentTweenRef.current = { from: displayPercentRef.current, to: target, startedAt: performance.now() }
+
+    // Ver.4.7: 「100%という上限を破壊した」演出（数字の震え→グリッチ→LIMIT ERROR→DOPA OVERDRIVE）。
+    function runOverdriveBreach() {
+      setSnapshot((s) => ({ ...s, showLimitErrorGlitch: true }))
+      setTimeout(() => {
+        overdriveActiveRef.current = true
+        sfx.overdrive()
+        setOverdriveMode(true)
+        setSnapshot((s) => ({ ...s, showLimitErrorGlitch: false, showOverdriveBurst: true, overdriveActive: true }))
+        setTimeout(() => {
+          setSnapshot((s) => ({ ...s, showOverdriveBurst: false }))
+          if (crossingMax) runMaxClimax()
+        }, MILESTONE_FREEZE_MS)
+      }, LIMIT_ERROR_MS)
+    }
+
+    // Ver.4.7: 120%到達の最大クライマックス（一瞬音を引く→黄金爆発）。
+    function runMaxClimax() {
+      duckAudio(MAX_SILENCE_MS, 1)
+      setTimeout(() => {
+        sfx.overdriveMax()
+        setSnapshot((s) => ({ ...s, showMaxBurst: true }))
+        setTimeout(() => setSnapshot((s) => ({ ...s, showMaxBurst: false })), MAX_BURST_HOLD_MS)
+      }, MAX_SILENCE_MS)
+    }
 
     if (crossingHundred) {
       hundredReachedRef.current = true
@@ -262,27 +304,19 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
       duckAudio(HUNDRED_SILENCE_MS, 1)
       setTimeout(() => {
         sfx.hundred()
-        if (crossingOverdrive) {
-          overdriveActiveRef.current = true
-          sfx.overdrive()
-          setOverdriveMode(true)
-        }
-        setSnapshot((s) => ({
-          ...s,
-          showHundredBurst: true,
-          showOverdriveBurst: crossingOverdrive,
-          overdriveActive: overdriveActiveRef.current,
-        }))
-        setTimeout(() => setSnapshot((s) => ({ ...s, showHundredBurst: false, showOverdriveBurst: false })), MILESTONE_FREEZE_MS)
+        setSnapshot((s) => ({ ...s, showHundredBurst: true }))
+        setTimeout(() => {
+          setSnapshot((s) => ({ ...s, showHundredBurst: false }))
+          if (crossingOverdrive) runOverdriveBreach()
+          else if (crossingMax) runMaxClimax()
+        }, MILESTONE_FREEZE_MS)
       }, HUNDRED_SILENCE_MS)
     } else if (crossingOverdrive) {
-      overdriveActiveRef.current = true
-      sfx.overdrive()
-      setOverdriveMode(true)
-      setSnapshot((s) => ({ ...s, showOverdriveBurst: true, overdriveActive: true }))
-      setTimeout(() => setSnapshot((s) => ({ ...s, showOverdriveBurst: false })), MILESTONE_FREEZE_MS)
+      runOverdriveBreach()
+    } else if (crossingMax) {
+      runMaxClimax()
     }
-    return { crossingHundred, crossingOverdrive }
+    return { crossingHundred, crossingOverdrive, crossingMax }
   }
 
   function buildNextQuestionSpec(): QuestionSpec | null {
@@ -404,12 +438,13 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     qualitySumRef.current += SCORE_CONFIG.qualityByTier[tier] + comboBonus
     answeredCountRef.current += 1
 
-    const { crossingHundred, crossingOverdrive } = setPercentTarget()
+    const { crossingHundred, crossingOverdrive, crossingMax } = setPercentTarget()
     judgementKeyRef.current += 1
     const judgementKey = judgementKeyRef.current
 
-    if (crossingHundred || crossingOverdrive) {
-      // 節目の演出のときだけ、意図的に少し間を置いてから次の問題を出す（100%到達時は静寂の分だけ長くする）
+    if (crossingHundred || crossingOverdrive || crossingMax) {
+      // 節目の演出のときだけ、意図的に少し間を置いてから次の問題を出す
+      // （どの節目を跨いだかに応じて、それぞれの演出時間ぶんだけ加算する）
       gapActiveRef.current = true
       if (nextQuestionTimerRef.current) clearTimeout(nextQuestionTimerRef.current)
       setSnapshot((s) => ({
@@ -421,7 +456,10 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         comboBrokenFrom,
         comboBreakBig,
       }))
-      const freezeMs = crossingHundred ? HUNDRED_SILENCE_MS + MILESTONE_FREEZE_MS : MILESTONE_FREEZE_MS
+      let freezeMs = 0
+      if (crossingHundred) freezeMs += HUNDRED_SILENCE_MS + MILESTONE_FREEZE_MS
+      if (crossingOverdrive) freezeMs += LIMIT_ERROR_MS + MILESTONE_FREEZE_MS
+      if (crossingMax) freezeMs += MAX_SILENCE_MS + MAX_BURST_HOLD_MS
       nextQuestionTimerRef.current = setTimeout(() => {
         const spec2 = buildNextQuestionSpec()
         gapActiveRef.current = false

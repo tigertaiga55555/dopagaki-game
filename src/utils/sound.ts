@@ -127,6 +127,14 @@ export const sfx = {
     beep(2100, 100, 'sawtooth', 0.16)
     setTimeout(() => beep(2600, 260, 'sawtooth', 0.16), 90)
   },
+  /** Ver.4.7: 120%到達専用の爆発SE。100%到達より一段大きく、低音の衝撃＋金色のきらめきを重ねる */
+  overdriveMax: () => {
+    beep(70, 260, 'sine', 0.2)
+    beep(1800, 140, 'sine', 0.14)
+    setTimeout(() => beep(2200, 200, 'sine', 0.13), 100)
+    setTimeout(() => beep(2800, 220, 'triangle', 0.11), 200)
+    setTimeout(() => beep(3400, 280, 'sine', 0.09), 320)
+  },
   /** GOまで押すな：GO表示の合図音 */
   go: () => beep(1300, 70, 'sine', 0.1),
   /** SKIP待ち：SKIP表示の合図音 */

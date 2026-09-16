@@ -1,4 +1,4 @@
-# ドパガキゲーム（Ver.4.6）
+# ドパガキゲーム（Ver.4.7）
 
 Ver.3系の「イベントを1つずつこなす診断ゲーム」を廃止し、**「60秒で刺激をさばき続ける高速リズムゲーム」**
 そのものに作り替えた。診断色を消し、ゲーム自体がドパガキ的な体験になることを最優先している。
@@ -32,6 +32,13 @@ Ver.4.6では**新お題の追加はせず、ゲーム構造・27種のお題・
 (2) 「成功したはずなのにMISSになる」誤判定の根本原因（外側の汎用タイムアウトが進捗を
 無視して発火するレース）を6問について構造的に修正、(3) FINAL DOPA RUSHと3-2-1カウントダウンが
 お題の中央領域を覆っていた表示バグを修正した（詳細は「Ver.4.6で修正した内容」を参照）。
+
+Ver.4.7では**通常問題のロジック・スコア計算・OVERDRIVE発動条件・正誤判定・問題制限時間は
+一切変更せず**、DOPA OVERDRIVE（100%突破）を完全にプレゼンテーション層として「黄金の非常事態」に
+作り替えた。100%→101%突破を「上限を破壊した」演出に強化し、黄金サイレン・黄金パーティクル・
+専用BGM/SEを追加、120%到達に専用のクライマックス演出と黄金結果カードを用意した
+（詳細は「Ver.4.7で追加した黄金DOPA OVERDRIVE演出」を参照）。演出はPlayScreenと
+`?preview=overdrive`確認画面（Vercel Preview限定）の両方で同じコンポーネントを共有している。
 
 タイトル → プレイ（固定60秒・お題が絶え間なく切り替わる） → 結果画面 → リトライ。
 
@@ -417,6 +424,85 @@ Ver.4.3でHOLDに導入した「進捗するたびに安全弁タイマーを引
 待つか押すか・成功条件と画面表示の一致・終了条件の推測可能性のいずれも大きな問題は
 見つからず、追加の変更はしていない。
 
+## Ver.4.7で追加した黄金DOPA OVERDRIVE演出
+
+DOPA OVERDRIVE（100%突破）を完全にプレゼンテーション層として作り替えた。**通常問題のロジック・
+スコア計算・OVERDRIVE発動条件（`overdriveConfig.ts`）・正誤判定・問題制限時間には一切触れていない**。
+コンセプトは、通常ゲームの紫・ネオン系、FINAL DOPA RUSHの赤い非常警報に対して、
+DOPA OVERDRIVEを**「黄金の非常事態」**として明確に差別化すること。
+
+### 共有コンポーネント（`src/components/OverdriveFx.tsx`）
+
+演出は実ゲーム（`PlayScreen.tsx`）と`?preview=overdrive`確認画面（`OverdrivePreviewScreen.tsx`、
+Vercel Preview限定）の両方から同じコンポーネントを呼び出す構成にした。見た目のロジックを
+ここに一本化することで、「Previewで見た演出」と「実際にOVERDRIVEが発動した時の演出」が
+ほぼ同じになる。`getOverdriveTier(percent)`でpercentから0〜4の段階を判定し、
+`OverdriveAmbience`（画面端の黄金サイレン＋外周パーティクル）、`LimitErrorOverlay`
+（100→101%突破時のグリッチ）、`OverdriveRevealOverlay`（DOPA OVERDRIVE到達）、
+`Golden120Overlay`（120%到達クライマックス）を提供する。全要素に`pointer-events-none`を設定。
+
+### 100%→101%突破演出
+
+既存の「騒音→一瞬静寂→金色爆発」（100%到達）は維持しつつ、その後OVERDRIVE条件を満たしている
+場合だけ、「100%という上限を破壊した」と感じられる新しいシーケンスを追加した
+（`useRushGame.ts`の`setPercentTarget()`）：
+
+DOPAGAKI表示の数字が震える（`anim-limit-shake`）→ グリッチ＋暗転＋「LIMIT ERROR」の異常表示
+（`LimitErrorOverlay`、約550ms）→ 101%表示＋`sfx.overdrive()`＋黄金衝撃波の「DOPA OVERDRIVE」
+バースト（`OverdriveRevealOverlay`）。100%到達と同じ答えでOVERDRIVEにも突入する場合と、
+すでに100%到達済みの状態で後の答えでOVERDRIVEに突入する場合の両方に対応している。
+
+### 黄金サイレン
+
+OVERDRIVEに入った瞬間から、画面左右端に細い帯状の黄金サイレン（`golden-siren-bar`、
+FINAL DOPA RUSHの赤サイレンとは別の点滅パターン）を常時表示する。左右で点灯タイミングを
+半周期ずらし、「左から光る→右から光る」という回転灯のような見え方にした。外周には
+`overdrive-ring`のパルス発光、パーティクルは画面端0〜15%／85〜100%の帯にのみ配置し、
+**中央60〜70%の問題表示領域には一切演出をかけない**（信号・色問題・通知色のUIに
+黄金フィルターがかからないことをPlaywrightで確認済み）。
+
+### 110/115/120%の演出差
+
+`getOverdriveTier()`が percent に応じて4段階を返し、サイレンの点滅速度・外周発光の脈動速度・
+パーティクル数を連動して強めていく。
+
+- 101〜109%：黄金演出開始。サイレンは控えめな速度
+- 110〜114%：金色の比率・パーティクル数が増加、外周発光を強化
+- 115〜119%：サイレンが高速化し、専用シンセ／高音レイヤーが増える
+- 120%：サイレン最高速、`Golden120Overlay`による最大クライマックス
+
+### OVERDRIVE中のBGM
+
+`bgm.ts`にOVERDRIVE専用レイヤーを追加した：`playOverdriveBass`（通常より太い専用低音）、
+`playOverdriveArpeggio`（COMBOアルペジオより速く広い駆け上がり）、`playOverdriveSiren`
+（黄金サイレンの音版、パトランプ風の上下スイープを1小節に1回）。既存の`playOverdriveStab`
+（高音シンセ）と合わせ、「通常ゲームの延長」ではなく「隠しステージに入った」音になるようにした。
+SEをかき消さないよう、音量は既存のBGM/SEバランスの範囲内に収めている。
+
+### 120%到達演出
+
+上限（`OVERDRIVE_CONFIG.maxPercent`）に初めて到達した瞬間だけの追加クライマックスを実装した
+（`crossingMax`、`useRushGame.ts`）。上限の値・発動条件自体は変更せず、「target が初めて
+上限に達したこと」を観測して演出するだけ。一瞬音を引く（`duckAudio`）→ `sfx.overdriveMax()`
+（100%到達より一段大きい専用爆発SE）→ 黄金爆発＋画面端から広がる金色衝撃波（`anim-golden-shockwave`）
+＋「120%」＋タイプ名（`getOverdriveTitle(120)`＝「ドパガキ最終形態」）を表示。多少やりすぎな
+くらいの演出量を許容している。
+
+### 黄金結果画面
+
+`ResultCard.tsx`を、通常結果と一目で区別できるように強化した。101%以上で「⚡ DOPA OVERDRIVE ⚡」
+バッジ・黄金グロー・カード端に控えめな金色パーティクルを表示し、120%到達時はさらに「・MAX」の
+表示と、より強い黄金グロー（`shadow`を2段階に強化）を追加する。SNSスクショ映えを意識し、
+通常の紫系カードとは明確に別物に見えるようにした。
+
+### Vercel Preview確認モード（`?preview=overdrive`）
+
+Ver.4.6で追加した確認用画面（`src/dev/OverdrivePreviewScreen.tsx`）を、今回の黄金演出込みで
+一通り確認できるように更新した。98%→100%到達→LIMIT ERRORブリーチ→101%突破→DOPA OVERDRIVE→
+110〜116%上昇→120%到達クライマックス→黄金結果画面、までを約13秒で再生する。到達可否は
+引き続きビルド時注入の`__DOPAGAKI_PREVIEW_ENABLED__`（Productionビルドでは常にfalse）で
+制御しており、通常プレイのロジック・スコア計算・OVERDRIVE発動条件には一切触れていない。
+
 ## 結果画面
 
 最大表示は常に「ドパガキ度」。その下にタイプ名、さらに小さく最大COMBO／最速反応／正答率を表示し、
@@ -583,6 +669,29 @@ GAME SCOREは表示しない。99%終了時は「あと1％でした。」のよ
     修正して解決
 - iPhone Safari実機での最終確認は未実施（後述の「重点確認ポイント」を参照）
 
+### Ver.4.7（黄金DOPA OVERDRIVE演出）
+
+- `npx tsc --noEmit` / `npm run build` / `npm run lint` すべて成功（エラー0件）
+- **Vercel Preview確認モードでの演出検証**（`?preview=overdrive`、Chromiumヘッドレス）：
+  0→30→60→85→98→100→101→104→108→112→116→120という想定通りの%推移、
+  「DOPAGAKI 100%」バースト、「LIMIT ERROR」グリッチ、「DOPA OVERDRIVE」バースト、
+  120%クライマックス（`Golden120Overlay`）、黄金結果カードの「MAX」バッジまで
+  すべて表示されることを確認。コンソールエラー0件
+- **実際の60秒ゲームループでのOVERDRIVE発動経路の検証**：本番の隠し条件・スコア計算は
+  一切変更していないことを確認する目的で、開発時のみ有効な一時テストフック
+  （`__DOPAGAKI_FORCE_OVERDRIVE_SETUP__`、検証後に削除済み）で統計値を直接注入したうえで、
+  実際の色選択お題に1問正解させ、本物の`handleQuestionResult()`→`setPercentTarget()`を
+  実行させて検証した。`showHundredBurst`／`showLimitErrorGlitch`／`showOverdriveBurst`／
+  `overdriveActive`／`showMaxBurst`のすべてが実エンジンのコードパス上で正しく発火し、
+  displayPercentが100・120の両方に到達することを確認。コンソールエラー0件
+- **Production非到達の再確認**：`VERCEL_ENV=production`でビルドしたバンドルに対し、
+  `?preview=overdrive`を付けても通常のタイトル画面が表示され、確認用画面・黄金演出のいずれも
+  出現しないことを確認（Ver.4.6で確立した仕組みがVer.4.7の追加後も機能している）
+- **色問題への干渉確認**：黄金パーティクル・サイレンの配置座標を画面端0〜15%／85〜100%の帯に
+  限定し、信号（GoWait）・文字の色（ColorWord）・通知ラッシュ・色選択のUI領域と
+  重ならないことをコードレビューと実機相当ビューポートでの表示確認で検証
+- iPhone Safari実機での最終確認は未実施（後述の「重点確認ポイント」を参照）
+
 ## 今後簡単に調整できるファイル
 
 - `src/config/difficultyConfig.ts`：6段階の時間帯・出題速度・出題プール
@@ -638,6 +747,17 @@ GAME SCOREは表示しない。99%終了時は「あと1％でした。」のよ
   `ShortVideoSwipeQuestion`の`PER_REMAINING_SWIPE_MS`など）：各問題の再武装タイマーの余裕時間
 - `useRushGame.ts`の`inferFailureReason`／`logQuestionMiss`：開発時のMISS原因ログ
   （`import.meta.env.DEV`時のみ`console.debug`に出力、本番には出ない）
+
+（Ver.4.7で追加）
+
+- `src/components/OverdriveFx.tsx`の`getOverdriveTier`のしきい値（101/110/115/120）、
+  `TIER_SIREN_MS`/`TIER_RING_MS`/`TIER_PARTICLE_COUNT`：黄金演出の段階と強度
+- `useRushGame.ts`の`LIMIT_ERROR_MS`/`MAX_SILENCE_MS`/`MAX_BURST_HOLD_MS`：
+  100→101%突破演出・120%到達演出それぞれの長さ
+- `src/utils/bgm.ts`の`playOverdriveBass`/`playOverdriveArpeggio`/`playOverdriveSiren`：
+  OVERDRIVE専用BGMレイヤーの音色・音量
+- `src/utils/sound.ts`の`overdriveMax`：120%到達専用の爆発SE
+- `src/components/ResultCard.tsx`の`GOLD_CARD_PARTICLES`：黄金結果カードの装飾パーティクル位置
 
 ## スマホ実機で重点的に確認してほしいポイント
 
@@ -705,6 +825,23 @@ GAME SCOREは表示しない。99%終了時は「あと1％でした。」のよ
   操作できるか。警告バーの位置・大きさが一般的なiPhone幅で崩れたり見切れたりしないか
 - （Ver.4.6）赤い警告ランプ・サイレン・高速BGM・警告ビープなど、FINALの刺激量自体は
   Ver.4.5から変わらず十分に感じられるか（表示を控えめにした分、刺激まで弱まっていないか）
+- **（Ver.4.7・最重要）100%→101%突破の瞬間、「普通に101%になった」ではなく「上限を破壊した」と
+  感じられるか**（数字の震え→グリッチ→LIMIT ERROR→DOPA OVERDRIVEの流れが実機で自然に見えるか）
+- （Ver.4.7）OVERDRIVEに入った瞬間、黄金サイレン・外周発光・パーティクルによって
+  「世界観が変わった」体感があるか。FINAL DOPA RUSHの赤サイレンと混同しないか
+- （Ver.4.7）OVERDRIVE中も、文字の色・信号（GoWait）・通知ラッシュ・色選択など色を判別する
+  お題のUIが黄金演出に埋もれず、実際に色を判別できるか
+- （Ver.4.7）110%・115%・120%と進むにつれて演出がはっきり派手になっていく段階差を感じられるか
+- （Ver.4.7）120%到達時の黄金爆発・衝撃波・「ドパガキ最終形態」表示が、操作中のお題を
+  隠さずに最大クライマックスとして成立しているか
+- （Ver.4.7）OVERDRIVE中のBGM（専用低音・アルペジオ・黄金サイレン）が、判定音やSEを
+  かき消していないか
+- （Ver.4.7）黄金演出が追加されてもiPhone Safariで入力遅延やカクつきが発生しないか
+  （パーティクル数・アニメーションの負荷）
+- （Ver.4.7）黄金結果画面（101%以上のバッジ、120%のMAX表示）が一目で「通常結果ではない」と
+  分かるか。SNSスクショとして見栄えがするか
+- （Ver.4.7）`?preview=overdrive`で確認した演出と、実際にOVERDRIVEを発動させた際の演出が
+  実機でもほぼ同じに見えるか
 
 ## Ver.4では見送ったもの
 

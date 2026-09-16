@@ -255,6 +255,81 @@ function playOverdriveStab(time: number) {
   })
 }
 
+/** Ver.4.7: OVERDRIVE専用の強い低音。「隠しステージに入った」感を出すため通常ベースより太くする */
+function playOverdriveBass(time: number) {
+  const ctx = getAudioContext()
+  const out = getBgmGain()
+  if (!ctx || !out) return
+  const osc = ctx.createOscillator()
+  const filter = ctx.createBiquadFilter()
+  const gain = ctx.createGain()
+  osc.type = 'sawtooth'
+  osc.frequency.setValueAtTime(62, time)
+  osc.frequency.exponentialRampToValueAtTime(41, time + 0.2)
+  filter.type = 'lowpass'
+  filter.frequency.value = 320
+  gain.gain.setValueAtTime(0.16, time)
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.3)
+  osc.connect(filter)
+  filter.connect(gain)
+  gain.connect(out)
+  osc.start(time)
+  osc.stop(time + 0.32)
+  osc.onended = () => {
+    osc.disconnect()
+    filter.disconnect()
+    gain.disconnect()
+  }
+}
+
+/** Ver.4.7: OVERDRIVE専用のアルペジオ（COMBOアルペジオより速く広い駆け上がり） */
+function playOverdriveArpeggio(time: number) {
+  const ctx = getAudioContext()
+  const out = getBgmGain()
+  if (!ctx || !out) return
+  ;[988, 1245, 1480, 1976].forEach((freq, i) => {
+    const t = time + i * 0.045
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'sawtooth'
+    osc.frequency.value = freq
+    gain.gain.setValueAtTime(0.03, t)
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09)
+    osc.connect(gain)
+    gain.connect(out)
+    osc.start(t)
+    osc.stop(t + 0.1)
+    osc.onended = () => {
+      osc.disconnect()
+      gain.disconnect()
+    }
+  })
+}
+
+/** Ver.4.7: 「黄金サイレン」の音版。パトランプの回転灯のような短い上下スイープを1小節に1回鳴らす */
+function playOverdriveSiren(time: number) {
+  const ctx = getAudioContext()
+  const out = getBgmGain()
+  if (!ctx || !out) return
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(650, time)
+  osc.frequency.linearRampToValueAtTime(1350, time + 0.3)
+  osc.frequency.linearRampToValueAtTime(650, time + 0.6)
+  gain.gain.setValueAtTime(0.001, time)
+  gain.gain.linearRampToValueAtTime(0.045, time + 0.15)
+  gain.gain.linearRampToValueAtTime(0.001, time + 0.6)
+  osc.connect(gain)
+  gain.connect(out)
+  osc.start(time)
+  osc.stop(time + 0.62)
+  osc.onended = () => {
+    osc.disconnect()
+    gain.disconnect()
+  }
+}
+
 /** FINAL DOPA RUSH直前（残り12秒前後）に一度だけ鳴らす、盛り上がりを予感させるライザー。 */
 export function playRiser() {
   if (isMuted()) return
@@ -321,9 +396,22 @@ function scheduleStep(step: number, time: number) {
     playShimmer(time, Math.min(1, combo / 30))
   }
 
-  // OVERDRIVE：拍頭に高音シンセを重ねる
-  if (overdriveMode && sub === 0) {
-    playOverdriveStab(time)
+  // Ver.4.7: OVERDRIVE中は「隠しステージに入った」と感じる専用レイヤーを重ねる
+  // （通常の終盤BGM＋COMBOレイヤーの上に、さらに強い低音・専用アルペジオ・黄金サイレンを追加）
+  if (overdriveMode) {
+    if (sub === 0) {
+      playOverdriveStab(time)
+      playOverdriveBass(time)
+    }
+    if (sub === 2) {
+      playPerc(time)
+    }
+    if (step % STEPS_PER_BAR === 12) {
+      playOverdriveArpeggio(time)
+    }
+    if (step % STEPS_PER_BAR === 0) {
+      playOverdriveSiren(time)
+    }
   }
 }
 

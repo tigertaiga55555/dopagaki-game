@@ -1,6 +1,9 @@
 import { useState } from 'react'
+import { getOverdriveFrameClass, getOverdriveTier, Golden120Overlay, LimitErrorOverlay, OverdriveAmbience, OverdriveRevealOverlay } from '../components/OverdriveFx'
 import { getVisualLevelDef } from '../config/visualConfig'
 import { MILESTONE_TEXT } from '../config/messagesV4'
+import { OVERDRIVE_CONFIG } from '../config/overdriveConfig'
+import { getOverdriveTitle } from '../config/resultTypesV4'
 import { useRushGame, type RushFinishPayload } from '../engine/useRushGame'
 import { QUESTION_MODULES } from '../questions'
 import { isMuted, setMuted } from '../utils/sound'
@@ -33,15 +36,19 @@ export function PlayScreen({ onFinish }: Props) {
     setMutedState(next)
   }
 
-  const frameClass = visual.intense
-    ? 'intense-frame'
-    : visual.gold
-      ? 'gold-frame'
-      : visual.neon
-        ? 'neon-frame'
-        : visual.glow
-          ? 'glow-frame'
-          : ''
+  const overdriveTier = getOverdriveTier(snapshot.displayPercent)
+
+  const frameClass = `${
+    visual.intense
+      ? 'intense-frame'
+      : visual.gold
+        ? 'gold-frame'
+        : visual.neon
+          ? 'neon-frame'
+          : visual.glow
+            ? 'glow-frame'
+            : ''
+  } ${getOverdriveFrameClass(overdriveTier)}`.trim()
 
   return (
     <div className={`relative flex min-h-dvh flex-col overflow-hidden ${frameClass}`}>
@@ -58,6 +65,8 @@ export function PlayScreen({ onFinish }: Props) {
           ))}
         </div>
       )}
+
+      <OverdriveAmbience tier={overdriveTier} />
 
       {snapshot.finalRushActive && (
         <>
@@ -85,7 +94,11 @@ export function PlayScreen({ onFinish }: Props) {
         </button>
         <div className="flex flex-col items-center">
           <p className="text-[10px] font-bold tracking-widest text-white/50">DOPAGAKI</p>
-          <p className={`text-4xl font-black tabular-nums ${snapshot.displayPercent >= 100 ? 'text-amber-300' : 'text-white'}`}>
+          <p
+            className={`text-4xl font-black tabular-nums ${snapshot.displayPercent >= 100 ? 'text-amber-300' : 'text-white'} ${
+              snapshot.showLimitErrorGlitch ? 'anim-limit-shake' : ''
+            }`}
+          >
             {snapshot.displayPercent.toFixed(0)}
             <span className="text-xl">%</span>
           </p>
@@ -186,12 +199,9 @@ export function PlayScreen({ onFinish }: Props) {
         </div>
       )}
 
-      {snapshot.showOverdriveBurst && (
-        <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/85">
-          <div className="anim-glitch absolute inset-0 bg-amber-300" />
-          <p className="anim-pop relative text-4xl font-black tracking-widest text-amber-300">{MILESTONE_TEXT.overdrive}</p>
-        </div>
-      )}
+      <LimitErrorOverlay show={snapshot.showLimitErrorGlitch} />
+      <OverdriveRevealOverlay show={snapshot.showOverdriveBurst} />
+      <Golden120Overlay show={snapshot.showMaxBurst} title={getOverdriveTitle(OVERDRIVE_CONFIG.maxPercent).name} />
     </div>
   )
 }
