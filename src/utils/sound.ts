@@ -192,28 +192,72 @@ function finalMiss() {
 }
 
 /**
- * Ver.5.0: 200% 真のPERFECT CLEAR専用の超大型ファンファーレ。既存の120%時代の
- * victoryFanfare()を土台に、より重い低音impact・ベルの層・上昇フレーズ・長い最終和音を
- * 追加してゲーム最大の演出にする（46. 完全オリジナル構成、既存作品のメロディは一切模倣しない）。
+ * Ver.5.0追加: 200% 真のPERFECT CLEAR専用の超大型ファンファーレ、再設計版。
+ * TASK C「ゲーム史上最大の脳汁」の中核。C-8で示された8部構成を明示的に実装する：
+ * 1. 上昇する短い3〜5音の駆け上がり
+ * 2. 巨大なmajor chord
+ * 3. brass風synth（2と同時に重ねる）
+ * 4. sub impact（1と同時、ドォォォン！の芯）
+ * 5. bell
+ * 6. sparkle
+ * 7. さらに上へ行く短い勝利フレーズ
+ * 8. 最後に長い明るいコード
+ * 音を一度に全部鳴らさず、約3秒かけて祝福が段階的に広がるようにする。
+ * 既存の120%時代のvictoryFanfare()を内部の一部として引き続き活用しつつ、
+ * それを大きく上回るレイヤー数・音域・長さにする（46. 完全オリジナル構成、
+ * 既存作品の旋律は一切模倣しない）。
  */
 function perfectFanfare200() {
-  // 0. 超重量級の低音impact（200%到達の重みを一発目に叩き込む）
-  beep(42, 500, 'sine', 0.26)
-  setTimeout(() => beep(55, 420, 'sine', 0.2), 40)
-  // 1〜3. 既存の120%時代ファンファーレ（上昇プレップ→メジャーコード→bell余韻）をそのまま踏襲
-  victoryFanfare()
-  // 4. 上昇フレーズ（駆け上がる4音、既存のcomboArpeggioより広い音域）
+  // 1. 上昇する短い4音の駆け上がり（テッテレレ、の出だし）
+  ;[440, 587.33, 698.46, 880].forEach((freq, i) => {
+    setTimeout(() => beep(freq, 110, 'triangle', 0.12), i * 55)
+  })
+  // 4. sub impact（1と同時に響かせる、200%到達の重みを一発目に叩き込む）
+  beep(40, 560, 'sine', 0.3)
+  setTimeout(() => beep(56, 460, 'sine', 0.22), 30)
+  // 2〜3. 巨大なmajor chord＋brass風synth（既存のvictoryFanfare()の構成をそのまま内包しつつ、
+  // さらに低音を1オクターブ下に重ねて厚みを出す）
   setTimeout(() => {
-    ;[784, 987.77, 1174.66, 1567.98].forEach((freq, i) => {
-      setTimeout(() => beep(freq, 130, 'triangle', 0.09), i * 70)
+    victoryFanfare()
+    beep(130.81, 460, 'sawtooth', 0.09)
+    beep(196.0, 460, 'sawtooth', 0.08)
+  }, 260)
+  // 5. bell（既存victoryFanfare内のbell/sparkleより高次・長めの層を追加で重ねる）
+  setTimeout(() => beep(2093.0, 700, 'sine', 0.07), 560)
+  setTimeout(() => beep(2637.0, 750, 'sine', 0.06), 660)
+  // 6. sparkle（きらめきが降りてくる）
+  setTimeout(() => beep(3520.0, 400, 'triangle', 0.05), 780)
+  setTimeout(() => beep(4186.0, 420, 'sine', 0.04), 880)
+  // 7. さらに上へ行く短い勝利フレーズ（駆け上がる4音、1.より広い音域で「もう一段上」を表現）
+  setTimeout(() => {
+    ;[784, 987.77, 1174.66, 1567.98, 1975.5].forEach((freq, i) => {
+      setTimeout(() => beep(freq, 140, 'triangle', 0.1), i * 65)
     })
-  }, 720)
-  // 5. 長い最終和音（ルート＋5度＋オクターブを長く伸ばして余韻を作る）
+  }, 1000)
+  // 8. 最後に長い明るいコード（ルート＋3度＋5度＋オクターブを長く伸ばして余韻を作る）
   setTimeout(() => {
-    beep(261.63, 1400, 'sine', 0.08)
-    beep(392.0, 1300, 'sine', 0.07)
-    beep(523.25, 1200, 'triangle', 0.06)
-  }, 1050)
+    beep(261.63, 1800, 'sine', 0.09)
+    beep(329.63, 1700, 'triangle', 0.07)
+    beep(392.0, 1650, 'sine', 0.07)
+    beep(523.25, 1500, 'triangle', 0.06)
+  }, 1450)
+}
+
+/** Ver.5.0追加: 200% CLEAR演出の花火に合わせて鳴らす「ドン！」という低い爆発音。 */
+function fireworkBoom() {
+  beep(60, 220, 'sine', 0.16)
+  noiseBurst(1200, 3, 180, 0.09, 'bandpass')
+  setTimeout(() => beep(1800, 90, 'sine', 0.05), 40)
+}
+
+/**
+ * Ver.5.0追加: 200%結果画面が表示された瞬間だけ鳴らす、ごく控えめな余韻チャイム（C-12）。
+ * 演出終了→結果画面で完全無音にしないための、bell/sparkle/victory chordの短い名残。
+ */
+function resultChime200() {
+  beep(1568.0, 500, 'sine', 0.06)
+  setTimeout(() => beep(2093.0, 550, 'sine', 0.05), 120)
+  setTimeout(() => beep(523.25, 900, 'triangle', 0.04), 200)
 }
 
 /** HOLD中の「充填音」。押している間ずっと鳴り続け、requiredMsで音程が上がりきるように設計。 */
@@ -336,6 +380,10 @@ export const sfx = {
   finalMiss,
   /** Ver.5.0: 200% 真のPERFECT CLEAR専用の超大型ファンファーレ（ゲーム最大の演出） */
   perfectFanfare200,
+  /** Ver.5.0追加: 200% CLEAR演出の花火に合わせて鳴らす「ドン！」 */
+  fireworkBoom,
+  /** Ver.5.0追加: 200%結果画面表示時のごく控えめな余韻チャイム */
+  resultChime200,
   /** GOまで押すな：GO表示の合図音 */
   go: () => beep(1300, 70, 'sine', 0.1),
   /**

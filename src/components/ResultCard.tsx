@@ -14,7 +14,10 @@ const GOLD_CARD_PARTICLES = [
   { x: 50, y: 6 },
 ]
 
-/** Ver.4.11: 120%（PERFECT CLEAR）専用カードのsparkle装飾。金・白・虹を混ぜる。 */
+/**
+ * Ver.4.11: 120%（PERFECT CLEAR）専用カードのsparkle装飾。金・白・虹を混ぜる。
+ * Ver.5.0追加(TASK C-11): 200%専用カードとしてさらに豪華にするため、密度を増やした。
+ */
 const MAX_CARD_SPARKLES = [
   { x: 8, y: 8, color: '#facc15' },
   { x: 90, y: 10, color: '#ffffff' },
@@ -23,6 +26,18 @@ const MAX_CARD_SPARKLES = [
   { x: 10, y: 88, color: '#7dfcae' },
   { x: 88, y: 86, color: '#b98bff' },
   { x: 50, y: 4, color: '#ffffff' },
+  { x: 20, y: 96, color: '#facc15' },
+  { x: 80, y: 96, color: '#5cc8ff' },
+  { x: 96, y: 28, color: '#facc15' },
+  { x: 4, y: 28, color: '#ff5757' },
+]
+
+/** Ver.5.0追加(TASK C-11): 200%専用カードにだけ浮かべる金貨のあしらい。 */
+const MAX_CARD_COINS = [
+  { x: 14, y: 18 },
+  { x: 86, y: 22 },
+  { x: 12, y: 62 },
+  { x: 88, y: 60 },
 ]
 
 export function ResultCard({ result }: Props) {
@@ -66,6 +81,11 @@ export function ResultCard({ result }: Props) {
             {MAX_CARD_SPARKLES.map((p, i) => (
               <span key={i} className="absolute text-sm" style={{ left: `${p.x}%`, top: `${p.y}%`, color: p.color }}>
                 ✦
+              </span>
+            ))}
+            {MAX_CARD_COINS.map((p, i) => (
+              <span key={i} className="absolute text-base opacity-90" style={{ left: `${p.x}%`, top: `${p.y}%` }}>
+                🪙
               </span>
             ))}
           </div>

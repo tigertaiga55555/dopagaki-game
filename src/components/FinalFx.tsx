@@ -134,19 +134,27 @@ export function FinalQuestionIntroOverlay({ show }: { show: boolean }) {
   )
 }
 
-/** 200% CLEAR演出冒頭の一瞬の中央小テキスト「200」（本番の巨大テキストが出る直前の一拍）。 */
+/**
+ * 200% CLEAR演出冒頭の「200」の前振り（C-6）。本番の巨大テキストが出る直前の一拍として、
+ * scale＋glow＋プリズムshockwaveリングを伴って一度だけ強く脈打つように見せる。
+ */
 export function Clear200PreludeOverlay({ show }: { show: boolean }) {
   if (!show) return null
   return (
     <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-black">
-      <p className="anim-pop text-3xl font-black tabular-nums text-white">200</p>
+      <div className="anim-rainbow-shockwave absolute h-16 w-16" style={{ ['--rainbow-color' as string]: '#facc15' }} />
+      <p className="anim-pop relative text-5xl font-black tabular-nums text-white drop-shadow-[0_0_30px_rgba(255,255,255,0.9)]">
+        200
+      </p>
     </div>
   )
 }
 
 /**
  * 200% CLEAR演出専用の花火／星の追加レイヤー。既存のConfetti120Overlay／Sparkle120Overlayに
- * 重ねて使うことで「ゲーム史上最大」の密度を作る。中央のテキストと重ならないよう外周・四隅寄り。
+ * 重ねて使うことで「ゲーム史上最大」の密度を作る（C-4/C-5）。中央のテキストと重ならないよう
+ * 外周・四隅寄り。waveを変える（=keyが変わる）たびにアニメーションが最初から再生され、
+ * 音の「ドン！ドン！」に合わせて複数回まとめて打ち上がるように見せる。
  */
 const FIREWORK_SLOTS = [
   { x: 20, y: 22, delay: 0, color: '#ff5757' },
@@ -155,12 +163,14 @@ const FIREWORK_SLOTS = [
   { x: 85, y: 72, delay: 0.15, color: '#7dfcae' },
   { x: 50, y: 14, delay: 0.5, color: '#b98bff' },
   { x: 50, y: 88, delay: 0.28, color: '#ffffff' },
+  { x: 8, y: 45, delay: 0.4, color: '#ffb347' },
+  { x: 92, y: 45, delay: 0.1, color: '#5cc8ff' },
 ]
 
-export function Fireworks200Overlay({ show }: { show: boolean }) {
+export function Fireworks200Overlay({ show, wave = 0 }: { show: boolean; wave?: number }) {
   if (!show) return null
   return (
-    <div className="pointer-events-none absolute inset-0 z-[52]">
+    <div key={wave} className="pointer-events-none absolute inset-0 z-[52]">
       {FIREWORK_SLOTS.map((f, i) => (
         <div
           key={i}

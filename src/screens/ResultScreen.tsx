@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ResultCard } from '../components/ResultCard'
+import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
 import { getRetryLabel } from '../config/messagesV4'
 import { copyShareText, getLineShareUrl, getXShareUrl, shareResult } from '../utils/share'
+import { sfx } from '../utils/sound'
 import type { FinalResultV4 } from '../types'
 
 interface Props {
@@ -13,6 +15,15 @@ const canNativeShare = typeof navigator !== 'undefined' && Boolean((navigator as
 
 export function ResultScreen({ result, onRetry }: Props) {
   const [copied, setCopied] = useState(false)
+
+  // Ver.5.0追加(TASK C-12): 200%結果画面へ切り替わった瞬間、完全無音にせず
+  // bell/sparkle/victory chordのごく控えめな余韻を一度だけ残す。
+  useEffect(() => {
+    if (result.percent >= FINAL_TRIAL_CONFIG.clearPercent) {
+      sfx.resultChime200()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleNativeShare = () => {
     void shareResult(result.percent, result.type.name, result.finalTrial)

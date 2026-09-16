@@ -65,9 +65,11 @@ const ENTRY_END_MS = TEXT2_AT_MS + 1000
 /** startAtQuestion===16（Preview専用）でFINAL QUESTIONへ直接入る場合の簡易導入表示時間。 */
 const DIRECT_Q16_INTRO_MS = 1300
 
-const CLEAR200_SILENCE_MS = 280
-const CLEAR200_PRELUDE_MS = 260
-const CLEAR200_FLASH_HOLD_MS = 300
+const CLEAR200_SILENCE_MS = 300
+const CLEAR200_PRELUDE_MS = 320
+const CLEAR200_FLASH_HOLD_MS = 320
+/** C-4: 花火の「ドン！ドン！」をファンファーレのリズムに合わせて複数回打ち上げるタイミング。 */
+const FIREWORK_BOOM_OFFSETS_MS = [280, 750, 1350, 2000]
 
 export function FinalTrialScreen({
   initialStats,
@@ -92,6 +94,7 @@ export function FinalTrialScreen({
 
   // 200% CLEARの内部ビート
   const [clear200Beat, setClear200Beat] = useState<'silence' | 'prelude' | 'climax' | null>(null)
+  const [fireworkWave, setFireworkWave] = useState(0)
   const clear200TimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
   const clear200FiredRef = useRef(false)
 
@@ -197,6 +200,16 @@ export function FinalTrialScreen({
       stopBgm()
     }, CLEAR200_SILENCE_MS + CLEAR200_PRELUDE_MS)
     schedule(() => setShowFlash(false), CLEAR200_SILENCE_MS + CLEAR200_PRELUDE_MS + CLEAR200_FLASH_HOLD_MS)
+    // C-4: 花火の「ドン！ドン！」を複数回、視覚（Fireworks200Overlayの再生）と音
+    // （sfx.fireworkBoom）を同期させて打ち上げる。常時大量に鳴らすのではなく、
+    // ファンファーレの節目に合わせたリズムにする。
+    FIREWORK_BOOM_OFFSETS_MS.forEach((offset) => {
+      schedule(() => {
+        sfx.fireworkBoom()
+        setFireworkWave((w) => w + 1)
+        triggerShake(false)
+      }, CLEAR200_SILENCE_MS + CLEAR200_PRELUDE_MS + offset)
+    })
     return () => clear200TimersRef.current.forEach(clearTimeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot.phase])
@@ -309,7 +322,7 @@ export function FinalTrialScreen({
             <RainbowShockwaveOverlay show={clear200Beat === 'climax'} />
             <Confetti120Overlay show={clear200Beat === 'climax'} />
             <Sparkle120Overlay show={clear200Beat === 'climax'} />
-            <Fireworks200Overlay show={clear200Beat === 'climax'} />
+            <Fireworks200Overlay show={clear200Beat === 'climax'} wave={fireworkWave} />
           </>
         )}
       </div>

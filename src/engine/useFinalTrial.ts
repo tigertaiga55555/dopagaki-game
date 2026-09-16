@@ -29,7 +29,12 @@ function successFlashDurationFor(clearedNumber: number): number {
  *  「FINAL QUESTION / 最後まで見失うな」を見せてからQ16へ入る）の表示時間。 */
 const FINAL_QUESTION_INTRO_MS = 1600
 const FAIL_TRANSITION_MS = 1400
-const CLEAR200_TRANSITION_MS = 5200
+/**
+ * Ver.5.0追加(TASK C-10): 200%だけは結果画面へ急いで移動せず、宝箱開封からPERFECT CLEARの
+ * 余韻まで含めて約5〜7秒程度の特大クライマックスにしてよい（達成感優先）。
+ * FinalTrialScreen側の演出強化（花火の複数打ち上げ・強化ファンファーレ）に合わせて延長した。
+ */
+const CLEAR200_TRANSITION_MS = 6200
 
 export type FinalTrialPhase = 'playing' | 'successFlash' | 'finalQuestionIntro' | 'failed' | 'clear200'
 
