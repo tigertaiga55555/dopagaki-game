@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { getOverdriveFrameClass, getOverdriveTier, Golden120Overlay, LimitErrorOverlay, OverdriveAmbience, OverdriveRevealOverlay } from '../components/OverdriveFx'
+import {
+  getOverdriveFrameClass,
+  getOverdriveTier,
+  Golden120Overlay,
+  LimitErrorOverlay,
+  OverdriveAmbience,
+  OverdriveRevealOverlay,
+  WhiteFlashOverlay,
+} from '../components/OverdriveFx'
 import { getVisualLevelDef } from '../config/visualConfig'
 import { MILESTONE_TEXT } from '../config/messagesV4'
 import { OVERDRIVE_CONFIG } from '../config/overdriveConfig'
@@ -222,7 +230,8 @@ export function PlayScreen({ onFinish }: Props) {
       )}
 
       <LimitErrorOverlay show={snapshot.showLimitErrorGlitch} />
-      <OverdriveRevealOverlay show={snapshot.showOverdriveBurst} />
+      <OverdriveRevealOverlay show={snapshot.showOverdriveBurst} showTimeBonus />
+      <WhiteFlashOverlay show={snapshot.showMaxFlash} />
       <Golden120Overlay show={snapshot.showMaxBurst} title={getOverdriveTitle(OVERDRIVE_CONFIG.maxPercent).name} />
     </div>
   )

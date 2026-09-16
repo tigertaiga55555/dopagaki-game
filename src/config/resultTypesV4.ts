@@ -9,8 +9,12 @@ export const NORMAL_TYPES = {
   impatient: { id: 'impatient', name: '待てない型ドパガキ' } satisfies DopagakiTypeDef,
   machine: { id: 'machine', name: '刺激処理マシーン' } satisfies DopagakiTypeDef,
   complete: { id: 'complete', name: '完全体ドパガキ' } satisfies DopagakiTypeDef,
-  /** どの特徴も突出しなかった場合の汎用タイプ。「なんとなく高速型」のような誤判定を避けるための受け皿。 */
-  balanced: { id: 'balanced', name: 'バランス型ドパガキ' } satisfies DopagakiTypeDef,
+  /**
+   * どの特徴も突出しなかった場合の汎用タイプ。「なんとなく高速型」のような誤判定を避けるための
+   * 受け皿だが、Ver.4.9で「バランス型」から改名：無難すぎてシェアしたくなる名前ではなかったため、
+   * 世界観に合う名前に変更した。
+   */
+  balanced: { id: 'balanced', name: '野生型ドパガキ' } satisfies DopagakiTypeDef,
 }
 
 /**
@@ -49,13 +53,17 @@ export const TYPE_THRESHOLDS = {
   noviceMaxPercent: 40,
 }
 
-/** 100%超え（OVERDRIVE）の称号。percentの範囲で決まる。 */
+/**
+ * 100%超え（OVERDRIVE）の称号。percentの範囲で決まる。
+ * Ver.4.9: 120%はゲーム開始から完全ノーミスでしか到達できない別格の条件になったため、
+ * 通常のOVERDRIVE称号（101〜119）とはっきり区別できる名前にした。
+ */
 export const OVERDRIVE_TITLES: { max: number; type: DopagakiTypeDef }[] = [
   { max: 105, type: { id: 'overdrive1', name: '限界突破ドパガキ' } },
   { max: 110, type: { id: 'overdrive2', name: '刺激過剰摂取型ドパガキ' } },
   { max: 115, type: { id: 'overdrive3', name: 'ドーパミン暴走型' } },
   { max: 119, type: { id: 'overdrive4', name: '人類卒業型ドパガキ' } },
-  { max: 120, type: { id: 'overdrive5', name: 'ドパガキ最終形態' } },
+  { max: 120, type: { id: 'overdrive5', name: 'DOPA PERFECT' } },
 ]
 
 export function getOverdriveTitle(percent: number): DopagakiTypeDef {

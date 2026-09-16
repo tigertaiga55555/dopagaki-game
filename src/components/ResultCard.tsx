@@ -22,10 +22,10 @@ export function ResultCard({ result }: Props) {
   return (
     <div
       className={`relative isolate w-full max-w-xs overflow-hidden rounded-3xl bg-gradient-to-b p-5 ${
-        isOverdrive ? 'from-[#241606] to-[#0b0620]' : 'from-[#1c1033] to-[#0b0620]'
+        isMax ? 'from-[#2e2408] to-[#120a02]' : isOverdrive ? 'from-[#241606] to-[#0b0620]' : 'from-[#1c1033] to-[#0b0620]'
       } ${
         isMax
-          ? 'shadow-[0_0_0_2px_rgba(250,204,21,0.7),0_0_90px_rgba(250,204,21,0.55)]'
+          ? 'shadow-[0_0_0_3px_rgba(255,255,255,0.85),0_0_110px_rgba(250,204,21,0.75)]'
           : isOverdrive
             ? 'shadow-[0_0_0_1px_rgba(250,204,21,0.4),0_0_60px_rgba(250,204,21,0.35)]'
             : 'shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_20px_40px_rgba(0,0,0,0.5)]'
@@ -41,10 +41,12 @@ export function ResultCard({ result }: Props) {
         </div>
       )}
 
-      {isOverdrive ? (
-        <p className="relative text-center text-xs font-black tracking-widest text-amber-300">
-          ⚡ DOPA OVERDRIVE {isMax ? '・MAX' : ''} ⚡
+      {isMax ? (
+        <p className="relative text-center text-sm font-black tracking-widest text-white drop-shadow-[0_0_10px_rgba(250,204,21,0.9)]">
+          🏆 GAME CLEAR!! 🏆
         </p>
+      ) : isOverdrive ? (
+        <p className="relative text-center text-xs font-black tracking-widest text-amber-300">⚡ DOPA OVERDRIVE ⚡</p>
       ) : (
         <p className="relative text-center text-xs font-bold tracking-widest text-fuchsia-300">ドパガキゲーム</p>
       )}
@@ -93,7 +95,7 @@ export function ResultCard({ result }: Props) {
 
       <p className="mt-4 text-center text-sm font-bold text-white/70">「{result.comment}」</p>
 
-      <p className="mt-5 text-center text-[11px] font-bold text-white/40">100％いける？</p>
+      <p className="mt-5 text-center text-[11px] font-bold text-white/40">{isMax ? '完全ノーミスでの完全攻略。' : '100％いける？'}</p>
     </div>
   )
 }

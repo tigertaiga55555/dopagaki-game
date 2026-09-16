@@ -97,8 +97,14 @@ export function LimitErrorOverlay({ show }: { show: boolean }) {
   )
 }
 
-/** DOPA OVERDRIVE本体の到達演出。中央から金色衝撃波が広がる。 */
-export function OverdriveRevealOverlay({ show }: { show: boolean }) {
+/**
+ * DOPA OVERDRIVE本体の到達演出。中央から金色衝撃波が広がる。
+ * Ver.4.9: showTimeBonus=trueのとき、同じ演出の中で「+10 SEC」も一緒に見せる
+ * （実ゲームでOVERDRIVE正式突入時に残り時間+10秒を加算するのはこの瞬間なので、
+ * 新しい演出ビートを追加せずゲームテンポを止めすぎないようにする）。
+ * Previewモードでは時間の概念がないためshowTimeBonusを渡さない＝falseのまま。
+ */
+export function OverdriveRevealOverlay({ show, showTimeBonus }: { show: boolean; showTimeBonus?: boolean }) {
   if (!show) return null
   return (
     <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/85">
@@ -108,23 +114,43 @@ export function OverdriveRevealOverlay({ show }: { show: boolean }) {
       <p className="anim-pop relative text-4xl font-black tracking-widest text-amber-300 drop-shadow-[0_0_20px_rgba(250,204,21,0.8)]">
         {MILESTONE_TEXT.overdrive}
       </p>
+      {showTimeBonus && (
+        <p className="anim-pop relative mt-2 text-2xl font-black tracking-widest text-white drop-shadow-[0_0_14px_rgba(250,204,21,0.9)]">
+          +10 SEC
+        </p>
+      )}
     </div>
   )
 }
 
-/** 120%（上限）到達時の最大クライマックス演出。多少やりすぎなくらいで良い。 */
+/**
+ * 120%到達＝「ゲームを完全攻略した」ことが一発で分かる専用CLEAR演出。
+ * Ver.4.9: 120%はゲーム開始から完全ノーミスでしか到達できない別格の条件になったため、
+ * 通常のOVERDRIVE演出（101〜119%）とはっきり区別できるよう「CLEAR!!」を大きく強調する。
+ * 直前にWhiteFlashOverlay（白閃光）を挟んでから表示することで、「黄金+白の超強力な爆発」を作る。
+ */
 export function Golden120Overlay({ show, title }: { show: boolean; title: string }) {
   if (!show) return null
   return (
-    <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center gap-2 bg-black/90">
+    <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center gap-1 bg-black/90">
       <div className="anim-golden-vignette absolute inset-0" />
       <div className="anim-golden-shockwave absolute h-16 w-16 rounded-full" style={{ animationDuration: '1.1s' }} />
       <div className="anim-golden-shockwave absolute h-16 w-16 rounded-full" style={{ animationDelay: '0.15s', animationDuration: '1.1s' }} />
+      <div className="anim-golden-shockwave absolute h-16 w-16 rounded-full" style={{ animationDelay: '0.3s', animationDuration: '1.1s' }} />
       <div className="anim-gold-burst absolute h-72 w-72 rounded-full bg-amber-300 blur-3xl" />
-      <p className="relative text-6xl font-black tabular-nums leading-none text-amber-300 drop-shadow-[0_0_30px_rgba(250,204,21,0.9)]">
-        120<span className="text-3xl">%</span>
+      <p className="relative text-5xl font-black tabular-nums leading-none text-amber-300 drop-shadow-[0_0_30px_rgba(250,204,21,0.9)]">
+        120<span className="text-2xl">%</span>
       </p>
-      <p className="anim-pop relative text-2xl font-black tracking-widest text-amber-200">{title}</p>
+      <p className="anim-pop relative text-6xl font-black italic tracking-wider text-white drop-shadow-[0_0_25px_rgba(250,204,21,1)]">
+        CLEAR!!
+      </p>
+      <p className="anim-pop relative mt-1 text-xl font-black tracking-widest text-amber-200">{title}</p>
     </div>
   )
+}
+
+/** Ver.4.9: 120%CLEAR演出の冒頭で一瞬だけ焚く、黄金爆発をさらに強く見せるための白閃光。 */
+export function WhiteFlashOverlay({ show }: { show: boolean }) {
+  if (!show) return null
+  return <div className="flash-white-overlay pointer-events-none absolute inset-0 z-50 bg-white" />
 }

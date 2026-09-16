@@ -33,6 +33,11 @@ export type QuestionTypeId =
   | 'flashSpot'
   | 'notifRush'
   | 'bonusTime'
+  | 'arrowSwipe'
+  | 'reverseArrowSwipe'
+  | 'evenNumber'
+  | 'popTarget'
+  | 'dragGoal'
 
 /**
  * お題のカテゴリ（Ver.4.2、Ver.4.5で拡張）。同じカテゴリの出題が連続しすぎないよう
@@ -44,8 +49,10 @@ export type QuestionTypeId =
  * - timing: タイミング系（狙った瞬間を当てる）
  * - sorting: 仕分け・選別系（対象だけを選び分ける）
  * - memory: 記憶・順序系（順番や位置を覚えて処理する）
+ * - gesture: スワイプ・ドラッグ系（Ver.4.9で新設。似た操作感の問題同士が連続しすぎないよう、
+ *   FoodSort/ShortVideoSwipe/ArrowSwipe/ReverseArrowSwipeを同じカテゴリにまとめた）
  */
-export type QuestionCategory = 'reaction' | 'rapid' | 'inhibition' | 'visual' | 'timing' | 'sorting' | 'memory'
+export type QuestionCategory = 'reaction' | 'rapid' | 'inhibition' | 'visual' | 'timing' | 'sorting' | 'memory' | 'gesture'
 
 export type DifficultyPhaseId = 'warmup' | 'ramp' | 'fake' | 'boost' | 'overload' | 'finalRush'
 

@@ -112,6 +112,23 @@ body {
   animation: flash-dark 0.22s ease-out;
 }
 
+/* Ver.4.9: 120%到達＝完全攻略CLEARの最大クライマックス冒頭で焚く、黄金+白の閃光 */
+@keyframes flash-white {
+  0% {
+    background-color: rgba(255, 255, 255, 0);
+  }
+  35% {
+    background-color: rgba(255, 255, 255, 0.95);
+  }
+  100% {
+    background-color: rgba(255, 255, 255, 0);
+  }
+}
+
+.flash-white-overlay {
+  animation: flash-white 0.3s ease-out;
+}
+
 @keyframes pop-in {
   0% {
     opacity: 0;

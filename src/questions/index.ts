@@ -1,9 +1,12 @@
+import { ArrowSwipeQuestionModule } from './ArrowSwipeQuestion'
 import { BiggerShapeQuestionModule } from './BiggerShapeQuestion'
 import { BonusTimeQuestionModule } from './BonusTimeQuestion'
 import { ClearNotificationsQuestionModule } from './ClearNotificationsQuestion'
 import { ColorQuestionModule } from './ColorQuestion'
 import { ColorWordQuestionModule } from './ColorWordQuestion'
 import { DifferentOneQuestionModule } from './DifferentOneQuestion'
+import { DragGoalQuestionModule } from './DragGoalQuestion'
+import { EvenNumberQuestionModule } from './EvenNumberQuestion'
 import { FindTargetQuestionModule } from './FindTargetQuestion'
 import { FlashSpotQuestionModule } from './FlashSpotQuestion'
 import { FoodSortQuestionModule } from './FoodSortQuestion'
@@ -15,9 +18,11 @@ import { MaxNumberQuestionModule, MinNumberQuestionModule } from './NumberExtrem
 import { NoPressQuestionModule } from './NoPressQuestion'
 import { NotifRushQuestionModule } from './NotifRushQuestion'
 import { OddOneOutQuestionModule } from './OddOneOutQuestion'
+import { PopTargetQuestionModule } from './PopTargetQuestion'
 import { RapidStopQuestionModule } from './RapidStopQuestion'
 import { ReleaseZoneQuestionModule } from './ReleaseZoneQuestion'
 import { RepeatTapQuestionModule } from './RepeatTapQuestion'
+import { ReverseArrowSwipeQuestionModule } from './ReverseArrowSwipeQuestion'
 import { SameOneQuestionModule } from './SameOneQuestion'
 import { SequenceTapQuestionModule } from './SequenceTapQuestion'
 import { ShortVideoSwipeQuestionModule } from './ShortVideoSwipeQuestion'
@@ -56,4 +61,9 @@ export const QUESTION_MODULES: Record<QuestionTypeId, QuestionModule> = {
   flashSpot: FlashSpotQuestionModule,
   notifRush: NotifRushQuestionModule,
   bonusTime: BonusTimeQuestionModule,
+  arrowSwipe: ArrowSwipeQuestionModule,
+  reverseArrowSwipe: ReverseArrowSwipeQuestionModule,
+  evenNumber: EvenNumberQuestionModule,
+  popTarget: PopTargetQuestionModule,
+  dragGoal: DragGoalQuestionModule,
 }

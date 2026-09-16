@@ -135,4 +135,24 @@ export const TIMING_SAFETY = {
   },
   /** どの問題タイプにも適用する絶対最小値（暴走防止の安全弁） */
   absoluteFloorMs: 450,
+  /** Ver.4.9で追加した新お題5種の最低制限時間ルール */
+  arrowSwipe: {
+    minTimeMs: 1350,
+  },
+  /** 認知抑制系（矢印の逆へスワイプ）のためarrowSwipeより長め */
+  reverseArrowSwipe: {
+    minTimeMs: 1800,
+  },
+  evenNumber: {
+    minTimeMs: 1450,
+  },
+  /** ターゲット出現後、発見してタップするのに見込む最低時間 */
+  popTarget: {
+    minReactionWindowMs: 1050,
+    safetyMarginMs: 150,
+  },
+  /** ドラッグ操作（掴む→運ぶ→離す）を完了できる最低時間 */
+  dragGoal: {
+    minTimeMs: 2250,
+  },
 }

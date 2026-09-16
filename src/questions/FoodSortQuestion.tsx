@@ -144,7 +144,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
 
 export const FoodSortQuestionModule: QuestionModule = {
   id: 'foodSort',
-  category: 'reaction',
+  category: 'gesture',
   baseTargetTimeMs: 1600,
   generate,
   Component,

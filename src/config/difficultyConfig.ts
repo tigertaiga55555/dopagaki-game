@@ -40,6 +40,7 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
     // Ver.4.3: 方向のみのswipeは初見で操作方法が伝わりづらいためプールから除外し、
     // 「← 食べ物  それ以外 →」の高速仕分け(foodSort)に置き換えた
     // Ver.4.5: 1→4／ターゲット探し／光ったやつ、をここから解禁
+    // Ver.4.9: 矢印スワイプ／偶数を押せ、をここから解禁
     pool: [
       'color',
       'maxNumber',
@@ -55,6 +56,8 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'sequenceTap',
       'findTarget',
       'flashSpot',
+      'arrowSwipe',
+      'evenNumber',
     ],
     visualLevel: 1,
   },
@@ -69,6 +72,7 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
     // Ver.4.8: 「連打→急停止」は2回の再設計を経ても初見での理解が困難でMISSも多発したため
     // 通常ローテーションから撤去（コード自体は削除せず残す）。代わりにMISSの一切ない
     // 「DOPA BONUS TIME」（bonusTime）をここから解禁する。
+    // Ver.4.9: 矢印と逆にスワイプ／出てきた丸を押せ、をここから解禁
     pool: [
       'color',
       'maxNumber',
@@ -83,13 +87,16 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'clearNotifications',
       'spotChange',
       'skipWait',
-      'bonusTime',
       'sequenceTap',
       'findTarget',
       'flashSpot',
       'colorWord',
       'shortVideoSwipe',
       'releaseZone',
+      'arrowSwipe',
+      'evenNumber',
+      'reverseArrowSwipe',
+      'popTarget',
     ],
     visualLevel: 2,
   },
@@ -102,6 +109,7 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
     // Ver.4.2: ここから全問題タイプを対象に幅広く出題
     // Ver.4.5: 通知ラッシュをここから解禁（新お題は全種類がここで出揃う）
     // Ver.4.8: 「連打→急停止」をbonusTime（DOPA BONUS TIME）に置き換え
+    // Ver.4.9: 丸をゴールへ運べ、をここから解禁（新お題5種がここで出揃う）
     pool: [
       'color',
       'maxNumber',
@@ -116,7 +124,6 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'holdPress',
       'goWait',
       'skipWait',
-      'bonusTime',
       'stopAt100',
       'clearNotifications',
       'spotChange',
@@ -127,6 +134,11 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'shortVideoSwipe',
       'releaseZone',
       'notifRush',
+      'arrowSwipe',
+      'evenNumber',
+      'reverseArrowSwipe',
+      'popTarget',
+      'dragGoal',
     ],
     visualLevel: 3,
   },
@@ -152,7 +164,6 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'noPress',
       'goWait',
       'skipWait',
-      'bonusTime',
       'stopAt100',
       'clearNotifications',
       'spotChange',
@@ -163,6 +174,11 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'shortVideoSwipe',
       'releaseZone',
       'notifRush',
+      'arrowSwipe',
+      'evenNumber',
+      'reverseArrowSwipe',
+      'popTarget',
+      'dragGoal',
     ],
     // Ver.4.8: 認知負荷の高いタイプの出現率を上げることで難易度を作る（時間はcomputeMinTargetTimeMsで保証済み）
     weightedTypes: { sequenceTap: 2, findTarget: 2, colorWord: 2, notifRush: 2, releaseZone: 2 },
@@ -193,7 +209,6 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'noPress',
       'goWait',
       'skipWait',
-      'bonusTime',
       'stopAt100',
       'clearNotifications',
       'spotChange',
@@ -204,6 +219,11 @@ export const DIFFICULTY_PHASES: DifficultyPhase[] = [
       'shortVideoSwipe',
       'releaseZone',
       'notifRush',
+      'arrowSwipe',
+      'evenNumber',
+      'reverseArrowSwipe',
+      'popTarget',
+      'dragGoal',
     ],
     // Ver.4.8: FINAL DOPA RUSHは「時間を極限まで削る」のではなく、難しい種類の出現率と
     // 出題タイプの切り替え頻度で難易度を作る
@@ -221,4 +241,5 @@ export function getPhaseAt(elapsedSec: number): DifficultyPhase {
 
 export const TOTAL_GAME_SEC = 60
 export const FINAL_RUSH_START_SEC = 50
-export const COUNTDOWN_START_SEC = 57
+// Ver.4.9: 終了3秒前カウントダウンの開始位置は、OVERDRIVE+10秒延長を反映して
+// useRushGame.ts側で動的に計算する（totalGameSec() - 3）ため、固定値としては廃止した。

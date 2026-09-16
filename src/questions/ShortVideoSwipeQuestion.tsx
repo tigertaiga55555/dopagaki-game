@@ -122,7 +122,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
 
 export const ShortVideoSwipeQuestionModule: QuestionModule = {
   id: 'shortVideoSwipe',
-  category: 'rapid',
+  category: 'gesture',
   baseTargetTimeMs: 2600,
   generate,
   Component,

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { COUNTDOWN_START_SEC, DIFFICULTY_PHASES, FINAL_RUSH_START_SEC, TOTAL_GAME_SEC, getPhaseAt } from '../config/difficultyConfig'
+import { DIFFICULTY_PHASES, FINAL_RUSH_START_SEC, TOTAL_GAME_SEC, getPhaseAt } from '../config/difficultyConfig'
 import { OVERDRIVE_CONFIG, evaluateOverdriveEligibility } from '../config/overdriveConfig'
 import {
   MISS_PENALTY,
@@ -7,15 +7,25 @@ import {
   TIER_GAIN,
   comboGainMultiplier,
   computeBonusGain,
-  getAccuracyCap,
   judgeByRatio,
+  momentumGainMultiplier,
+  nextMomentum,
 } from '../config/scoreConfigV4'
+import { TIMING_SAFETY } from '../config/timingConfig'
 import { setCurrentStageIndex } from './difficultyStage'
 import { generateNextQuestion } from './questionPicker'
+import { randFloat } from './random'
+import { QUESTION_MODULES } from '../questions'
 import { duckAudio } from '../utils/audioContext'
 import { playLateGameSweetener, playRiser, setBgmProgress, setOverdriveMode, startBgm, stopBgm } from '../utils/bgm'
 import { sfx } from '../utils/sound'
 import type { DifficultyPhaseId, Judgement, PlayStats, QuestionResult, QuestionSpec, QuestionTypeId } from '../types'
+
+/** Ver.4.9: OVERDRIVE正式突入時に一度だけ加算する残り時間ボーナス（秒） */
+const OVERDRIVE_TIME_BONUS_SEC = 10
+/** Ver.4.9: DOPA BONUS TIMEを1ゲームにつき必ず1回、この秒数範囲のどこかで発生させる（毎回同じ秒数にはしない） */
+const BONUS_TIME_WINDOW_START_SEC = 25
+const BONUS_TIME_WINDOW_END_SEC = 40
 
 const PRE_COUNTDOWN_MS = 1800
 /** 100%/OVERDRIVE到達演出のときだけ、次の問題を意図的に少し遅らせる（それ以外は即座に次へ進む） */
@@ -28,8 +38,8 @@ const HUNDRED_SILENCE_MS = 300
 const LIMIT_ERROR_MS = 550
 /** Ver.4.7: 120%（上限）到達時、一瞬音を引く長さ */
 const MAX_SILENCE_MS = 250
-/** Ver.4.7: 120%到達演出の表示保持時間（最大クライマックスなので少し長めに） */
-const MAX_BURST_HOLD_MS = 900
+/** Ver.4.9: 120%到達＝完全攻略CLEARの表示保持時間（通常のOVERDRIVE演出よりさらに長めにして別格感を出す） */
+const MAX_BURST_HOLD_MS = 1300
 /** 大きいCOMBOを切った瞬間の「怯み」演出（画面暗転・BGMダック）の長さ */
 const COMBO_BREAK_FLINCH_MS = 200
 /** COMBO BREAK演出の文言を強めに出す最低COMBO数 */
@@ -44,7 +54,22 @@ const RISER_LEAD_SEC = 2
  * repeatTap/rapidStopはratioWindowMsで公平な反応比率を計算できるためここには含めない。
  * Ver.4.5: releaseZoneも「タイミングの正確さ」でratioWindowMsを使うため除外はしない。
  */
-const NON_SPEED_TYPES = new Set<QuestionTypeId>(['holdPress', 'noPress', 'stopAt100', 'bonusTime'])
+/**
+ * Ver.4.9: repeatTap/sequenceTap/shortVideoSwipeは「1問の完了までの合計時間」を返すため
+ * 複数ステップぶんの時間が混ざり、releaseZoneは「ゾーン中心からのズレ量」であって
+ * 反応時間そのものではない。結果画面の「最速反応」に、これらの値や非現実的な極小値
+ * （例：0.05秒）が混入しないよう、いずれも反応速度の集計対象から除外する。
+ */
+const NON_SPEED_TYPES = new Set<QuestionTypeId>([
+  'holdPress',
+  'noPress',
+  'stopAt100',
+  'bonusTime',
+  'repeatTap',
+  'sequenceTap',
+  'shortVideoSwipe',
+  'releaseZone',
+])
 
 /** Ver.4.5: 残り20秒からBGMに薄いライザーを足すタイミング（残り秒） */
 const LATE_GAME_SWEETENER_SEC = 20
@@ -147,6 +172,8 @@ export interface RushSnapshot {
   showLimitErrorGlitch: boolean
   /** Ver.4.7: 120%（上限）到達時の最大クライマックス演出 */
   showMaxBurst: boolean
+  /** Ver.4.9: 120%到達CLEAR演出の冒頭、黄金爆発の直前に一瞬焚く白閃光 */
+  showMaxFlash: boolean
   overdriveActive: boolean
   /** 連続正解の節目（10/20など）で短時間だけ表示するバナー文言 */
   comboMilestoneLabel: string | null
@@ -215,6 +242,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     showOverdriveBurst: false,
     showLimitErrorGlitch: false,
     showMaxBurst: false,
+    showMaxFlash: false,
     overdriveActive: false,
     comboMilestoneLabel: null,
     comboMilestoneKey: 0,
@@ -256,6 +284,20 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
   const lastCountdownValueRef = useRef<number | null>(null)
   /** Ver.4.8: 開始前3・2・1カウントダウンで、同じ値に対して音を二重再生しないためのガード */
   const preCountdownAudioRef = useRef<number | null>(null)
+  /** Ver.4.9: DOPA MOMENTUM（直近の質の高さを表す0〜1のメーター）。MISSで即0にリセットされる。 */
+  const momentumRef = useRef(0)
+  /** Ver.4.9: ゲーム開始から一度でもMISSしたか。120%到達の必須条件（一度でもMISSしたら119%が上限）。 */
+  const hasEverMissedRef = useRef(false)
+  /** Ver.4.9: OVERDRIVE正式突入時に一度だけ加算される残り時間ボーナス（秒）。1ゲーム1回のみ。 */
+  const overdriveBonusSecRef = useRef(0)
+  /** Ver.4.9: DOPA BONUS TIMEを1ゲーム必ず1回、この秒（経過秒）で強制出題する。開始時に一度だけ抽選。 */
+  const bonusTimeScheduledAtSecRef = useRef(randFloat(BONUS_TIME_WINDOW_START_SEC, BONUS_TIME_WINDOW_END_SEC))
+  const bonusTimeUsedRef = useRef(false)
+
+  /** Ver.4.9: OVERDRIVE到達時+10秒ぶん、ゲーム全体の実効プレイ時間を延長する。 */
+  function totalGameSec(): number {
+    return TOTAL_GAME_SEC + overdriveBonusSecRef.current
+  }
 
   // グローバルなタップ監視：先走り操作・1秒間の最大タップ数を記録する
   useEffect(() => {
@@ -299,24 +341,30 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
   function setPercentTarget() {
     const eligible = currentEligibility().eligible
     const rawScore = currentRawScore()
-    const cap = eligible ? OVERDRIVE_CONFIG.maxPercent : getAccuracyCap(currentAccuracy())
+    // Ver.4.9: 正答率による直接キャップ（旧getAccuracyCap）を廃止。非OVERDRIVEは常に100が上限、
+    // OVERDRIVE対象は119（一度でもMISSしている場合）または120（ゲーム開始から完全ノーミスの場合のみ）。
+    const cap = eligible ? (hasEverMissedRef.current ? 119 : OVERDRIVE_CONFIG.maxPercent) : 100
     const target = Math.max(0, Math.min(cap, rawScore))
 
     const wasHundred = hundredReachedRef.current
     const crossingHundred = !wasHundred && target >= 100
     const crossingOverdrive = eligible && !overdriveActiveRef.current && target > 100
-    // Ver.4.7: 120%（既存の隠し上限=OVERDRIVE_CONFIG.maxPercent）に初めて到達した瞬間だけの
-    // 追加クライマックス演出。上限の値・発動条件自体は一切変更していない（観測して演出するだけ）。
+    // 120%（既存の隠し上限=OVERDRIVE_CONFIG.maxPercent）に初めて到達した瞬間だけの
+    // 完全攻略CLEAR演出。Ver.4.9では一度でもMISSしていると cap が119止まりになるため、
+    // ここに到達できるのはゲーム開始から完全ノーミスのプレイだけ。
     const crossingMax = eligible && !maxReachedRef.current && target >= OVERDRIVE_CONFIG.maxPercent
     if (crossingMax) maxReachedRef.current = true
 
     percentTweenRef.current = { from: displayPercentRef.current, to: target, startedAt: performance.now() }
 
-    // Ver.4.7: 「100%という上限を破壊した」演出（数字の震え→グリッチ→LIMIT ERROR→DOPA OVERDRIVE）。
+    // 「100%という上限を破壊した」演出（数字の震え→グリッチ→LIMIT ERROR→DOPA OVERDRIVE）。
+    // Ver.4.9: OVERDRIVEに正式突入した瞬間、1ゲーム1回だけ残り時間+10秒を加算する
+    // （100%到達が終盤になりやすく、OVERDRIVEに入っても数秒しか遊べない問題への対応）。
     function runOverdriveBreach() {
       setSnapshot((s) => ({ ...s, showLimitErrorGlitch: true }))
       setTimeout(() => {
         overdriveActiveRef.current = true
+        overdriveBonusSecRef.current = OVERDRIVE_TIME_BONUS_SEC
         sfx.overdrive()
         setOverdriveMode(true)
         setSnapshot((s) => ({ ...s, showLimitErrorGlitch: false, showOverdriveBurst: true, overdriveActive: true }))
@@ -327,13 +375,21 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
       }, LIMIT_ERROR_MS)
     }
 
-    // Ver.4.7: 120%到達の最大クライマックス（一瞬音を引く→黄金爆発）。
+    // Ver.4.9: 120%到達＝「ゲームを完全攻略した」ことが一発で分かる専用CLEAR演出。
+    // 通常の時間切れ結果と混同されないよう、一瞬の白閃光→黄金爆発→巨大な「120% CLEAR!!」を
+    // 経てからfinishGame()を呼び、残り時間があっても即座にゲームを終える。
     function runMaxClimax() {
       duckAudio(MAX_SILENCE_MS, 1)
       setTimeout(() => {
-        sfx.overdriveMax()
-        setSnapshot((s) => ({ ...s, showMaxBurst: true }))
-        setTimeout(() => setSnapshot((s) => ({ ...s, showMaxBurst: false })), MAX_BURST_HOLD_MS)
+        setSnapshot((s) => ({ ...s, showMaxFlash: true }))
+        setTimeout(() => {
+          sfx.overdriveMax()
+          setSnapshot((s) => ({ ...s, showMaxFlash: false, showMaxBurst: true }))
+          setTimeout(() => {
+            setSnapshot((s) => ({ ...s, showMaxBurst: false }))
+            finishGame()
+          }, MAX_BURST_HOLD_MS)
+        }, 180)
       }, MAX_SILENCE_MS)
     }
 
@@ -361,9 +417,23 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
   function buildNextQuestionSpec(): QuestionSpec | null {
     if (endedRef.current || startTimeRef.current === null) return null
     const elapsedSec = (performance.now() - startTimeRef.current) / 1000
-    if (elapsedSec >= TOTAL_GAME_SEC) return null
+    if (elapsedSec >= totalGameSec()) return null
     const phase = getPhaseAt(elapsedSec)
-    const spec = generateNextQuestion(phase, recentTypesRef.current)
+    let spec: QuestionSpec
+    // Ver.4.9: DOPA BONUS TIMEは抽選プールに含めず、1ゲームにつき必ず1回、開始時に決めた
+    // 経過秒（25〜40秒のどこか）に達した瞬間、強制的にこの1問として出題する。
+    // OVERDRIVEの+10秒延長中は既に使用済みのため二重発生しない（bonusTimeUsedRefで保証）。
+    if (!bonusTimeUsedRef.current && elapsedSec >= bonusTimeScheduledAtSecRef.current) {
+      bonusTimeUsedRef.current = true
+      const module = QUESTION_MODULES.bonusTime
+      const data = module.generate()
+      const scaledBase = module.baseTargetTimeMs * phase.speedMultiplier
+      const minRequired = Math.max(TIMING_SAFETY.absoluteFloorMs, module.computeMinTargetTimeMs?.(data) ?? 0)
+      const targetTimeMs = Math.round(Math.max(scaledBase, minRequired))
+      spec = { instanceId: `bonus-${Math.round(elapsedSec)}`, type: 'bonusTime', targetTimeMs, data }
+    } else {
+      spec = generateNextQuestion(phase, recentTypesRef.current)
+    }
     recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, RECENT_TYPES_LENGTH)
     currentSpecRef.current = spec
     return spec
@@ -441,7 +511,11 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         sfx.miss()
       }
       comboRef.current = 0
-      // Ver.4.8: MISSは理由カテゴリ別のペナルティで実際に減点する（フロアは0＝一撃で0まで落ちない）。
+      // Ver.4.9: MOMENTUMも即座に0へリセットする（COMBOとは別軸だが、MISSでは両方とも消える）。
+      momentumRef.current = 0
+      // Ver.4.9: ゲーム開始から一度でもMISSしたら、以後ずっとtrue（120%到達の必須条件に使う）。
+      hasEverMissedRef.current = true
+      // MISSは理由カテゴリ別のペナルティで実際に減点する（フロアは0＝一撃で0まで落ちない）。
       // COMBOも同時に切れるため、大きいCOMBO中のMISSほど「二重の痛さ」になる。
       rawScoreRef.current = Math.max(0, rawScoreRef.current - penalty)
     } else {
@@ -479,12 +553,17 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
       }
 
       if (isBonusTime) {
-        // Ver.4.8: 「1タップ=1%」のような直接変換はせず、通常問題1〜2問ぶん相当を上限とする
-        // firmly cappedなボーナス（COMBO倍率は適用しない＝連打の速さそのものだけで評価する）。
+        // 「1タップ=1%」のような直接変換はせず、通常問題1〜2問ぶん相当を上限とする
+        // firmly cappedなボーナス（COMBO・MOMENTUM倍率は適用しない＝連打の速さそのものだけで評価する）。
         rawScoreRef.current += computeBonusGain(result.meta?.bonusTapCount ?? 0)
       } else {
-        const gain = TIER_GAIN[tier as 'PERFECT' | 'GREAT' | 'GOOD'] * comboGainMultiplier(comboRef.current)
+        const qualityTier = tier as 'PERFECT' | 'GREAT' | 'GOOD'
+        // Ver.4.9: DOPA MOMENTUM。今回の加点にはこの正解「より前」の蓄積分（直近の質の高さ）を
+        // 適用し、加点が確定してからこの正解ぶんをMOMENTUMへ積む（終盤の連続PERFECTが
+        // 「98→99→100」のような逆転を後押しできるようにする）。
+        const gain = TIER_GAIN[qualityTier] * comboGainMultiplier(comboRef.current) * momentumGainMultiplier(momentumRef.current)
         rawScoreRef.current += gain
+        momentumRef.current = nextMomentum(momentumRef.current, qualityTier)
       }
     }
 
@@ -506,10 +585,14 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         comboBrokenFrom,
         comboBreakBig,
       }))
+      if (crossingMax) {
+        // Ver.4.9: 120%到達＝ゲーム完全攻略のCLEAR演出。runMaxClimax()自身がこの後finishGame()を
+        // 呼んでゲームを終えるため、ここでは次の問題を一切出さない（一瞬ゲーム停止を維持する）。
+        return
+      }
       let freezeMs = 0
       if (crossingHundred) freezeMs += HUNDRED_SILENCE_MS + MILESTONE_FREEZE_MS
       if (crossingOverdrive) freezeMs += LIMIT_ERROR_MS + MILESTONE_FREEZE_MS
-      if (crossingMax) freezeMs += MAX_SILENCE_MS + MAX_BURST_HOLD_MS
       nextQuestionTimerRef.current = setTimeout(() => {
         const spec2 = buildNextQuestionSpec()
         gapActiveRef.current = false
@@ -546,7 +629,8 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     stopBgm()
     const eligibility = currentEligibility()
     const rawPercent = currentRawScore()
-    const cap = eligibility.eligible ? OVERDRIVE_CONFIG.maxPercent : getAccuracyCap(currentAccuracy())
+    // Ver.4.9: setPercentTarget()と同じcapロジック（正答率による直接キャップは廃止）。
+    const cap = eligibility.eligible ? (hasEverMissedRef.current ? 119 : OVERDRIVE_CONFIG.maxPercent) : 100
     const finalPercent = Math.max(0, Math.round(Math.min(cap, rawPercent)))
     onFinish({
       rawPercent,
@@ -592,15 +676,17 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
       if (endedRef.current) return
 
       const elapsedSec = (now - startTimeRef.current) / 1000
-      if (elapsedSec >= TOTAL_GAME_SEC) {
+      const effectiveTotalSec = totalGameSec()
+      if (elapsedSec >= effectiveTotalSec) {
         finishGame()
         return
       }
 
       const phase = getPhaseAt(elapsedSec)
-      const remainingSec = TOTAL_GAME_SEC - elapsedSec
+      const remainingSec = effectiveTotalSec - elapsedSec
       const finalRushActive = elapsedSec >= FINAL_RUSH_START_SEC
-      const countdownValue = elapsedSec >= COUNTDOWN_START_SEC ? Math.max(1, Math.ceil(TOTAL_GAME_SEC - elapsedSec)) : null
+      // Ver.4.9: OVERDRIVE+10秒延長ぶん、終了3秒前カウントダウンの発火位置も動的に後ろへずれる。
+      const countdownValue = elapsedSec >= effectiveTotalSec - 3 ? Math.max(1, Math.ceil(effectiveTotalSec - elapsedSec)) : null
 
       if (finalRushActive) {
         const bucket = Math.floor(remainingSec)

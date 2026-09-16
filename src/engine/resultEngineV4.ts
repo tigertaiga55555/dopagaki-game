@@ -159,6 +159,7 @@ function buildCrimeRecords(stats: PlayStats): string[] {
 function buildComment(percent: number): string {
   const nearMiss = getNearMissComment(percent)
   if (nearMiss) return nearMiss
+  if (percent >= 120) return '一度もミスなく、完全にゲームを攻略した。'
   if (percent > 100) return '見てはいけないものを見た気がする。'
   if (percent >= 100) return '本当に100％とった……？'
   if (percent >= 90) return 'かなり刺激に強い。'
