@@ -4,10 +4,10 @@ import { pick } from '../engine/random'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
 const DIRECTIONS = [
-  { id: 'up', label: '上！', arrow: '↑' },
-  { id: 'down', label: '下！', arrow: '↓' },
-  { id: 'left', label: '左！', arrow: '←' },
-  { id: 'right', label: '右！', arrow: '→' },
+  { id: 'up', label: '上にスワイプ！', arrow: '↑' },
+  { id: 'down', label: '下にスワイプ！', arrow: '↓' },
+  { id: 'left', label: '左にスワイプ！', arrow: '←' },
+  { id: 'right', label: '右にスワイプ！', arrow: '→' },
 ]
 
 function generate() {

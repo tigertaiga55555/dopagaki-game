@@ -101,7 +101,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction="長押し！">
+    <QuestionShell sub="離すと失敗" instruction={'指を離さず\n長押し！'}>
       <button
         onPointerDown={handleDown}
         onPointerUp={handleRelease}

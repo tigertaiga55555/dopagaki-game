@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { TIMING_SAFETY } from '../config/timingConfig'
 import { randInt } from '../engine/random'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
@@ -28,7 +29,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction="多い方！">
+    <QuestionShell instruction="点が多い方を押せ！">
       <div className="flex w-full max-w-xs gap-3">
         {[left, right].map((count, side) => (
           <button
@@ -52,4 +53,5 @@ export const MoreSideQuestionModule: QuestionModule = {
   baseTargetTimeMs: 1800,
   generate,
   Component,
+  computeMinTargetTimeMs: () => TIMING_SAFETY.reactionMinMs.moreSide,
 }

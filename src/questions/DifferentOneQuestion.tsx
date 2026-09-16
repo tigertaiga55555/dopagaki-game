@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { TIMING_SAFETY } from '../config/timingConfig'
 import { pickExcluding, randInt } from '../engine/random'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
@@ -36,7 +37,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction="違うやつ！">
+    <QuestionShell instruction="周りと違う色を押せ！">
       <div className="grid grid-cols-2 gap-4">
         {colors.map((c, i) => (
           <button
@@ -57,4 +58,5 @@ export const DifferentOneQuestionModule: QuestionModule = {
   baseTargetTimeMs: 1800,
   generate,
   Component,
+  computeMinTargetTimeMs: () => TIMING_SAFETY.reactionMinMs.differentOne,
 }

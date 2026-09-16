@@ -89,7 +89,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction="1→4！">
+    <QuestionShell instruction={'1 → 2 → 3 → 4\nの順に押せ！'}>
       <div className="relative h-64 w-full max-w-xs">
         {numbers.map((n) => (
           <button

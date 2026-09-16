@@ -32,9 +32,24 @@ function filterByRecentTypes(pool: QuestionTypeId[], recentTypes: QuestionTypeId
   return filtered.length > 0 ? filtered : pool
 }
 
+/**
+ * Ver.4.8: phase.weightedTypesに挙げられたタイプをプール内で複製し、抽選での出現率を上げる。
+ * 個々の問題のtargetTimeMs（人間の最低時間保証）には一切影響しない、出現頻度だけの重み付け。
+ */
+function applyWeighting(pool: QuestionTypeId[], weightedTypes?: Partial<Record<QuestionTypeId, number>>): QuestionTypeId[] {
+  if (!weightedTypes) return pool
+  const weighted: QuestionTypeId[] = []
+  for (const type of pool) {
+    const weight = weightedTypes[type] ?? 1
+    for (let i = 0; i < weight; i++) weighted.push(type)
+  }
+  return weighted
+}
+
 export function generateNextQuestion(phase: DifficultyPhase, recentTypes: QuestionTypeId[]): QuestionSpec {
   const lastType = recentTypes[0]
-  const candidatePool = filterByRecentTypes(phase.pool, recentTypes)
+  const weightedPool = applyWeighting(phase.pool, phase.weightedTypes)
+  const candidatePool = filterByRecentTypes(weightedPool, recentTypes)
   const finalPool = filterByCategoryStreak(candidatePool, recentTypes)
 
   const type = finalPool.length > 0 ? pick(finalPool) : pickExcluding(phase.pool, lastType)

@@ -5,6 +5,7 @@ import { PlayScreen } from './screens/PlayScreen'
 import { ResultScreen } from './screens/ResultScreen'
 import { TitleScreen } from './screens/TitleScreen'
 import { unlockAudio } from './utils/audioContext'
+import { sfx } from './utils/sound'
 import { computeFinalResult } from './engine/resultEngineV4'
 import type { RushFinishPayload } from './engine/useRushGame'
 import type { FinalResultV4, ScreenName } from './types'
@@ -22,6 +23,7 @@ export default function App() {
     // iPhone SafariはAudioContextの生成/resumeをユーザー操作の同期コールバック内でしか許可しないため、
     // START/リトライの両方で使われるこのハンドラの中で必ず呼ぶ。
     unlockAudio()
+    sfx.startPress()
     setPlayKey((k) => k + 1)
     setScreen('playing')
   }, [])

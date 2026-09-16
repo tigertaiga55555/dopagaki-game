@@ -53,7 +53,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell sub="文字の意味ではなく色で" instruction="文字の色！">
+    <QuestionShell sub="文字の意味は無視する" instruction={'文字の色と同じ\n丸を押せ！'}>
       <p className="text-6xl font-black" style={{ color: displayColor.hex }}>
         {word}
       </p>

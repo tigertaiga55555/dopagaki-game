@@ -35,7 +35,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction={`${a}＋${b}`}>
+    <QuestionShell sub="計算した答えを押せ" instruction={`${a} ＋ ${b} ＝ ？`}>
       <div className="grid grid-cols-2 gap-4">
         {options.map((n) => (
           <button

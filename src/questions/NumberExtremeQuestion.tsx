@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { TIMING_SAFETY } from '../config/timingConfig'
 import { randInt, shuffle } from '../engine/random'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
@@ -34,7 +35,7 @@ function makeModule(mode: 'max' | 'min'): QuestionModule {
     }
 
     return (
-      <QuestionShell instruction={mode === 'max' ? '一番大きい！' : '一番小さい！'}>
+      <QuestionShell instruction={mode === 'max' ? '一番大きい数字を押せ！' : '一番小さい数字を押せ！'}>
         <div className="grid grid-cols-2 gap-4">
           {numbers.map((n, i) => (
             <button
@@ -50,7 +51,14 @@ function makeModule(mode: 'max' | 'min'): QuestionModule {
     )
   }
 
-  return { id: mode === 'max' ? 'maxNumber' : 'minNumber', category: 'reaction', baseTargetTimeMs: 1600, generate, Component }
+  return {
+    id: mode === 'max' ? 'maxNumber' : 'minNumber',
+    category: 'reaction',
+    baseTargetTimeMs: 1600,
+    generate,
+    Component,
+    computeMinTargetTimeMs: () => TIMING_SAFETY.reactionMinMs[mode === 'max' ? 'maxNumber' : 'minNumber'],
+  }
 }
 
 export const MaxNumberQuestionModule = makeModule('max')

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { TIMING_SAFETY } from '../config/timingConfig'
 import { pick, shuffle } from '../engine/random'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
@@ -53,4 +54,5 @@ export const ColorQuestionModule: QuestionModule = {
   baseTargetTimeMs: 1400,
   generate,
   Component,
+  computeMinTargetTimeMs: () => TIMING_SAFETY.reactionMinMs.color,
 }

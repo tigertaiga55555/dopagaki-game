@@ -32,6 +32,7 @@ export type QuestionTypeId =
   | 'colorWord'
   | 'flashSpot'
   | 'notifRush'
+  | 'bonusTime'
 
 /**
  * お題のカテゴリ（Ver.4.2、Ver.4.5で拡張）。同じカテゴリの出題が連続しすぎないよう
@@ -89,6 +90,8 @@ export interface QuestionResult {
     releaseOffsetMs?: number
     /** Ver.4.5: 文字の色で、文字の意味の色を選んでしまった（騙された） */
     fooledByWord?: boolean
+    /** Ver.4.8: DOPA BONUS TIMEで連打できた回数（MISSが存在しないため常にcorrect:trueで使う） */
+    bonusTapCount?: number
   }
 }
 

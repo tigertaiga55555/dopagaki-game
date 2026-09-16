@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { TIMING_SAFETY } from '../config/timingConfig'
 import { shuffle } from '../engine/random'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
@@ -30,7 +31,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction="同じもの！">
+    <QuestionShell instruction="2つある同じ絵を押せ！">
       <div className="grid grid-cols-2 gap-4">
         {items.map((item, i) => (
           <button
@@ -52,4 +53,5 @@ export const SameOneQuestionModule: QuestionModule = {
   baseTargetTimeMs: 2000,
   generate,
   Component,
+  computeMinTargetTimeMs: () => TIMING_SAFETY.reactionMinMs.sameOne,
 }

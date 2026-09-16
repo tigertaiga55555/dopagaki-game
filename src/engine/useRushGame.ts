@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { COUNTDOWN_START_SEC, DIFFICULTY_PHASES, FINAL_RUSH_START_SEC, TOTAL_GAME_SEC, getPhaseAt } from '../config/difficultyConfig'
 import { OVERDRIVE_CONFIG, evaluateOverdriveEligibility } from '../config/overdriveConfig'
-import { SCORE_CONFIG, getAccuracyCap, judgeByRatio } from '../config/scoreConfigV4'
+import {
+  MISS_PENALTY,
+  SCORE_CONFIG,
+  TIER_GAIN,
+  comboGainMultiplier,
+  computeBonusGain,
+  getAccuracyCap,
+  judgeByRatio,
+} from '../config/scoreConfigV4'
 import { setCurrentStageIndex } from './difficultyStage'
 import { generateNextQuestion } from './questionPicker'
 import { duckAudio } from '../utils/audioContext'
@@ -36,7 +44,7 @@ const RISER_LEAD_SEC = 2
  * repeatTap/rapidStopはratioWindowMsで公平な反応比率を計算できるためここには含めない。
  * Ver.4.5: releaseZoneも「タイミングの正確さ」でratioWindowMsを使うため除外はしない。
  */
-const NON_SPEED_TYPES = new Set<QuestionTypeId>(['holdPress', 'noPress', 'stopAt100'])
+const NON_SPEED_TYPES = new Set<QuestionTypeId>(['holdPress', 'noPress', 'stopAt100', 'bonusTime'])
 
 /** Ver.4.5: 残り20秒からBGMに薄いライザーを足すタイミング（残り秒） */
 const LATE_GAME_SWEETENER_SEC = 20
@@ -62,17 +70,43 @@ function inferFailureReason(spec: QuestionSpec, result: QuestionResult): string 
   return 'explicit-wrong-action'
 }
 
-function logQuestionMiss(spec: QuestionSpec, result: QuestionResult): void {
+function logQuestionMiss(spec: QuestionSpec, result: QuestionResult, penalty: number): void {
   if (!import.meta.env.DEV) return
   console.debug('[dopagaki:miss]', {
     questionType: spec.type,
+    questionInstanceId: spec.instanceId,
     result: 'MISS',
     failureReason: inferFailureReason(spec, result),
+    penalty,
     elapsedMs: Math.round(result.reactionMs),
     targetTimeMs: spec.targetTimeMs,
     ratioWindowMs: result.ratioWindowMs ?? spec.targetTimeMs,
     meta: result.meta,
   })
+}
+
+/**
+ * Ver.4.8: MISSの理由カテゴリを、実際に減算するペナルティ量にマッピングする。
+ * - impulsive（衝動そのものの失敗）：押すな中に押した／規定回数を超えて押したなど＝最も重い
+ * - wrong（明確な誤操作・誤答）：中程度
+ * - timeout（単純な反応漏れ・時間切れ）：最も軽い
+ */
+function missPenaltyForReason(reason: string): number {
+  switch (reason) {
+    case 'forbidden-touch':
+    case 'early-press':
+    case 'extra-taps':
+    case 'red-phase-tap':
+      return MISS_PENALTY.impulsive
+    case 'wrong-order':
+    case 'release-too-late':
+    case 'release-too-early':
+    case 'explicit-wrong-action':
+      return MISS_PENALTY.wrong
+    case 'likely-generic-timeout':
+    default:
+      return MISS_PENALTY.timeout
+  }
 }
 
 function comboVisualBonus(combo: number): number {
@@ -117,6 +151,8 @@ export interface RushSnapshot {
   /** 連続正解の節目（10/20など）で短時間だけ表示するバナー文言 */
   comboMilestoneLabel: string | null
   comboMilestoneKey: number
+  /** Ver.4.8: GO！の瞬間だけ一瞬光らせる、開始演出用のフラッシュ */
+  showGoFlash: boolean
 }
 
 export interface RushFinishPayload {
@@ -182,16 +218,17 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     overdriveActive: false,
     comboMilestoneLabel: null,
     comboMilestoneKey: 0,
+    showGoFlash: false,
   })
 
   const preStartRef = useRef(performance.now())
   const startTimeRef = useRef<number | null>(null)
   const endedRef = useRef(false)
 
-  // rawScoreは「1問ごとの質スコア（0〜100）＋COMBOボーナス」の合計。answeredCountで割った平均が
-  // ドパガキ度の元になる（累積カウンターにしない＝出題数を稼いでも数値が積み上がらないようにする）。
-  const qualitySumRef = useRef(0)
-  const answeredCountRef = useRef(0)
+  // Ver.4.8: 0から始まる加算/減算式の累積スコア。正解のたびにTier×COMBO倍率ぶん加点し、
+  // MISSのたびに理由別ペナルティで減点する（フロアは0）。表示上限は正答率のcapを
+  // その都度被せるだけで、rawScore自体は上限を超えて溜まっていてもよい。
+  const rawScoreRef = useRef(0)
   const percentTweenRef = useRef({ from: 0, to: 0, startedAt: 0 })
   const displayPercentRef = useRef(0)
 
@@ -217,6 +254,8 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
   const lateGameSweetenerFiredRef = useRef(false)
   const warningBeep5sFiredRef = useRef(false)
   const lastCountdownValueRef = useRef<number | null>(null)
+  /** Ver.4.8: 開始前3・2・1カウントダウンで、同じ値に対して音を二重再生しないためのガード */
+  const preCountdownAudioRef = useRef<number | null>(null)
 
   // グローバルなタップ監視：先走り操作・1秒間の最大タップ数を記録する
   useEffect(() => {
@@ -253,15 +292,15 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     })
   }
 
-  function currentAvgPercent(): number {
-    return answeredCountRef.current > 0 ? qualitySumRef.current / answeredCountRef.current : 0
+  function currentRawScore(): number {
+    return rawScoreRef.current
   }
 
   function setPercentTarget() {
     const eligible = currentEligibility().eligible
-    const avgPercent = currentAvgPercent()
+    const rawScore = currentRawScore()
     const cap = eligible ? OVERDRIVE_CONFIG.maxPercent : getAccuracyCap(currentAccuracy())
-    const target = Math.max(0, Math.min(cap, avgPercent))
+    const target = Math.max(0, Math.min(cap, rawScore))
 
     const wasHundred = hundredReachedRef.current
     const crossingHundred = !wasHundred && target >= 100
@@ -381,10 +420,13 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     if (tier !== 'MISS') typeEntry.correct += 1
     stats.typeStats[spec.type] = typeEntry
 
+    const isBonusTime = spec.type === 'bonusTime'
+
     let comboBrokenFrom = 0
     let comboBreakBig = false
     if (tier === 'MISS') {
-      logQuestionMiss(spec, result)
+      const penalty = missPenaltyForReason(inferFailureReason(spec, result))
+      logQuestionMiss(spec, result, penalty)
       stats.missCount += 1
       if (spec.type === 'noPress' && result.meta?.forbiddenTouch) stats.noPressFails += 1
       if (spec.type === 'noPress' && comboRef.current >= 8) {
@@ -399,6 +441,9 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         sfx.miss()
       }
       comboRef.current = 0
+      // Ver.4.8: MISSは理由カテゴリ別のペナルティで実際に減点する（フロアは0＝一撃で0まで落ちない）。
+      // COMBOも同時に切れるため、大きいCOMBO中のMISSほど「二重の痛さ」になる。
+      rawScoreRef.current = Math.max(0, rawScoreRef.current - penalty)
     } else {
       stats.correctCount += 1
       if (!NON_SPEED_TYPES.has(spec.type)) {
@@ -413,8 +458,9 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
       if (comboRef.current > 1) sfx.comboUp()
       if (tier === 'PERFECT' && spec.type === 'stopAt100') {
         sfx.stopAt100(true)
-      } else {
+      } else if (!isBonusTime) {
         // Ver.4.5: 連続正解が伸びるほど判定音の音程が少しずつ上がる
+        // （DOPA BONUS TIME自身がタップごとの専用音を鳴らすため、ここでは重複させない）
         sfx.comboPitchedTier(tier, comboRef.current)
       }
 
@@ -431,12 +477,16 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
           }, 900)
         }
       }
-    }
 
-    const comboBonus =
-      tier === 'MISS' ? 0 : Math.min(comboRef.current, SCORE_CONFIG.comboBonusCapCount) * SCORE_CONFIG.comboBonusPerStack
-    qualitySumRef.current += SCORE_CONFIG.qualityByTier[tier] + comboBonus
-    answeredCountRef.current += 1
+      if (isBonusTime) {
+        // Ver.4.8: 「1タップ=1%」のような直接変換はせず、通常問題1〜2問ぶん相当を上限とする
+        // firmly cappedなボーナス（COMBO倍率は適用しない＝連打の速さそのものだけで評価する）。
+        rawScoreRef.current += computeBonusGain(result.meta?.bonusTapCount ?? 0)
+      } else {
+        const gain = TIER_GAIN[tier as 'PERFECT' | 'GREAT' | 'GOOD'] * comboGainMultiplier(comboRef.current)
+        rawScoreRef.current += gain
+      }
+    }
 
     const { crossingHundred, crossingOverdrive, crossingMax } = setPercentTarget()
     judgementKeyRef.current += 1
@@ -495,7 +545,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     if (comboMilestoneTimerRef.current) clearTimeout(comboMilestoneTimerRef.current)
     stopBgm()
     const eligibility = currentEligibility()
-    const rawPercent = currentAvgPercent()
+    const rawPercent = currentRawScore()
     const cap = eligibility.eligible ? OVERDRIVE_CONFIG.maxPercent : getAccuracyCap(currentAccuracy())
     const finalPercent = Math.max(0, Math.round(Math.min(cap, rawPercent)))
     onFinish({
@@ -517,15 +567,23 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         const remaining = Math.max(0, PRE_COUNTDOWN_MS - elapsed)
         const value = remaining <= 0 ? null : remaining > 1200 ? 3 : remaining > 600 ? 2 : 1
         setSnapshot((s) => (s.preCountdown === value ? s : { ...s, preCountdown: value }))
+        // Ver.4.8: START→3・2・1・GOの開始演出。3→2→1と音程が少しずつ上がるビープを鳴らし、
+        // GOの瞬間にBGM開始・画面フラッシュ・最初の問題出現を同期させる。
+        if (value !== null && value !== preCountdownAudioRef.current) {
+          preCountdownAudioRef.current = value
+          sfx.countdownBeep(value)
+        }
         if (remaining <= 0) {
           startTimeRef.current = now
           gapActiveRef.current = false
           if (!bgmStartedRef.current) {
             bgmStartedRef.current = true
+            sfx.gameStart()
             startBgm()
           }
           const spec = buildNextQuestionSpec()
-          setSnapshot((s) => ({ ...s, currentSpec: spec }))
+          setSnapshot((s) => ({ ...s, currentSpec: spec, showGoFlash: true }))
+          setTimeout(() => setSnapshot((s) => ({ ...s, showGoFlash: false })), 260)
         }
         raf = requestAnimationFrame(tick)
         return

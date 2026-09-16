@@ -115,7 +115,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
       >
         {cards[cardIndex]}
       </div>
-      <p className="text-lg font-black text-amber-200/90">{remaining > 0 ? `あと${remaining}本` : '完了！'}</p>
+      <p className="text-lg font-black text-amber-200/90">{remaining > 0 ? `あと${remaining}回` : '完了！'}</p>
     </div>
   )
 }

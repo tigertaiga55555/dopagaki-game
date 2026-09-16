@@ -1,4 +1,5 @@
 import { BiggerShapeQuestionModule } from './BiggerShapeQuestion'
+import { BonusTimeQuestionModule } from './BonusTimeQuestion'
 import { ClearNotificationsQuestionModule } from './ClearNotificationsQuestion'
 import { ColorQuestionModule } from './ColorQuestion'
 import { ColorWordQuestionModule } from './ColorWordQuestion'
@@ -54,4 +55,5 @@ export const QUESTION_MODULES: Record<QuestionTypeId, QuestionModule> = {
   colorWord: ColorWordQuestionModule,
   flashSpot: FlashSpotQuestionModule,
   notifRush: NotifRushQuestionModule,
+  bonusTime: BonusTimeQuestionModule,
 }

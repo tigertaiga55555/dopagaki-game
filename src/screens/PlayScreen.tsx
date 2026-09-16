@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getOverdriveFrameClass, getOverdriveTier, Golden120Overlay, LimitErrorOverlay, OverdriveAmbience, OverdriveRevealOverlay } from '../components/OverdriveFx'
 import { getVisualLevelDef } from '../config/visualConfig'
 import { MILESTONE_TEXT } from '../config/messagesV4'
@@ -24,11 +24,32 @@ const PARTICLE_POSITIONS = Array.from({ length: 8 }).map((_, i) => ({ x: (i * 12
 export function PlayScreen({ onFinish }: Props) {
   const { snapshot, handleQuestionResult } = useRushGame(onFinish)
   const [muted, setMutedState] = useState(isMuted())
+  const shakeWrapperRef = useRef<HTMLDivElement>(null)
 
   const visual = getVisualLevelDef(snapshot.visualLevel)
   const CurrentQuestion = snapshot.currentSpec ? QUESTION_MODULES[snapshot.currentSpec.type].Component : null
   const isMiss = snapshot.lastJudgement === 'MISS'
   const blinkMs = snapshot.remainingSec > 6 ? 900 : snapshot.remainingSec > 3 ? 450 : 220
+
+  /**
+   * Ver.4.8: 最重要バグの根本原因だった箇所。以前はこのシェイク演出を「keyを変えて
+   * 要素ごと作り直す」方式で再生していたため、MISS表示が消える瞬間（約380ms後）に
+   * 出題エリア全体（CurrentQuestionを含む）が一度アンマウント→再マウントされていた。
+   * これにより、直前の問題がMISSした直後に出た新しい問題を触り始めたプレイヤーの
+   * 入力途中の状態（RepeatTapのカウント・phaseなど）が丸ごと消え、正しく操作していても
+   * 内部状態がリセットされてMISS扱いになる、という「操作は正しいのにMISSになる」不具合の
+   * 温床になっていた。CurrentQuestionのマウント安定性（key=instanceId）とは別に、
+   * シェイクの再生だけをDOM操作（reflow強制によるCSSアニメーションの再始動）で行うことで、
+   * 出題コンポーネントを一切アンマウントせずに済むようにする。
+   */
+  useEffect(() => {
+    if (!isMiss || !shakeWrapperRef.current) return
+    const el = shakeWrapperRef.current
+    el.classList.remove('anim-shake-fast')
+    void el.offsetWidth
+    el.classList.add('anim-shake-fast')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot.judgementKey, isMiss])
 
   function toggleMute() {
     const next = !muted
@@ -87,6 +108,7 @@ export function PlayScreen({ onFinish }: Props) {
       {snapshot.comboBreakBig && (
         <div key={`flash-dark-${snapshot.judgementKey}`} className="flash-dark-overlay pointer-events-none fixed inset-0 z-20" />
       )}
+      {snapshot.showGoFlash && <div className="flash-green-overlay pointer-events-none fixed inset-0 z-20" />}
 
       <div className="relative z-30 flex items-start justify-between px-5 pt-3 pb-1">
         <button onClick={toggleMute} className="text-lg opacity-70" aria-label="ミュート切り替え">
@@ -151,8 +173,8 @@ export function PlayScreen({ onFinish }: Props) {
       </div>
 
       <div
-        key={isMiss ? `shake-${snapshot.judgementKey}` : 'stable'}
-        className={`relative z-10 flex flex-1 items-center justify-center ${isMiss ? 'anim-shake-fast' : ''}`}
+        ref={shakeWrapperRef}
+        className="relative z-10 flex flex-1 items-center justify-center"
       >
         {snapshot.preCountdown !== null ? (
           <p key={snapshot.preCountdown} className="anim-pop text-8xl font-black text-white">

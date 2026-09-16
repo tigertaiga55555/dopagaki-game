@@ -137,6 +137,20 @@ export const sfx = {
   },
   /** GOまで押すな：GO表示の合図音 */
   go: () => beep(1300, 70, 'sine', 0.1),
+  /**
+   * Ver.4.8: STARTボタン押下時の「起動感のある短いSE」。低音の「ドン！」＋わずかに高い
+   * パンチ音を重ね、AudioContextのアンロックジェスチャーと同じ同期コールバック内で鳴らす。
+   */
+  startPress: () => {
+    beep(75, 220, 'sine', 0.22)
+    setTimeout(() => beep(340, 100, 'square', 0.12), 20)
+  },
+  /** Ver.4.8: 3・2・1のあと、GO！の瞬間だけ鳴らす強めの開始音（countdownBeepより一段大きく派手） */
+  gameStart: () => {
+    beep(2200, 160, 'square', 0.22)
+    setTimeout(() => beep(1400, 200, 'sine', 0.16), 40)
+    setTimeout(() => beep(2800, 180, 'triangle', 0.12), 90)
+  },
   /** SKIP待ち：SKIP表示の合図音 */
   skip: () => beep(1000, 60, 'square', 0.08),
   /** SKIP待ち：SKIP成功タップ時の「ピッ！」 */
@@ -173,4 +187,21 @@ export const sfx = {
   flashTick: () => beep(1900, 45, 'sine', 0.05),
   /** Ver.4.5「通知ラッシュ」：バッジ出現音（ごく軽く） */
   notifSpawn: () => beep(650, 20, 'sine', 0.02),
+  /** Ver.4.8「DOPA BONUS TIME」：タップごとに鳴る音。タップ数が増えるほど音程が上がる。10/20HITで一段強く。 */
+  bonusTap: (hitCount: number) => {
+    const pitchMul = 1 + Math.min(hitCount, 24) * 0.03
+    if (hitCount > 0 && hitCount % 10 === 0) {
+      beep(1200 * pitchMul, 90, 'triangle', 0.13)
+      setTimeout(() => beep(1700 * pitchMul, 100, 'sine', 0.11), 50)
+    } else {
+      beep(850 * pitchMul, 45, 'square', 0.07)
+    }
+  },
+  /** Ver.4.8「DOPA BONUS TIME」：終了時の「DOPA BOOST！」専用SE。派手で強めでよい。 */
+  bonusBoost: () => {
+    beep(90, 220, 'sine', 0.2)
+    beep(1500, 130, 'sawtooth', 0.15)
+    setTimeout(() => beep(2000, 160, 'sine', 0.13), 70)
+    setTimeout(() => beep(2500, 200, 'triangle', 0.1), 150)
+  },
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { TIMING_SAFETY } from '../config/timingConfig'
 import { pick, pickExcluding, randInt, shuffle } from '../engine/random'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
@@ -38,7 +39,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction="仲間外れ！">
+    <QuestionShell instruction="仲間外れを押せ！">
       <div className="grid grid-cols-2 gap-4">
         {items.map((item, i) => (
           <button
@@ -60,4 +61,5 @@ export const OddOneOutQuestionModule: QuestionModule = {
   baseTargetTimeMs: 2200,
   generate,
   Component,
+  computeMinTargetTimeMs: () => TIMING_SAFETY.reactionMinMs.oddOneOut,
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { TIMING_SAFETY } from '../config/timingConfig'
 import { randInt } from '../engine/random'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
@@ -28,7 +29,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction="大きい方！">
+    <QuestionShell instruction="大きい丸を押せ！">
       <div className="flex w-full max-w-xs items-center justify-center gap-6">
         {[left, right].map((size, side) => (
           <button
@@ -53,4 +54,5 @@ export const BiggerShapeQuestionModule: QuestionModule = {
   baseTargetTimeMs: 1500,
   generate,
   Component,
+  computeMinTargetTimeMs: () => TIMING_SAFETY.reactionMinMs.biggerShape,
 }

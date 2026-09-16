@@ -2,14 +2,28 @@ import { useEffect, useRef, useState } from 'react'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { judgeByRatio } from '../config/scoreConfigV4'
 import { randInt } from '../engine/random'
+import { createResolveOnce } from '../engine/resolveOnce'
 import { QuestionShell } from './QuestionShell'
-import type { QuestionComponentProps, QuestionModule } from '../types'
+import type { QuestionComponentProps, QuestionModule, QuestionResult } from '../types'
 
 /**
- * Ver.4.2: 「指定回数に到達した瞬間に自動成功」をやめ、
- * 「指定回数まで押す→停止確認時間に何も押さなければ成功、7回目を押した瞬間MISS」に変更。
- * 勢いで押しすぎるドパガキの衝動をそのままゲーム化する。
+ * Ver.4.8: 「INPUT → CONFIRM_STOP → RESOLVED」の明示的な状態機械に再構成。
+ *
+ * 実機で報告され続けていた「3回正しく押して止まっているのにMISSになる」の根本原因は、
+ * Ver.4.6で入れたタイマー再武装（止まれの合図が出た瞬間、外側タイマーをstopConfirmMs
+ * 基準に引き直す）のレースではなかった――そちらは構造的に正しく、SUCCESS用のholdTimerは
+ * 常にMISS用のfailTimerより先に発火する。
+ *
+ * 本当の原因は、この問題が唯一「高速連打」を要求するお題であるにもかかわらず、
+ * handleTapが生のpointerdownを一切重複排除していなかったこと。静電容量タッチパネルは
+ * 高速連打中、1回の物理タップを2回のpointerdownとして誤検知する（コンタクトバウンス）
+ * ことがある。これが起きると、プレイヤーがまだ規定回数に達していないと思っている間に
+ * 内部カウントだけが1回多く進み、CONFIRM_STOPへ切り替わってしまう。その直後にプレイヤーが
+ * 打つ「本人にとっては正しい最後の1回」がCONFIRM_STOP中の「余計な1回」としてMISS判定される。
+ * MIN_TAP_INTERVAL_MS未満の連続pointerdownをバウンスとして無視することでこれを構造的に防ぐ。
  */
+const MIN_TAP_INTERVAL_MS = TIMING_SAFETY.repeatTap.minTapIntervalMs
+
 function generate() {
   return { required: randInt(3, 7), stopConfirmMs: randInt(700, 900) }
 }
@@ -19,23 +33,22 @@ function computeMinTargetTimeMs(data: Record<string, unknown>) {
   return required * TIMING_SAFETY.repeatTap.perTapMs + TIMING_SAFETY.repeatTap.reactionBufferMs + stopConfirmMs + TIMING_SAFETY.repeatTap.stopSafetyMarginMs
 }
 
-type Phase = 'counting' | 'holding'
+/** カウント中か、規定回数に達して「止まれ」を確認中か。RESOLVED相当はguardRef側で管理する。 */
+type Phase = 'INPUT' | 'CONFIRM_STOP'
 
-/**
- * Ver.4.6: 外側の汎用タイムアウトはマウント時にspec.targetTimeMsで一度だけセットされていたため、
- * 反応してから規定回数に到達するまでが想定よりわずかに遅いだけでも、正しく「止まれ」を
- * 待っている最中にタイムアウトが先に発火してMISSになるレースがあった（HOLDと同種の不具合）。
- * 規定回数に到達した瞬間、外側タイマーをstopConfirmMs基準で引き直すことでこれを防ぐ。
- */
 function Component({ spec, onResult }: QuestionComponentProps) {
   const { required, stopConfirmMs } = spec.data as { required: number; stopConfirmMs: number }
   const [count, setCount] = useState(0)
-  const [phase, setPhase] = useState<Phase>('counting')
+  const [uiPhase, setUiPhase] = useState<Phase>('INPUT')
+  const phaseRef = useRef<Phase>('INPUT')
+  const countRef = useRef(0)
   const startRef = useRef(performance.now())
   const reachedAtRef = useRef<number | null>(null)
-  const doneRef = useRef(false)
+  const lastTapAtRef = useRef(0)
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const guardRef = useRef<ReturnType<typeof createResolveOnce<QuestionResult>> | null>(null)
+  if (!guardRef.current) guardRef.current = createResolveOnce(onResult)
 
   useEffect(() => {
     failTimerRef.current = setTimeout(() => finish(false, 0), spec.targetTimeMs)
@@ -47,39 +60,45 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }, [])
 
   function finish(correct: boolean, extraTaps: number, reactionMsOverride?: number) {
-    if (doneRef.current) return
-    doneRef.current = true
+    const guard = guardRef.current!
+    if (guard.isResolved) return
     if (failTimerRef.current) clearTimeout(failTimerRef.current)
     if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
     const reactionMs = reactionMsOverride ?? performance.now() - startRef.current
     if (!correct) {
-      onResult({ correct: false, reactionMs, meta: extraTaps > 0 ? { extraTaps } : undefined })
+      guard.resolve({ correct: false, reactionMs, meta: extraTaps > 0 ? { extraTaps } : undefined })
       return
     }
     const ratioWindowMs = required * TIMING_SAFETY.repeatTap.perTapMs + TIMING_SAFETY.repeatTap.reactionBufferMs
     const tier = judgeByRatio(reactionMs, ratioWindowMs)
-    onResult({ correct: true, reactionMs, tierOverride: tier })
+    guard.resolve({ correct: true, reactionMs, tierOverride: tier })
   }
 
   function handleTap() {
-    if (doneRef.current) return
+    if (guardRef.current!.isResolved) return
+    const now = performance.now()
+    // コンタクトバウンス対策：人間の連打限界より十分短い間隔の重複入力は無視する。
+    if (now - lastTapAtRef.current < MIN_TAP_INTERVAL_MS) return
+    lastTapAtRef.current = now
 
-    if (phase === 'holding') {
-      // 停止確認時間中に押した＝止まれなかった
+    if (phaseRef.current === 'CONFIRM_STOP') {
+      // 停止確認中に押した＝止まれなかった
       finish(false, 1)
       return
     }
 
-    const next = count + 1
+    const next = countRef.current + 1
     if (next > required) {
       // 指定回数を超えて押した瞬間MISS
       finish(false, next - required)
       return
     }
+    countRef.current = next
     setCount(next)
     if (next === required) {
-      reachedAtRef.current = performance.now()
-      setPhase('holding')
+      reachedAtRef.current = now
+      phaseRef.current = 'CONFIRM_STOP'
+      setUiPhase('CONFIRM_STOP')
       // 規定回数に到達した瞬間、外側タイマーをstopConfirmMs+安全マージン基準に引き直す。
       // これにより「必要な停止確認を満たしたのにtimeoutが先に発火する」レースを構造的に防ぐ。
       if (failTimerRef.current) clearTimeout(failTimerRef.current)
@@ -94,11 +113,14 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction={phase === 'holding' ? '止まれ！' : `${required}回押せ！`}>
+    <QuestionShell
+      sub={uiPhase === 'CONFIRM_STOP' ? '指を触れずに待て' : '規定回数で止まれ'}
+      instruction={uiPhase === 'CONFIRM_STOP' ? '止まれ！' : `${required}回タップせよ！`}
+    >
       <button
         onPointerDown={handleTap}
         className={`flex h-28 w-28 items-center justify-center rounded-full text-3xl font-black text-white active:scale-95 ${
-          phase === 'holding' ? 'bg-gradient-to-b from-red-500 to-rose-600' : 'bg-gradient-to-b from-fuchsia-500 to-purple-600'
+          uiPhase === 'CONFIRM_STOP' ? 'bg-gradient-to-b from-red-500 to-rose-600' : 'bg-gradient-to-b from-fuchsia-500 to-purple-600'
         }`}
       >
         {count}
