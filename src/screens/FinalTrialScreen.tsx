@@ -27,6 +27,7 @@ export function FinalTrialScreen({ initialStats, onFinish }: Props) {
     onFinish(computeFinalTrialResult(payload, initialStats))
   })
 
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setEntryDone(true)
