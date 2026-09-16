@@ -588,3 +588,104 @@ body {
   animation: climax-shake 0.18s ease-in-out;
 }
 
+/* Ver.5.0: 200% CLEAR等、超大型演出専用の強い画面shake（climax-shakeより振幅・時間ともに大きい）。
+   FINAL DOPA TRIAL中の出題エリアには絶対に適用しない（celebration系オーバーレイの外枠divのみ）。 */
+@keyframes climax-shake-strong {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  15% {
+    transform: translate(-12px, 5px);
+  }
+  30% {
+    transform: translate(10px, -7px);
+  }
+  45% {
+    transform: translate(-9px, 6px);
+  }
+  60% {
+    transform: translate(8px, -5px);
+  }
+  75% {
+    transform: translate(-5px, 3px);
+  }
+  90% {
+    transform: translate(3px, -2px);
+  }
+}
+
+.anim-climax-shake-strong {
+  animation: climax-shake-strong 0.4s ease-in-out;
+}
+
+/* Ver.5.0: 120%→FINAL DOPA TRIAL突入時の「黄金HUDにヒビが入る」演出。金色の細い亀裂線が
+   数回明滅してから消える。中央の問題表示領域を避け、画面全体を覆うオーバーレイとして使う。 */
+@keyframes hud-crack {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  10%,
+  30%,
+  50% {
+    opacity: 1;
+  }
+  20%,
+  40%,
+  60% {
+    opacity: 0.2;
+  }
+  70% {
+    opacity: 0;
+  }
+}
+
+.anim-hud-crack {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(105deg, transparent 42%, rgba(250, 204, 21, 0.9) 43%, transparent 44%),
+    linear-gradient(72deg, transparent 58%, rgba(250, 204, 21, 0.7) 59%, transparent 60%),
+    linear-gradient(130deg, transparent 21%, rgba(255, 255, 255, 0.8) 21.6%, transparent 22.2%);
+  animation: hud-crack 0.5s steps(3) forwards;
+}
+
+/* Ver.5.0: FINAL世界観の「プリズム／虹色エネルギー」を表す、ゆっくり色相が回転する
+   円環グロー。中心の問題表示領域には重ならない外周専用（pointer-events-none）。 */
+@keyframes prism-spin {
+  0% {
+    transform: rotate(0deg);
+    filter: hue-rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+    filter: hue-rotate(360deg);
+  }
+}
+
+.anim-prism-spin {
+  animation: prism-spin 3.2s linear infinite;
+}
+
+/* Ver.5.0: FINAL DOPA TRIAL失敗（TRIAL FAILED）演出用。黄金/虹の世界が一気に崩れ落ち、
+   暗く沈んでいく感触の暗転フェード。 */
+@keyframes prism-collapse {
+  0% {
+    opacity: 0;
+    filter: brightness(1.4) saturate(1.6);
+  }
+  40% {
+    opacity: 1;
+    filter: brightness(0.6) saturate(0.4);
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(0.3) saturate(0);
+  }
+}
+
+.anim-prism-collapse {
+  animation: prism-collapse 0.7s ease-in forwards;
+}
+

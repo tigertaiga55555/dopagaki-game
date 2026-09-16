@@ -75,6 +75,83 @@ function victoryFanfare() {
   setTimeout(() => beep(3136.0, 700, 'triangle', 0.05), 680)
 }
 
+/**
+ * Ver.5.0: FINAL DOPA TRIAL突入専用のオリジナルSE。100%OVERDRIVE突入音（overdriveMax）より
+ * 一段強く、かつ「祝福」ではなく「警告・異変・ボス戦突入」の感触にする
+ * （9. 低音impact＋逆再生スウェル＋金属質ヒット＋高音シンセ＋プリズムきらめき＋サブベース）。
+ */
+function finalEntry() {
+  // 低音impact
+  beep(48, 420, 'sine', 0.24)
+  // 逆再生スウェル風（低→高へ駆け上がる歪んだ音）
+  sweep(140, 1600, 380, 'sawtooth', 0.1)
+  // 金属質ヒット（複数の非整数倍音を短く重ねる）
+  setTimeout(() => {
+    beep(1830, 90, 'square', 0.09)
+    beep(2540, 70, 'square', 0.07)
+    beep(3370, 60, 'square', 0.05)
+  }, 200)
+  // 高音シンセの警告アクセント
+  setTimeout(() => {
+    beep(2200, 160, 'sawtooth', 0.1)
+    setTimeout(() => beep(1900, 140, 'sawtooth', 0.09), 90)
+  }, 260)
+  // プリズムきらめきの余韻
+  setTimeout(() => beep(3100, 300, 'sine', 0.06), 420)
+  setTimeout(() => beep(3800, 350, 'triangle', 0.05), 520)
+  // サブベースの締め
+  setTimeout(() => beep(36, 500, 'sine', 0.18), 480)
+}
+
+/**
+ * Ver.5.0: FINAL DOPA TRIAL中、1問正解するたびに鳴る成功SE。intensity（1〜5）が
+ * 上がるほど音域・レイヤー数が増え、Q1→Q15に向けて確実に「盛り上がっていく」ようにする
+ * （17. 成功演出の強度をQ1-3/Q4/Q5-7/Q8/Q9-11/Q12/Q13/Q14/Q15で段階的にエスカレートさせる）。
+ */
+function finalSuccess(intensity: 1 | 2 | 3 | 4 | 5) {
+  const base = 1000 + intensity * 120
+  beep(base, 90, 'triangle', 0.11 + intensity * 0.012)
+  setTimeout(() => beep(base * 1.5, 110, 'sine', 0.1 + intensity * 0.012), 60)
+  if (intensity >= 2) setTimeout(() => beep(base * 2, 120, 'sine', 0.09), 130)
+  if (intensity >= 3) beep(70, 180, 'sine', 0.1 + intensity * 0.01)
+  if (intensity >= 4) setTimeout(() => beep(base * 2.5, 140, 'triangle', 0.08), 190)
+  if (intensity >= 5) setTimeout(() => beep(base * 3, 160, 'sine', 0.07), 250)
+}
+
+/**
+ * Ver.5.0: FINAL DOPA TRIAL失敗（TRIAL FAILED）専用SE。通常のMISS音より重く、
+ * 「積み上げてきたものが崩れ落ちる」ような下降トーンにする。
+ */
+function finalMiss() {
+  sweep(900, 120, 320, 'sawtooth', 0.14)
+  setTimeout(() => beep(90, 400, 'sine', 0.16), 200)
+}
+
+/**
+ * Ver.5.0: 200% 真のPERFECT CLEAR専用の超大型ファンファーレ。既存の120%時代の
+ * victoryFanfare()を土台に、より重い低音impact・ベルの層・上昇フレーズ・長い最終和音を
+ * 追加してゲーム最大の演出にする（46. 完全オリジナル構成、既存作品のメロディは一切模倣しない）。
+ */
+function perfectFanfare200() {
+  // 0. 超重量級の低音impact（200%到達の重みを一発目に叩き込む）
+  beep(42, 500, 'sine', 0.26)
+  setTimeout(() => beep(55, 420, 'sine', 0.2), 40)
+  // 1〜3. 既存の120%時代ファンファーレ（上昇プレップ→メジャーコード→bell余韻）をそのまま踏襲
+  victoryFanfare()
+  // 4. 上昇フレーズ（駆け上がる4音、既存のcomboArpeggioより広い音域）
+  setTimeout(() => {
+    ;[784, 987.77, 1174.66, 1567.98].forEach((freq, i) => {
+      setTimeout(() => beep(freq, 130, 'triangle', 0.09), i * 70)
+    })
+  }, 720)
+  // 5. 長い最終和音（ルート＋5度＋オクターブを長く伸ばして余韻を作る）
+  setTimeout(() => {
+    beep(261.63, 1400, 'sine', 0.08)
+    beep(392.0, 1300, 'sine', 0.07)
+    beep(523.25, 1200, 'triangle', 0.06)
+  }, 1050)
+}
+
 /** HOLD中の「充填音」。押している間ずっと鳴り続け、requiredMsで音程が上がりきるように設計。 */
 function startHoldCharge(durationMs: number): () => void {
   if (isMuted()) return () => {}
@@ -187,6 +264,14 @@ export const sfx = {
   },
   /** Ver.4.11: 120% PERFECT CLEAR専用のオリジナル勝利ファンファーレ（overdriveMaxの直後に鳴らす） */
   victoryFanfare,
+  /** Ver.5.0: FINAL DOPA TRIAL突入専用SE（祝福ではなく警告・ボス戦突入の感触） */
+  finalEntry,
+  /** Ver.5.0: FINAL DOPA TRIAL、1問正解ごとの成功SE（intensity 1〜5で段階的に派手になる） */
+  finalSuccess,
+  /** Ver.5.0: FINAL DOPA TRIAL失敗（TRIAL FAILED）専用SE */
+  finalMiss,
+  /** Ver.5.0: 200% 真のPERFECT CLEAR専用の超大型ファンファーレ（ゲーム最大の演出） */
+  perfectFanfare200,
   /** GOまで押すな：GO表示の合図音 */
   go: () => beep(1300, 70, 'sine', 0.1),
   /**

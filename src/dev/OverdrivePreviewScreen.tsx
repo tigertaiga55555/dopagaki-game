@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { getOverdriveFrameClass, getOverdriveTier, Golden120Overlay, LimitErrorOverlay, OverdriveAmbience, OverdriveRevealOverlay } from '../components/OverdriveFx'
+import { getOverdriveFrameClass, getOverdriveTier, GoldenClearOverlay, LimitErrorOverlay, OverdriveAmbience, OverdriveRevealOverlay } from '../components/OverdriveFx'
 import { MILESTONE_TEXT } from '../config/messagesV4'
-import { OVERDRIVE_CONFIG } from '../config/overdriveConfig'
 import { getOverdriveTitle } from '../config/resultTypesV4'
 import { ResultScreen } from '../screens/ResultScreen'
 import { duckAudio, unlockAudio } from '../utils/audioContext'
@@ -21,8 +20,13 @@ import type { FinalResultV4 } from '../types'
  * ゲームロジック・条件判定には一切手を加えていない。
  *
  * Ver.4.7: 演出コンポーネント（OverdriveAmbience/LimitErrorOverlay/OverdriveRevealOverlay/
- * Golden120Overlay）はPlayScreenと共通の src/components/OverdriveFx.tsx を使用し、
+ * GoldenClearOverlay）はPlayScreenと共通の src/components/OverdriveFx.tsx を使用し、
  * Previewで見る見た目と実ゲームでOVERDRIVEが発動した時の見た目がほぼ同じになるようにしている。
+ *
+ * Ver.5.0: 120%はもはやゲームのCLEARではなくFINAL DOPA TRIALの入口になったため、
+ * このプレビューのクライマックスは119%（一度でもMISSした場合の実質上限と同じ、101〜119%の
+ * 黄金OVERDRIVE演出の頂点）で止め、「PERFECT CLEAR!!」の文言は表示しない
+ * （43. その文言は200%専用）。101〜119%の黄金OVERDRIVE演出そのものは一切変更していない。
  */
 const HUNDRED_SILENCE_MS = 300
 const BURST_HOLD_MS = 650
@@ -36,7 +40,9 @@ const CLIMB_MID = [104, 108, 112, 116]
 type Phase = 'idle' | 'running' | 'result'
 
 function buildPreviewResult(): FinalResultV4 {
-  const finalPercent = OVERDRIVE_CONFIG.maxPercent
+  // Ver.5.0: このプレビューは101〜119%の黄金OVERDRIVE演出専用（120%はFINAL DOPA TRIALの
+  // 入口になったため、ここでは扱わない）。119%止まりの見た目に合わせてダミー結果も119%にする。
+  const finalPercent = 119
   return {
     percent: finalPercent,
     rawPercent: finalPercent,
@@ -147,7 +153,7 @@ export function OverdrivePreviewScreen() {
         duckAudio(MAX_SILENCE_MS, 1)
         schedule(() => {
           sfx.overdriveMax()
-          setDisplayPercent(OVERDRIVE_CONFIG.maxPercent)
+          setDisplayPercent(119)
           setShowMaxBurst(true)
           schedule(() => {
             setShowMaxBurst(false)
@@ -213,7 +219,7 @@ export function OverdrivePreviewScreen() {
 
       <LimitErrorOverlay show={showLimitErrorGlitch} />
       <OverdriveRevealOverlay show={showOverdriveBurst} />
-      <Golden120Overlay show={showMaxBurst} title={getOverdriveTitle(OVERDRIVE_CONFIG.maxPercent).name} />
+      <GoldenClearOverlay show={showMaxBurst} percent={119} title={getOverdriveTitle(119).name} />
     </div>
   )
 }

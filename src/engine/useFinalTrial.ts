@@ -15,22 +15,33 @@ import type { FinalQuestionResult, FinalQuestionSpec, FinalQuestionTag } from '.
  * 即座に終了する（減点はしない）。全16問（Q1〜Q15＋Q16のFINAL QUESTION）に正解すると200%。
  */
 
-const SUCCESS_FLASH_MS = 320
 /**
- * Ver.5.0（commit2時点の暫定値）：MISS/200%CLEARの瞬間、onFinish()を呼ぶまでの短い間。
- * 本格的な「TRIAL FAILED」演出・200%の超大型演出はcommit5で追加するが、それまでの間も
- * 結果画面へ即座に切り替わって唐突に見えないよう、ごく短い間だけ置く。
+ * Ver.5.0(16.): 通常の成功演出は「テンポを崩さない」ため0.2〜0.4秒程度に収める。
+ * 節目（Q4/Q8/Q12/Q15）だけは特別に長く見せてよい（17. 強度エスカレーション）。
  */
-const FAIL_TRANSITION_MS = 700
-const CLEAR200_TRANSITION_MS = 700
+const SUCCESS_FLASH_MS_NORMAL = 340
+const SUCCESS_FLASH_MS_MILESTONE = 900
+const MILESTONE_NUMBERS = new Set([4, 8, 12, 15])
+function successFlashDurationFor(clearedNumber: number): number {
+  return MILESTONE_NUMBERS.has(clearedNumber) ? SUCCESS_FLASH_MS_MILESTONE : SUCCESS_FLASH_MS_NORMAL
+}
+/** 15問目クリア後だけ入る特別な中継演出（30. BGMが落ち、画面が暗くなり、
+ *  「FINAL QUESTION / 最後まで見失うな」を見せてからQ16へ入る）の表示時間。 */
+const FINAL_QUESTION_INTRO_MS = 1600
+const FAIL_TRANSITION_MS = 1400
+const CLEAR200_TRANSITION_MS = 5200
+
+export type FinalTrialPhase = 'playing' | 'successFlash' | 'finalQuestionIntro' | 'failed' | 'clear200'
 
 export interface FinalTrialSnapshot {
   /** 現在挑戦中の問題番号（1〜16） */
   questionNumber: number
   percent: number
   currentSpec: FinalQuestionSpec | null
-  phase: 'playing' | 'successFlash' | 'failed' | 'clear200'
+  phase: FinalTrialPhase
   judgementKey: number
+  /** 直前に突破した問題番号（1〜16）。成功演出の強度計算に使う。突破直後以外はnull。 */
+  lastClearedNumber: number | null
   /** 15問目突破時などの節目バナー文言 */
   milestoneLabel: string | null
 }
@@ -42,22 +53,39 @@ export interface FinalTrialFinishPayload {
   cleared200: boolean
 }
 
+/**
+ * Ver.5.0: 成功演出の強度（1〜5）。Q1-3=1、Q4/Q5-7=2、Q8/Q9-11=3、Q12/Q13-14=4、Q15=5、
+ * という形でQ1→Q15に向けて確実にエスカレートしていく（17. 成功演出の強度エスカレーション）。
+ */
+export function finalSuccessIntensityFor(clearedNumber: number): 1 | 2 | 3 | 4 | 5 {
+  if (clearedNumber <= 3) return 1
+  if (clearedNumber <= 7) return 2
+  if (clearedNumber <= 11) return 3
+  if (clearedNumber <= 14) return 4
+  return 5
+}
+
 function milestoneLabelFor(clearedNumber: number): string {
+  if (clearedNumber === 4) return '4 / 16 突破！'
+  if (clearedNumber === 8) return '折り返し突破！ 8 / 16'
+  if (clearedNumber === 12) return '12 / 16 突破！'
+  if (clearedNumber === 15) return '195% 到達！'
   return `${clearedNumber} / ${FINAL_TRIAL_CONFIG.totalQuestions} CLEAR`
 }
 
-export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => void) {
+export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => void, initialQuestionNumber = 1) {
   const [snapshot, setSnapshot] = useState<FinalTrialSnapshot>({
-    questionNumber: 1,
-    percent: FINAL_TRIAL_CONFIG.startPercent,
+    questionNumber: initialQuestionNumber,
+    percent: FINAL_TRIAL_CONFIG.startPercent + (initialQuestionNumber - 1) * FINAL_TRIAL_CONFIG.percentPerCorrect,
     currentSpec: null,
     phase: 'playing',
     judgementKey: 0,
+    lastClearedNumber: null,
     milestoneLabel: null,
   })
 
-  const questionNumberRef = useRef(1)
-  const percentRef = useRef(FINAL_TRIAL_CONFIG.startPercent)
+  const questionNumberRef = useRef(initialQuestionNumber)
+  const percentRef = useRef(FINAL_TRIAL_CONFIG.startPercent + (initialQuestionNumber - 1) * FINAL_TRIAL_CONFIG.percentPerCorrect)
   const endedRef = useRef(false)
   const startedRef = useRef(false)
   const currentSpecRef = useRef<FinalQuestionSpec | null>(null)
@@ -108,7 +136,7 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
   function start() {
     if (startedRef.current || endedRef.current) return
     startedRef.current = true
-    const spec = buildQuestion(1)
+    const spec = buildQuestion(questionNumberRef.current)
     setSnapshot((s) => ({ ...s, currentSpec: spec }))
   }
 
@@ -139,6 +167,7 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
         percent: FINAL_TRIAL_CONFIG.clearPercent,
         currentSpec: null,
         judgementKey: judgementKeyRef.current,
+        lastClearedNumber: clearedNumber,
       }))
       endTimerRef.current = setTimeout(() => {
         onFinish({
@@ -158,15 +187,27 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
       questionNumber: questionNumberRef.current,
       currentSpec: null,
       judgementKey: judgementKeyRef.current,
+      lastClearedNumber: clearedNumber,
       milestoneLabel: milestoneLabelFor(clearedNumber),
     }))
 
     if (successTimerRef.current) clearTimeout(successTimerRef.current)
     successTimerRef.current = setTimeout(() => {
       if (endedRef.current) return
+      // Ver.5.0(30.): 15問目を突破した直後だけ、Q16（FINAL QUESTION）へ即座には入らず、
+      // 「FINAL QUESTION / 最後まで見失うな」の専用中継演出を一度挟む。
+      if (clearedNumber === FINAL_TRIAL_CONFIG.totalQuestions - 1) {
+        setSnapshot((s) => ({ ...s, phase: 'finalQuestionIntro', milestoneLabel: null }))
+        successTimerRef.current = setTimeout(() => {
+          if (endedRef.current) return
+          const spec = buildQuestion(questionNumberRef.current)
+          setSnapshot((s) => ({ ...s, phase: 'playing', currentSpec: spec }))
+        }, FINAL_QUESTION_INTRO_MS)
+        return
+      }
       const spec = buildQuestion(questionNumberRef.current)
       setSnapshot((s) => ({ ...s, phase: 'playing', currentSpec: spec, milestoneLabel: null }))
-    }, SUCCESS_FLASH_MS)
+    }, successFlashDurationFor(clearedNumber))
   }
 
   return { snapshot, start, handleResult }

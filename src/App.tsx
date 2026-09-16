@@ -1,7 +1,12 @@
 import { useCallback, useState } from 'react'
-import { Clear120PreviewScreen } from './dev/Clear120PreviewScreen'
+import { FinalTrialPreviewScreen } from './dev/FinalTrialPreviewScreen'
 import { OverdrivePreviewScreen } from './dev/OverdrivePreviewScreen'
-import { isClear120PreviewRequested, isOverdrivePreviewRequested } from './dev/overdrivePreview'
+import {
+  isClear200PreviewRequested,
+  isFinalQuestionPreviewRequested,
+  isFinalTrialPreviewRequested,
+  isOverdrivePreviewRequested,
+} from './dev/overdrivePreview'
 import { PlayScreen } from './screens/PlayScreen'
 import { ResultScreen } from './screens/ResultScreen'
 import { TitleScreen } from './screens/TitleScreen'
@@ -17,9 +22,12 @@ export default function App() {
   // 画面遷移を完全にバイパスして確認用画面を表示する。Productionでは
   // isOverdrivePreviewRequested()が常にfalseを返すため、この分岐には到達しない。
   const [showOverdrivePreview] = useState(isOverdrivePreviewRequested)
-  // 同様に ?preview=clear120 の場合のみ、120%到達＝DOPA PERFECT CLEAR演出だけを
-  // 確認する専用画面を表示する。こちらもProductionでは常にfalseになる。
-  const [showClear120Preview] = useState(isClear120PreviewRequested)
+  // Ver.5.0: 同様に ?preview=finaltrial / finalquestion / clear200 の場合のみ、
+  // FINAL DOPA TRIAL以降を確認する専用画面を表示する（51. 旧?preview=clear120は
+  // 120%がもはやCLEARではなくなったため廃止し、finaltrialへ整理した）。
+  const [showFinalTrialPreview] = useState(isFinalTrialPreviewRequested)
+  const [showFinalQuestionPreview] = useState(isFinalQuestionPreviewRequested)
+  const [showClear200Preview] = useState(isClear200PreviewRequested)
 
   const startPlay = useCallback(() => {
     // iPhone SafariはAudioContextの生成/resumeをユーザー操作の同期コールバック内でしか許可しないため、
@@ -44,8 +52,12 @@ export default function App() {
 
       {showOverdrivePreview ? (
         <OverdrivePreviewScreen />
-      ) : showClear120Preview ? (
-        <Clear120PreviewScreen />
+      ) : showFinalTrialPreview ? (
+        <FinalTrialPreviewScreen mode="finaltrial" />
+      ) : showFinalQuestionPreview ? (
+        <FinalTrialPreviewScreen mode="finalquestion" />
+      ) : showClear200Preview ? (
+        <FinalTrialPreviewScreen mode="clear200" />
       ) : (
         <>
           {screen === 'title' && <TitleScreen onStart={startPlay} />}

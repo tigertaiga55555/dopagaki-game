@@ -17,6 +17,9 @@ const SCHEDULER_INTERVAL_MS = 25
 
 const STAGE_BPM = [96, 110, 122, 134, 146, 158]
 const OVERDRIVE_BPM = 166
+/** Ver.5.0: FINAL DOPA TRIAL専用BGMのBPM。OVERDRIVEよりわずかに遅くし、
+ *  「速さ」ではなく「重さ・緊迫感（ボス戦）」で威圧するテンポにする。 */
+const FINAL_BPM = 150
 
 let running = false
 let schedulerTimer: ReturnType<typeof setInterval> | null = null
@@ -27,6 +30,12 @@ let stageRef = 0
  *  MISSでcomboRefが0に戻ると、この値も次のtickで即座に0へ戻り、追加レイヤーも自動的に消える。 */
 let comboCountRef = 0
 let overdriveMode = false
+/** Ver.5.0: FINAL DOPA TRIAL専用BGMモード。trueの間は通常/OVERDRIVEの全レイヤーを完全に
+ *  差し替え、専用のボス戦パターン（重いベース・金属質パーカッション・不穏なシンセ・
+ *  ハートビート感のキック）だけを鳴らす。 */
+let finalMode = false
+/** Ver.5.0: FINAL DOPA TRIALの問題番号（1〜16）に応じて0〜3の4段階でレイヤーを積み増す。 */
+let finalIntensityRef = 0
 let noiseBuffer: AudioBuffer | null = null
 
 function getNoiseBuffer(ctx: AudioContext): AudioBuffer {
@@ -40,6 +49,7 @@ function getNoiseBuffer(ctx: AudioContext): AudioBuffer {
 }
 
 function currentBpm(): number {
+  if (finalMode) return FINAL_BPM
   return overdriveMode ? OVERDRIVE_BPM : STAGE_BPM[Math.max(0, Math.min(STAGE_BPM.length - 1, stageRef))]
 }
 
@@ -355,7 +365,175 @@ export function playRiser() {
   }
 }
 
+/** Ver.5.0: FINAL専用「ハートビート」キック。低い一撃のすぐ後にもう一段低い残響を重ね、
+ *  心臓の鼓動のような「ドッ、ドッ…」を作る（通常のplayKickより低く・重い）。 */
+function playFinalHeartbeatKick(time: number) {
+  const ctx = getAudioContext()
+  const out = getBgmGain()
+  if (!ctx || !out) return
+  ;[0, 0.09].forEach((offset, i) => {
+    const t = time + offset
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(i === 0 ? 110 : 70, t)
+    osc.frequency.exponentialRampToValueAtTime(36, t + 0.16)
+    gain.gain.setValueAtTime(i === 0 ? 0.26 : 0.16, t)
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22)
+    osc.connect(gain)
+    gain.connect(out)
+    osc.start(t)
+    osc.stop(t + 0.24)
+    osc.onended = () => {
+      osc.disconnect()
+      gain.disconnect()
+    }
+  })
+}
+
+/** Ver.5.0: FINAL専用の細かいハイハット（通常より速く鳴らし、緊迫感を出す）。 */
+function playFinalHat(time: number) {
+  const ctx = getAudioContext()
+  const out = getBgmGain()
+  if (!ctx || !out) return
+  const src = ctx.createBufferSource()
+  src.buffer = getNoiseBuffer(ctx)
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'highpass'
+  filter.frequency.value = 8500
+  const gain = ctx.createGain()
+  gain.gain.setValueAtTime(0.03, time)
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.03)
+  src.connect(filter)
+  filter.connect(gain)
+  gain.connect(out)
+  src.start(time)
+  src.stop(time + 0.04)
+  src.onended = () => {
+    src.disconnect()
+    filter.disconnect()
+    gain.disconnect()
+  }
+}
+
+/** Ver.5.0: FINAL専用の金属質パーカッション（狭いbandpassで高いQ＝金属を叩いたような質感）。 */
+function playFinalMetal(time: number) {
+  const ctx = getAudioContext()
+  const out = getBgmGain()
+  if (!ctx || !out) return
+  const src = ctx.createBufferSource()
+  src.buffer = getNoiseBuffer(ctx)
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'bandpass'
+  filter.frequency.value = 3600
+  filter.Q.value = 8
+  const gain = ctx.createGain()
+  gain.gain.setValueAtTime(0.05, time)
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.14)
+  src.connect(filter)
+  filter.connect(gain)
+  gain.connect(out)
+  src.start(time)
+  src.stop(time + 0.15)
+  src.onended = () => {
+    src.disconnect()
+    filter.disconnect()
+    gain.disconnect()
+  }
+}
+
+/** Ver.5.0: FINAL専用の不穏なシンセパッド（2音をわずかにデチューンして唸らせる）。 */
+function playFinalOminousPad(time: number) {
+  const ctx = getAudioContext()
+  const out = getBgmGain()
+  if (!ctx || !out) return
+  ;[110, 111.5].forEach((freq) => {
+    const osc = ctx.createOscillator()
+    const filter = ctx.createBiquadFilter()
+    const gain = ctx.createGain()
+    osc.type = 'sawtooth'
+    osc.frequency.value = freq
+    filter.type = 'lowpass'
+    filter.frequency.value = 500
+    gain.gain.setValueAtTime(0.001, time)
+    gain.gain.linearRampToValueAtTime(0.05, time + 0.4)
+    gain.gain.linearRampToValueAtTime(0.001, time + 1.6)
+    osc.connect(filter)
+    filter.connect(gain)
+    gain.connect(out)
+    osc.start(time)
+    osc.stop(time + 1.65)
+    osc.onended = () => {
+      osc.disconnect()
+      filter.disconnect()
+      gain.disconnect()
+    }
+  })
+}
+
+/** Ver.5.0: FINAL専用のサブベース（超低音、常時流れる緊張感のベースライン）。 */
+function playFinalSubBass(time: number, intensity: number) {
+  const ctx = getAudioContext()
+  const out = getBgmGain()
+  if (!ctx || !out) return
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = 'sine'
+  osc.frequency.value = 41
+  gain.gain.setValueAtTime(0.14 + intensity * 0.02, time)
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.5)
+  osc.connect(gain)
+  gain.connect(out)
+  osc.start(time)
+  osc.stop(time + 0.52)
+  osc.onended = () => {
+    osc.disconnect()
+    gain.disconnect()
+  }
+}
+
+/**
+ * Ver.5.0: FINAL DOPA TRIAL専用BGM本体。通常/OVERDRIVEの全レイヤーとは完全に独立した
+ * 別パターン（10. ボス戦のような緊張感：速く重いベース、細かいハイハット、金属質
+ * パーカッション、不穏なシンセ、ハートビート感のキック）。finalIntensityRef（0〜3）に
+ * 応じて段階的にレイヤーが増える（問題が進むほど専用BGMも激しくなる）。
+ * 問題の正誤判定SE自体はsound.tsの別ゲインノードを通るため、ここでどれだけ重ねても
+ * 判定音が聞こえなくなることはない。
+ */
+function scheduleFinalStep(step: number, time: number) {
+  const beat = Math.floor(step / STEPS_PER_BEAT)
+  const sub = step % STEPS_PER_BEAT
+  const intensity = finalIntensityRef
+
+  // ハートビートキック：1拍目・3拍目の頭に必ず（心臓の鼓動のように規則正しく）
+  if (sub === 0 && (beat === 0 || beat === 2)) {
+    playFinalHeartbeatKick(time)
+  }
+  // サブベース：ハートビートキックと同期
+  if (sub === 0 && (beat === 0 || beat === 2)) {
+    playFinalSubBass(time, intensity)
+  }
+  // 細かいハイハット：常時16分で刻み続け緊迫感を作る
+  playFinalHat(time)
+  // 金属質パーカッション：intensity>=1から、小節の裏拍に
+  if (intensity >= 1 && sub === 2 && (beat === 1 || beat === 3)) {
+    playFinalMetal(time)
+  }
+  // 不穏なシンセパッド：intensity>=2から、小節頭に長く伸ばす
+  if (intensity >= 2 && step % STEPS_PER_BAR === 0) {
+    playFinalOminousPad(time)
+  }
+  // 最高強度：intensity>=3で追加の金属パーカッションを増やし密度を上げる
+  if (intensity >= 3 && sub === 2) {
+    playFinalMetal(time)
+  }
+}
+
 function scheduleStep(step: number, time: number) {
+  if (finalMode) {
+    scheduleFinalStep(step, time)
+    return
+  }
   const stage = stageRef
   const beat = Math.floor(step / STEPS_PER_BEAT)
   const sub = step % STEPS_PER_BEAT
@@ -431,6 +609,8 @@ export function startBgm() {
   if (!ctx || running) return
   running = true
   overdriveMode = false
+  finalMode = false
+  finalIntensityRef = 0
   stageRef = 0
   comboCountRef = 0
   stepIndex = 0
@@ -441,6 +621,7 @@ export function startBgm() {
 export function stopBgm() {
   running = false
   overdriveMode = false
+  finalMode = false
   if (schedulerTimer !== null) {
     clearInterval(schedulerTimer)
     schedulerTimer = null
@@ -455,6 +636,18 @@ export function setBgmProgress(stage: number, comboCount: number) {
 
 export function setOverdriveMode(active: boolean) {
   overdriveMode = active
+}
+
+/** Ver.5.0: FINAL DOPA TRIAL専用BGMモードの切り替え。trueの間は通常/OVERDRIVEの
+ *  全レイヤーが完全に無効化され、scheduleFinalStep()だけが鳴る。 */
+export function setFinalMode(active: boolean) {
+  finalMode = active
+  if (active) overdriveMode = false
+}
+
+/** Ver.5.0: FINAL DOPA TRIALの問題進行（0〜3）に応じてBGMレイヤーを段階的に増やす。 */
+export function setFinalIntensity(level: number) {
+  finalIntensityRef = Math.max(0, Math.min(3, level))
 }
 
 /**

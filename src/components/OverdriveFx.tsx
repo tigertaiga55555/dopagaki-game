@@ -124,16 +124,30 @@ export function OverdriveRevealOverlay({ show, showTimeBonus }: { show: boolean;
 }
 
 /**
- * 120%到達＝「ゲームを完全攻略した」ことが一発で分かる専用CLEAR演出。
- * Ver.4.9: 120%はゲーム開始から完全ノーミスでしか到達できない別格の条件になったため、
- * 通常のOVERDRIVE演出（101〜119%）とはっきり区別できるよう「PERFECT CLEAR!!」を大きく強調する。
- * 直前にWhiteFlashOverlay（白閃光）を挟んでから表示することで、「黄金+白の超強力な爆発」を作る。
- * Ver.4.11: 119%までの黄金OVERDRIVEの延長ではなく「ゲーム完全クリアのお祭り」に格上げするため、
- * RainbowShockwaveOverlay／Confetti120Overlay／Sparkle120Overlayと合わせて表示する
+ * 黄金爆発の中央にpercentとtitleを表示する汎用CLEAR演出オーバーレイ。
+ * Ver.4.9〜4.11: もともとは120%到達＝「ゲームを完全攻略した」ことが一発で分かる専用演出として、
+ * 直前にWhiteFlashOverlay（白閃光）を挟んでから表示し、RainbowShockwaveOverlay／
+ * Confetti120Overlay／Sparkle120Overlayと合わせて「黄金+白+虹の超強力な爆発」を作っていた
  * （このコンポーネント自体は中央のテキスト＋黄金爆発のみを担当し、虹・紙吹雪・sparkleは
- * それぞれ専用コンポーネントに分離して合成する）。
+ * それぞれ専用コンポーネントに分離して合成する、という構造は変わらない）。
+ *
+ * Ver.5.0: 「PERFECT CLEAR!!」「完全攻略」の文言は200%（真のPERFECT CLEAR）専用に
+ * 予約されたため、showPerfectClearWording（既定false）で明示的にオプトインした
+ * 呼び出し元だけがこの文言を表示できるようにした。120%はもはやゲームのCLEARではなく
+ * FINAL DOPA TRIALの入口に過ぎないため、この文言を出してはならない
+ * （?preview=overdriveのクライマックスは119%止まりでこのオプトインをしない）。
  */
-export function Golden120Overlay({ show, title }: { show: boolean; title: string }) {
+export function GoldenClearOverlay({
+  show,
+  percent,
+  title,
+  showPerfectClearWording = false,
+}: {
+  show: boolean
+  percent: number
+  title: string
+  showPerfectClearWording?: boolean
+}) {
   if (!show) return null
   return (
     <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center gap-1 bg-black/90">
@@ -143,13 +157,20 @@ export function Golden120Overlay({ show, title }: { show: boolean; title: string
       <div className="anim-golden-shockwave absolute h-16 w-16 rounded-full" style={{ animationDelay: '0.3s', animationDuration: '1.1s' }} />
       <div className="anim-gold-burst absolute h-72 w-72 rounded-full bg-amber-300 blur-3xl" />
       <p className="relative text-5xl font-black tabular-nums leading-none text-amber-300 drop-shadow-[0_0_30px_rgba(250,204,21,0.9)]">
-        120<span className="text-2xl">%</span>
+        {percent}
+        <span className="text-2xl">%</span>
       </p>
-      <p className="anim-pop relative px-4 text-center text-4xl font-black italic leading-tight text-white drop-shadow-[0_0_25px_rgba(250,204,21,1)]">
-        PERFECT CLEAR!!
-      </p>
-      <p className="anim-pop relative mt-2 text-xl font-black tracking-widest text-amber-200">{title}</p>
-      <p className="anim-pop relative text-sm font-bold tracking-widest text-white/70">完全攻略</p>
+      {showPerfectClearWording ? (
+        <>
+          <p className="anim-pop relative px-4 text-center text-4xl font-black italic leading-tight text-white drop-shadow-[0_0_25px_rgba(250,204,21,1)]">
+            PERFECT CLEAR!!
+          </p>
+          <p className="anim-pop relative mt-2 text-xl font-black tracking-widest text-amber-200">{title}</p>
+          <p className="anim-pop relative text-sm font-bold tracking-widest text-white/70">完全攻略</p>
+        </>
+      ) : (
+        <p className="anim-pop relative mt-2 text-xl font-black tracking-widest text-amber-200">{title}</p>
+      )}
     </div>
   )
 }

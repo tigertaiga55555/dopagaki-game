@@ -352,6 +352,11 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEn
       // 最後まで再生する機会がない。表示が119%台のまま固まらないよう、120%へ即座にスナップする。
       displayPercentRef.current = target
       setSnapshot((s) => ({ ...s, displayPercent: target }))
+      // Ver.5.0: このパスはfinishGame()を経由しないため、そちらが担うstopBgm()がここでも
+      // 必要。呼ばないとOVERDRIVE BGMがFINAL DOPA TRIAL突入後もループし続け、FinalTrialScreen
+      // 側が新たに始めるFINAL専用BGMと二重に鳴ってしまう（11. FINALでは全体タイマーだけでなく
+      // 通常/OVERDRIVE BGMも完全に切り替わるべき）。
+      stopBgm()
     }
 
     percentTweenRef.current = { from: displayPercentRef.current, to: target, startedAt: performance.now() }
