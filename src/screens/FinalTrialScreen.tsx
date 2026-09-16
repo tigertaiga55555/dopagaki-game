@@ -56,6 +56,9 @@ interface Props {
 const SILENCE_MS = 280
 const FLASH_AT_MS = SILENCE_MS + 350
 const SHATTER_AT_MS = FLASH_AT_MS + 150
+/** A-2: 「ほぼ無音に近い溜め」の長さ。この直前でduckAudio()を呼び、ちょうどFLASH_AT_MSで
+ *  音量が回復し終えるタイミングにsfx.finalEntry()を鳴らす。 */
+const DUCK_HOLD_MS = 160
 const TEXT1_AT_MS = SHATTER_AT_MS + 420
 const TEXT2_AT_MS = TEXT1_AT_MS + 1100
 const ENTRY_END_MS = TEXT2_AT_MS + 1000
@@ -120,8 +123,13 @@ export function FinalTrialScreen({
     }
 
     schedule(() => setShowCrack(true), SILENCE_MS)
+    // A-2: 「既存BGMを急激にduck→約100〜180ms程度ほぼ無音に近い溜め→強いreverse swell...」。
+    // duckAudioとsfx.finalEntry()を同時に呼ぶと、finalEntry()自身の音までダッキング対象の
+    // sfxGainを通るため無音化されてしまう（実際に発見された不具合）。DUCK_HOLD_MSぶん前倒しで
+    // duckAudio()を呼び、そのrecoveryが完了するちょうどFLASH_AT_MSでfinalEntry()を鳴らすことで、
+    // 「溜め」が明けた瞬間に全音量でSEが飛び込んでくるようにする。
+    schedule(() => duckAudio(DUCK_HOLD_MS, 1), FLASH_AT_MS - DUCK_HOLD_MS)
     schedule(() => {
-      duckAudio(400, 1)
       setShowFlash(true)
       sfx.finalEntry()
     }, FLASH_AT_MS)
@@ -130,9 +138,12 @@ export function FinalTrialScreen({
       setShowFlash(false)
       setShowShatter(true)
       triggerShake(true)
+      // startBgm()は内部でfinalMode/finalIntensityRefを一旦リセットしてしまうため、
+      // 必ずstartBgm()を先に呼んでからsetFinalMode(true)する
+      // （逆順だとFINAL専用BGMへ切り替わらず、通常BGMのまま鳴り続けてしまう不具合があった）。
+      startBgm()
       setFinalMode(true)
       setFinalIntensity(0)
-      startBgm()
     }, SHATTER_AT_MS)
     schedule(() => setShowShatter(false), SHATTER_AT_MS + 500)
     schedule(() => setEntryTextBeat('breach'), TEXT1_AT_MS)

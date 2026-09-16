@@ -35,6 +35,10 @@ export function HudCrackOverlay({ show }: { show: boolean }) {
 /**
  * 突入演出の核：「黄金世界が砕け散る」瞬間。既存のanim-glitch（amber）を土台に、
  * さらに白フラッシュの残光を重ねて「世界が壊れて塗り替わる」印象を強める。
+ *
+ * Ver.5.0追加（A-5、上積みのみ・既存演出は変更しない）：色収差パルス（赤/シアンのずれ）と
+ * 外周からの黄金shockwaveリングを同じビートに重ねる。テンポ・既存デザインは維持したまま、
+ * 「壊れる瞬間」の情報量だけを増やす。
  */
 export function WorldShatterOverlay({ show }: { show: boolean }) {
   if (!show) return null
@@ -42,6 +46,9 @@ export function WorldShatterOverlay({ show }: { show: boolean }) {
     <div className="pointer-events-none absolute inset-0 z-50">
       <div className="anim-glitch absolute inset-0 bg-amber-300" />
       <div className="anim-glitch absolute inset-0 bg-white" style={{ animationDelay: '0.08s', mixBlendMode: 'overlay' }} />
+      <div className="anim-chromatic-pulse-red absolute inset-0 bg-red-500/40" />
+      <div className="anim-chromatic-pulse-cyan absolute inset-0 bg-cyan-400/40" />
+      <div className="anim-outer-shockwave absolute inset-0" />
     </div>
   )
 }

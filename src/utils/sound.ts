@@ -50,6 +50,49 @@ function sweep(fromFreq: number, toFreq: number, durationMs: number, type: Oscil
   }
 }
 
+let sfxNoiseBuffer: AudioBuffer | null = null
+function getSfxNoiseBuffer(ctx: AudioContext): AudioBuffer {
+  if (!sfxNoiseBuffer) {
+    const length = Math.floor(ctx.sampleRate * 0.4)
+    sfxNoiseBuffer = ctx.createBuffer(1, length, ctx.sampleRate)
+    const data = sfxNoiseBuffer.getChannelData(0)
+    for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1
+  }
+  return sfxNoiseBuffer
+}
+
+/**
+ * Ver.5.0追加: フィルタ済みノイズバースト。ガラス・金属が砕けるような質感のSEに使う
+ * （bgm.tsのplayFinalMetal等と同じ発想だが、こちらはSFXバス経由）。
+ */
+function noiseBurst(freq: number, q: number, durationMs: number, gainValue: number, filterType: BiquadFilterType = 'bandpass') {
+  if (isMuted()) return
+  const ctx = getAudioContext()
+  const gainOut = getSfxGain()
+  if (!ctx || !gainOut) return
+  if (ctx.state === 'suspended') void ctx.resume()
+  const src = ctx.createBufferSource()
+  src.buffer = getSfxNoiseBuffer(ctx)
+  const filter = ctx.createBiquadFilter()
+  filter.type = filterType
+  filter.frequency.value = freq
+  filter.Q.value = q
+  const gain = ctx.createGain()
+  const now = ctx.currentTime
+  gain.gain.setValueAtTime(gainValue, now)
+  gain.gain.exponentialRampToValueAtTime(0.001, now + durationMs / 1000)
+  src.connect(filter)
+  filter.connect(gain)
+  gain.connect(gainOut)
+  src.start(now)
+  src.stop(now + durationMs / 1000 + 0.02)
+  src.onended = () => {
+    src.disconnect()
+    filter.disconnect()
+    gain.disconnect()
+  }
+}
+
 /**
  * Ver.4.11: 120% PERFECT CLEAR専用のオリジナル勝利ファンファーレ。既存作品のメロディは
  * 一切模倣せず、「短い上昇音（テッ）→明るいメジャーコード（テレーン！）→bell/sparkleの
@@ -76,31 +119,52 @@ function victoryFanfare() {
 }
 
 /**
- * Ver.5.0: FINAL DOPA TRIAL突入専用のオリジナルSE。100%OVERDRIVE突入音（overdriveMax）より
- * 一段強く、かつ「祝福」ではなく「警告・異変・ボス戦突入」の感触にする
- * （9. 低音impact＋逆再生スウェル＋金属質ヒット＋高音シンセ＋プリズムきらめき＋サブベース）。
+ * Ver.5.0追加: FINAL DOPA TRIAL突入専用のオリジナルSE、再設計版。
+ *
+ * 格付け：通常 < FINAL問題正解 < 100%OVERDRIVE(overdriveMax) < 120%FINAL突入(この関数)
+ * < 200%PERFECT CLEAR(perfectFanfare200)。overdriveMaxより明確に強いが、祝福（major chord等）
+ * は一切使わず、あくまで「異常事態・最終フェーズ解禁・ラスボス戦開始」の感触にする。
+ *
+ * 呼び出し側（FinalTrialScreen）は、この関数を「既存BGMのduckが明けた直後」に呼ぶこと
+ * （duckAudioと同時に呼ぶと、この関数自身の音までダッキングされてしまうため）。
+ *
+ * レイヤー構成（すべてWeb Audio APIでのオリジナル生成。既存作品の旋律・効果音は模倣しない）：
+ * 1. reverse swell風の二重スイープ（低→高、歪んだ上昇）
+ * 2. 超低音SUB IMPACT「ドン！！！！」（overdriveMaxの低音impactより明確に重い）
+ * 3. metallic / glass fracture（フィルタ済みノイズ＋非整数倍音の金属ヒット）
+ * 4. 高音の持続的な「キィィィン」という耳鳴り・異常音
+ * 5. プリズム系sparkleの降下
+ * 6. 低いsub bassの残響（この直後にFINAL専用BGMがドロップする前提の橋渡し）
  */
 function finalEntry() {
-  // 低音impact
-  beep(48, 420, 'sine', 0.24)
-  // 逆再生スウェル風（低→高へ駆け上がる歪んだ音）
-  sweep(140, 1600, 380, 'sawtooth', 0.1)
-  // 金属質ヒット（複数の非整数倍音を短く重ねる）
+  // 1. reverse swell（二重スイープで厚みを出す。祝福ではなく警告の上昇感）
+  sweep(80, 1800, 340, 'sawtooth', 0.16)
+  sweep(120, 2200, 340, 'square', 0.07)
+  // 2. 超低音SUB IMPACT（overdriveMaxの低音impact=0.2よりも明確に強く、より低い）
   setTimeout(() => {
-    beep(1830, 90, 'square', 0.09)
-    beep(2540, 70, 'square', 0.07)
-    beep(3370, 60, 'square', 0.05)
-  }, 200)
-  // 高音シンセの警告アクセント
+    beep(34, 560, 'sine', 0.32)
+    beep(51, 440, 'sine', 0.22)
+  }, 320)
+  // 3. metallic / glass fracture（金属・ガラス・黄金UIが砕ける質感）
   setTimeout(() => {
-    beep(2200, 160, 'sawtooth', 0.1)
-    setTimeout(() => beep(1900, 140, 'sawtooth', 0.09), 90)
-  }, 260)
-  // プリズムきらめきの余韻
-  setTimeout(() => beep(3100, 300, 'sine', 0.06), 420)
-  setTimeout(() => beep(3800, 350, 'triangle', 0.05), 520)
-  // サブベースの締め
-  setTimeout(() => beep(36, 500, 'sine', 0.18), 480)
+    noiseBurst(3200, 6, 220, 0.17)
+    noiseBurst(5200, 9, 160, 0.11)
+    beep(1830, 110, 'square', 0.11)
+    beep(2540, 90, 'square', 0.09)
+    beep(3370, 80, 'square', 0.07)
+    beep(4460, 70, 'square', 0.05)
+  }, 340)
+  // 4. 高音の「キィィィン」という耳鳴り・異常感（2音をわずかにデチューンして唸らせる）
+  setTimeout(() => {
+    beep(4200, 640, 'sine', 0.09)
+    beep(4222, 640, 'triangle', 0.05)
+  }, 380)
+  // 5. プリズム系sparkleが降りてくる
+  setTimeout(() => beep(3100, 260, 'sine', 0.07), 480)
+  setTimeout(() => beep(2600, 240, 'sine', 0.06), 580)
+  setTimeout(() => beep(3800, 300, 'triangle', 0.05), 650)
+  // 6. 低いsub bassの残響（FINAL専用BGM DROPへの橋渡し）
+  setTimeout(() => beep(34, 480, 'sine', 0.17), 700)
 }
 
 /**

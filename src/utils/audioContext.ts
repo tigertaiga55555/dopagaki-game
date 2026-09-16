@@ -14,6 +14,7 @@ export const SFX_BASE_GAIN = 1
 let audioCtx: AudioContext | null = null
 let sfxGain: GainNode | null = null
 let bgmGain: GainNode | null = null
+let masterCompressor: DynamicsCompressorNode | null = null
 let muted = false
 
 try {
@@ -22,16 +23,31 @@ try {
   muted = false
 }
 
+/**
+ * Ver.5.0追加: FINAL突入音・200%ファンファーレをレイヤー強化するにあたり、単純にgainを
+ * 上げるだけでは音割れ（クリッピング）が起きる。sfxGain/bgmGainの出力を、destinationへ
+ * 直接つなぐのではなく共通のmaster compressor（limiter相当）を経由させることで、
+ * 複数レイヤーが同時に重なってもiPhone Safariのスピーカーで潰れないようにする。
+ */
 function ensureGraph(ctx: AudioContext) {
+  if (!masterCompressor) {
+    masterCompressor = ctx.createDynamicsCompressor()
+    masterCompressor.threshold.value = -16
+    masterCompressor.knee.value = 24
+    masterCompressor.ratio.value = 6
+    masterCompressor.attack.value = 0.003
+    masterCompressor.release.value = 0.25
+    masterCompressor.connect(ctx.destination)
+  }
   if (!sfxGain) {
     sfxGain = ctx.createGain()
     sfxGain.gain.value = muted ? 0 : SFX_BASE_GAIN
-    sfxGain.connect(ctx.destination)
+    sfxGain.connect(masterCompressor)
   }
   if (!bgmGain) {
     bgmGain = ctx.createGain()
     bgmGain.gain.value = muted ? 0 : BGM_BASE_GAIN
-    bgmGain.connect(ctx.destination)
+    bgmGain.connect(masterCompressor)
   }
 }
 
