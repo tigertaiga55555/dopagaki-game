@@ -6,7 +6,9 @@ import {
   SCORE_CONFIG,
   TIER_GAIN,
   comboGainMultiplier,
+  comboLossPenalty,
   computeBonusGain,
+  diminishingReturnsMultiplier,
   judgeByRatio,
   momentumGainMultiplier,
   nextMomentum,
@@ -495,7 +497,10 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     let comboBrokenFrom = 0
     let comboBreakBig = false
     if (tier === 'MISS') {
-      const penalty = missPenaltyForReason(inferFailureReason(spec, result))
+      // Ver.4.10: 基本ペナルティに「切れた瞬間のCOMBOの大きさ」ぶんを上乗せする。
+      // 育てたCOMBOが大きいほどMISSの実質ペナルティが重くなる（切る前のcomboRef値を使う）。
+      const basePenalty = missPenaltyForReason(inferFailureReason(spec, result))
+      const penalty = basePenalty + comboLossPenalty(comboRef.current)
       logQuestionMiss(spec, result, penalty)
       stats.missCount += 1
       if (spec.type === 'noPress' && result.meta?.forbiddenTouch) stats.noPressFails += 1
@@ -511,11 +516,11 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         sfx.miss()
       }
       comboRef.current = 0
-      // Ver.4.9: MOMENTUMも即座に0へリセットする（COMBOとは別軸だが、MISSでは両方とも消える）。
+      // MOMENTUMも即座に0へリセットする（COMBOとは別軸だが、MISSでは両方とも消える）。
       momentumRef.current = 0
-      // Ver.4.9: ゲーム開始から一度でもMISSしたら、以後ずっとtrue（120%到達の必須条件に使う）。
+      // ゲーム開始から一度でもMISSしたら、以後ずっとtrue（120%到達の必須条件に使う）。
       hasEverMissedRef.current = true
-      // MISSは理由カテゴリ別のペナルティで実際に減点する（フロアは0＝一撃で0まで落ちない）。
+      // MISSは理由カテゴリ別のペナルティ＋COMBO_LOSSで実際に減点する（フロアは0）。
       // COMBOも同時に切れるため、大きいCOMBO中のMISSほど「二重の痛さ」になる。
       rawScoreRef.current = Math.max(0, rawScoreRef.current - penalty)
     } else {
@@ -558,10 +563,16 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         rawScoreRef.current += computeBonusGain(result.meta?.bonusTapCount ?? 0)
       } else {
         const qualityTier = tier as 'PERFECT' | 'GREAT' | 'GOOD'
-        // Ver.4.9: DOPA MOMENTUM。今回の加点にはこの正解「より前」の蓄積分（直近の質の高さ）を
+        // DOPA MOMENTUM。今回の加点にはこの正解「より前」の蓄積分（直近の質の高さ）を
         // 適用し、加点が確定してからこの正解ぶんをMOMENTUMへ積む（終盤の連続PERFECTが
         // 「98→99→100」のような逆転を後押しできるようにする）。
-        const gain = TIER_GAIN[qualityTier] * comboGainMultiplier(comboRef.current) * momentumGainMultiplier(momentumRef.current)
+        // Ver.4.10: DIMINISHING_RETURNSも同様に「加点前のrawScore」を基準に適用する
+        // （正答率ではなくプレイヤー自身のその時点のrawScoreだけで決まる値ベースの逓減）。
+        const gain =
+          TIER_GAIN[qualityTier] *
+          comboGainMultiplier(comboRef.current) *
+          momentumGainMultiplier(momentumRef.current) *
+          diminishingReturnsMultiplier(rawScoreRef.current)
         rawScoreRef.current += gain
         momentumRef.current = nextMomentum(momentumRef.current, qualityTier)
       }

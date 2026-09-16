@@ -1,19 +1,34 @@
 /**
- * Ver.4.9のスコア設定。
+ * Ver.4.10のスコア設定。
  *
- * Ver.4.8は「0から始まる加算/減算式の累積スコア（rawScore）」を導入したが、表示上限を
- * 正答率（ACCURACY_CAPS）で直接キャップしていたため、「98%まで到達→その後数問PERFECT→
- * 正答率の母数が大きく動かない→98%から100%へ行けない」という新しい頭打ち問題が生まれた。
+ * Ver.4.9で「正答率による直接キャップ」は廃止したが、実際にシミュレーションすると
+ * スコアが全体的に高すぎた（80%正答で平均97.4%など）。「普通にやれば90%前後へ収束」を
+ * 「結果が大きく振れる」へ変える、という本来の目的からズレていたため、Ver.4.10で
+ * TIER_GAIN・MISS_PENALTY・COMBO倍率・MOMENTUM倍率の4つをセットで再調整した。
  *
- * Ver.4.9では正答率による直接キャップ（ACCURACY_CAPS/getAccuracyCap）を廃止する。
- * ライブスコアは1問ごとのプレイ結果（Tier×COMBO倍率×MOMENTUM倍率、MISSはカテゴリ別
- * ペナルティ）だけで動き、正答率は「OVERDRIVE eligibility」「120%の完全ノーミス条件」
- * 「結果画面のタイプ判定・コメント」にのみ使う（＝ライブスコアの直接の天井にはしない）。
- * 表示upper boundは常に100（OVERDRIVE非対象）または119/120（OVERDRIVE対象、後者は
- * ゲーム開始から一度もMISSしていない場合のみ）というeligibility由来のゲートだけになる。
+ * 設計上の制約（シミュレーションで判明した数学的な事実）：
+ * 1ゲームの出題数はおよそ50〜60問。この規模で「MISSペナルティを明確に強める」
+ * （ユーザー希望：timeout -2〜3 / wrong -3〜5 / impulsive -4〜6 程度）と
+ * 「正答率50%でも25〜45%は残る」を同時に、加点・減点が完全に一定（COMBO/MOMENTUM
+ * 以外は毎回同じ値）の単純な足し算モデルだけで満たすことはできない
+ * （50%正答なら約27〜28回はMISSするため、ペナルティが本当にその大きさだと
+ * 正答ぶんの加点をほぼ相殺してしまう）。
  *
- * 定数はNode.jsでのモンテカルロシミュレーション（N=55問+OVERDRIVE時+8問、4000試行/ケース）
- * で検証済み。検証したケースと結果は完了報告を参照。
+ * そこでVer.4.10では、Ver.4.9までの「TIER_GAIN／MISS_PENALTY／COMBO倍率／MOMENTUM倍率」
+ * の4つに加えて、次の2つを導入した：
+ * - COMBO_LOSS: MISSした瞬間の「切れたCOMBOの大きさ」に応じてペナルティを上乗せする。
+ *   正答率が低いプレイヤーはCOMBOが伸びる前にすぐMISSするため実質的な影響が小さく、
+ *   正答率が高いプレイヤーほど「大きく育てたCOMBOを失う」実質ペナルティが重くなる
+ *   （＝MISSの基本値は抑えめでも、COMBOがある状態でのMISSは合計でユーザー希望の
+ *   2〜6の範囲に達する。詳細は完了報告を参照）。
+ * - DIMINISHING_RETURNS: rawScore自体（＝プレイヤーの実績）が一定水準を超えた後は、
+ *   同じ判定でも加点が少しずつ小さくなる。正答率ではなく「その時点のrawScoreの値」
+ *   だけで決まるため、「正答率を直接の天井にしない」という方針には反しない。
+ *   出題数が多い高正答率プレイヤーほど早くこの領域に入るため、「80〜90%正答なら
+ *   楽に100へ近づく」を防ぎつつ、低正答率プレイヤーの加点は目減りしない。
+ *
+ * 定数はNode.jsでのモンテカルロシミュレーション（N=55問+OVERDRIVE時+8問、
+ * 4000試行/ケース）で検証済み。検証したケースと結果は完了報告を参照。
  */
 export const SCORE_CONFIG = {
   /** ドパガキ度の表示を滑らかに増減させる時間（ms）。MISSでも急激に落ちて見えないようにする。 */
@@ -21,52 +36,66 @@ export const SCORE_CONFIG = {
 }
 
 /**
- * 正解時、判定Tierごとに加算する生スコア。COMBO倍率×MOMENTUM倍率が乗算される。
- * Ver.4.8比で大幅に引き上げ、1問ごとの結果がスコアに与える影響を強めた
- * （「振れ幅が小さすぎる」「普通にやると全員90%前後に収束する」への対応）。
+ * 正解時、判定Tierごとに加算する生スコア。COMBO倍率×MOMENTUM倍率×
+ * DIMINISHING_RETURNS倍率が乗算される。
  */
 export const TIER_GAIN: Record<'PERFECT' | 'GREAT' | 'GOOD', number> = {
-  PERFECT: 3.0,
-  GREAT: 2.4,
-  GOOD: 2.2,
+  PERFECT: 4.3,
+  GREAT: 3.5,
+  GOOD: 3.1,
 }
 
 /**
- * MISS時、理由カテゴリごとに減算する生スコア（フロアは0＝一撃で0まで落ちることはない）。
+ * MISS時、理由カテゴリごとに減算する生スコアの基本値（フロアは0＝一撃で0まで落ちない）。
  * - timeout: 単純な反応漏れ・時間切れ（比較的軽い）
  * - wrong: 明確な誤操作・誤答（中程度）
  * - impulsive: 押すな中に押した／規定回数を超えて押したなど、衝動そのものの失敗（重め）
- * MISSは同時にCOMBO・MOMENTUMの両方をリセットするため、直接減点との「二重の痛さ」になる。
+ * 実際に減算される値はこれに COMBO_LOSS（下記）が加算される。COMBO0でのMISS
+ * （平均1.5/2.1/3.1、平均2.23）はVer.4.8（平均1.63）より明確に強いが、Ver.4.9
+ * （平均1.37）よりさらに強めている。COMBOが育った状態でのMISSは、COMBO_LOSSの
+ * 上乗せによりユーザー希望の2〜6の範囲（timeout約2〜4、wrong約3〜5、impulsive約4〜6）
+ * に達する。
  */
 export const MISS_PENALTY: Record<'timeout' | 'wrong' | 'impulsive', number> = {
-  timeout: 0.8,
-  wrong: 1.3,
-  impulsive: 1.8,
+  timeout: 1.5,
+  wrong: 2.1,
+  impulsive: 3.1,
 }
 
-/** COMBOが伸びるほど正解時の加点に乗る倍率。COMBO16で頭打ち（+16%）。 */
-const COMBO_GAIN_CAP_COUNT = 16
-const COMBO_GAIN_STEP = 0.01
+/**
+ * MISSした瞬間のCOMBO数に応じて基本ペナルティへ上乗せする追加減点。
+ * 「大きく育てたCOMBOを失うMISSほど痛い」を数値としても表現する。
+ */
+const COMBO_LOSS_FACTOR = 0.22
+const COMBO_LOSS_CAP = 4.0
+
+export function comboLossPenalty(comboAtMiss: number): number {
+  return Math.min(COMBO_LOSS_CAP, Math.max(0, comboAtMiss) * COMBO_LOSS_FACTOR)
+}
+
+/** COMBOが伸びるほど正解時の加点に乗る倍率。COMBO14で頭打ち（+7%）。Ver.4.9より控えめにし、単独でのスコア暴騰を防ぐ。 */
+const COMBO_GAIN_CAP_COUNT = 14
+const COMBO_GAIN_STEP = 0.005
 
 export function comboGainMultiplier(combo: number): number {
   return 1 + Math.min(Math.max(0, combo), COMBO_GAIN_CAP_COUNT) * COMBO_GAIN_STEP
 }
 
 /**
- * Ver.4.9で新設：DOPA MOMENTUM。「終盤の連続成功」を軽く評価するための補助的な倍率。
+ * DOPA MOMENTUM。「終盤の連続成功」を軽く評価するための補助的な倍率。
  * 直近の正解Tierに応じて0〜1のメーターが少しずつ溜まり（PERFECTほど多く溜まる）、
  * MISSで即座に0へリセットされる。COMBOとは別軸の「最近の質の高さ」を表す。
- * MOMENTUM_MAX_BONUSは控えめ（最大+13%）にとどめ、序盤からCOMBOだけでスコアが
- * 爆発しないようにする。あくまで「98→PERFECT→99→PERFECT→100」のような終盤の
- * 逆転を後押しする補助であり、正答率が低いプレイヤーが終盤だけで100%に届く主因には
- * ならない（MISSでリセットされる＝連続して初めて効くため）。
+ * MOMENTUM_MAX_BONUSはVer.4.9よりさらに控えめ（最大+4%）にし、序盤からCOMBOと
+ * 合わせてスコアが爆発しないようにする。あくまで「98→PERFECT→99→PERFECT→100」の
+ * ような終盤の逆転を後押しする補助であり、正答率が低いプレイヤーが終盤だけで
+ * 100%に届く主因にはならない（MISSでリセットされる＝連続して初めて効くため）。
  */
 export const MOMENTUM_STEP: Record<'PERFECT' | 'GREAT' | 'GOOD', number> = {
-  PERFECT: 0.16,
-  GREAT: 0.08,
-  GOOD: 0.03,
+  PERFECT: 0.1,
+  GREAT: 0.05,
+  GOOD: 0.02,
 }
-export const MOMENTUM_MAX_BONUS = 0.13
+export const MOMENTUM_MAX_BONUS = 0.04
 
 export function momentumGainMultiplier(momentum: number): number {
   return 1 + Math.max(0, Math.min(1, momentum)) * MOMENTUM_MAX_BONUS
@@ -77,15 +106,32 @@ export function nextMomentum(momentum: number, tier: 'PERFECT' | 'GREAT' | 'GOOD
 }
 
 /**
+ * Ver.4.10で新設：DIMINISHING_RETURNS（逓減）。rawScoreがDIM_THRESHOLDを超えた後、
+ * 同じ判定でも加点が少しずつ小さくなる（下限DIM_FLOORで頭打ち）。あくまでプレイヤー
+ * 自身の「その時点のrawScore」だけで決まる値ベースの仕組みであり、正答率を直接の
+ * 天井にするものではない（正答率が低いプレイヤーはrawScoreが伸びにくいためこの領域に
+ * 入りにくく、加点は目減りしない）。
+ */
+const DIM_THRESHOLD = 30
+const DIM_SLOPE = 0.011
+const DIM_FLOOR = 0.3
+
+export function diminishingReturnsMultiplier(currentRawScore: number): number {
+  if (currentRawScore <= DIM_THRESHOLD) return 1
+  const reduced = 1 - (currentRawScore - DIM_THRESHOLD) * DIM_SLOPE
+  return Math.max(DIM_FLOOR, reduced)
+}
+
+/**
  * DOPA BONUS TIME（MISSの一切ない連打ボーナス）の得点設計。
- * 「1タップ=1%」のような直接変換は絶対にせず、通常の問題1〜2問ぶん相当を上限とする、
- * firmly cappedなボーナスにする。
+ * 「1タップ=1%」のような直接変換は絶対にせず、通常の問題1〜2問ぶん相当（TIER_GAIN.PERFECTの
+ * 約1.5倍）を上限とする、firmly cappedなボーナスにする。
  */
 export const BONUS_TIME_CONFIG = {
   /** これ以上のタップ数で満点ボーナス（それ未満は比例配分） */
   expectedMaxTaps: 15,
   /** 満点時に加算する生スコアの上限 */
-  maxGain: 5,
+  maxGain: 6.5,
 }
 
 export function computeBonusGain(tapCount: number): number {
