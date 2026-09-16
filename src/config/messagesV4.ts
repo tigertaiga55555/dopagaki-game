@@ -25,7 +25,18 @@ export const MILESTONE_TEXT = {
   overdrive: 'DOPA OVERDRIVE',
 }
 
-export function buildShareText(percent: number, typeName: string): string {
+/**
+ * Ver.5.0: FINAL DOPA TRIALへ突入した場合（finalTrialが存在する場合）は、
+ * 「ドパガキ度165% / FINAL DOPA TRIAL 9/16」のように進捗も一緒にシェアできるようにする。
+ * 200%（cleared200）の場合だけ、PERFECT CLEARと16/16を明示する。
+ */
+export function buildShareText(percent: number, typeName: string, finalTrial?: { trialsCleared: number; cleared200: boolean }): string {
+  if (finalTrial) {
+    if (finalTrial.cleared200) {
+      return `ドパガキ度 ${percent}％\nPERFECT CLEAR\n${typeName}\nFINAL DOPA TRIAL ${finalTrial.trialsCleared}/16\n\n100％が上限だと思ってた？`
+    }
+    return `ドパガキ度 ${percent}％\n${typeName}\nFINAL DOPA TRIAL ${finalTrial.trialsCleared}/16\n\n100％が上限だと思ってた？`
+  }
   if (percent > 100) {
     return `ドパガキ度 ${percent}％\n${typeName}\n\n100％が上限だと思ってた？`
   }

@@ -15,11 +15,11 @@ export function ResultScreen({ result, onRetry }: Props) {
   const [copied, setCopied] = useState(false)
 
   const handleNativeShare = () => {
-    void shareResult(result.percent, result.type.name)
+    void shareResult(result.percent, result.type.name, result.finalTrial)
   }
 
   const handleCopy = async () => {
-    const ok = await copyShareText(result.percent, result.type.name)
+    const ok = await copyShareText(result.percent, result.type.name, result.finalTrial)
     setCopied(ok)
     if (ok) setTimeout(() => setCopied(false), 2000)
   }
@@ -55,7 +55,7 @@ export function ResultScreen({ result, onRetry }: Props) {
         ) : (
           <div className="flex gap-2">
             <a
-              href={getXShareUrl(result.percent, result.type.name)}
+              href={getXShareUrl(result.percent, result.type.name, result.finalTrial)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl bg-white/10 py-3.5 text-center text-sm font-bold text-white"
@@ -66,7 +66,7 @@ export function ResultScreen({ result, onRetry }: Props) {
               Xでシェア
             </a>
             <a
-              href={getLineShareUrl(result.percent, result.type.name)}
+              href={getLineShareUrl(result.percent, result.type.name, result.finalTrial)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex-1 rounded-2xl bg-white/10 py-3.5 text-center text-sm font-bold text-white"

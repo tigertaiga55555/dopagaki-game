@@ -1,26 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  Confetti120Overlay,
-  getOverdriveFrameClass,
-  getOverdriveTier,
-  Golden120Overlay,
-  LimitErrorOverlay,
-  OverdriveAmbience,
-  OverdriveRevealOverlay,
-  RainbowShockwaveOverlay,
-  Sparkle120Overlay,
-  WhiteFlashOverlay,
-} from '../components/OverdriveFx'
+import { getOverdriveFrameClass, getOverdriveTier, LimitErrorOverlay, OverdriveAmbience, OverdriveRevealOverlay } from '../components/OverdriveFx'
 import { getVisualLevelDef } from '../config/visualConfig'
 import { MILESTONE_TEXT } from '../config/messagesV4'
-import { OVERDRIVE_CONFIG } from '../config/overdriveConfig'
-import { getOverdriveTitle } from '../config/resultTypesV4'
-import { useRushGame, type RushFinishPayload } from '../engine/useRushGame'
+import { computeFinalResult } from '../engine/resultEngineV4'
+import { useRushGame } from '../engine/useRushGame'
 import { QUESTION_MODULES } from '../questions'
+import { FinalTrialScreen } from './FinalTrialScreen'
 import { isMuted, setMuted } from '../utils/sound'
+import type { FinalResultV4, PlayStats } from '../types'
 
 interface Props {
-  onFinish: (payload: RushFinishPayload) => void
+  onFinish: (result: FinalResultV4) => void
 }
 
 const JUDGEMENT_COLOR: Record<string, string> = {
@@ -33,7 +23,11 @@ const JUDGEMENT_COLOR: Record<string, string> = {
 const PARTICLE_POSITIONS = Array.from({ length: 8 }).map((_, i) => ({ x: (i * 12.5) % 100, delay: i * 0.2 }))
 
 export function PlayScreen({ onFinish }: Props) {
-  const { snapshot, handleQuestionResult } = useRushGame(onFinish)
+  const [finalEntryStats, setFinalEntryStats] = useState<PlayStats | null>(null)
+  const { snapshot, handleQuestionResult } = useRushGame(
+    (payload) => onFinish(computeFinalResult(payload)),
+    (stats) => setFinalEntryStats(stats),
+  )
   const [muted, setMutedState] = useState(isMuted())
   const shakeWrapperRef = useRef<HTMLDivElement>(null)
 
@@ -68,6 +62,14 @@ export function PlayScreen({ onFinish }: Props) {
     setMutedState(next)
   }
 
+  // Ver.5.0: 120%到達＝FINAL DOPA TRIAL突入。useRushGame自体は既に内部で完全停止しているため、
+  // 以後は通常ゲームのJSXを描画せず、FinalTrialScreenへ完全に引き継ぐ
+  // （PlayScreenを再マウントさせない＝Question subtreeのkey不変則には抵触しない。
+  // 通常ゲームは既にcurrentSpecがnullで問題を表示していないため、切り替えの影響を受けない）。
+  if (finalEntryStats) {
+    return <FinalTrialScreen initialStats={finalEntryStats} onFinish={onFinish} />
+  }
+
   const overdriveTier = getOverdriveTier(snapshot.displayPercent)
 
   const frameClass = `${
@@ -83,9 +85,7 @@ export function PlayScreen({ onFinish }: Props) {
   } ${getOverdriveFrameClass(overdriveTier)}`.trim()
 
   return (
-    <div
-      className={`relative flex min-h-dvh flex-col overflow-hidden ${frameClass} ${snapshot.showMaxBurst ? 'anim-climax-shake' : ''}`}
-    >
+    <div className={`relative flex min-h-dvh flex-col overflow-hidden ${frameClass}`}>
       {visual.particles && (
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           {PARTICLE_POSITIONS.map((p, i) => (
@@ -236,11 +236,6 @@ export function PlayScreen({ onFinish }: Props) {
 
       <LimitErrorOverlay show={snapshot.showLimitErrorGlitch} />
       <OverdriveRevealOverlay show={snapshot.showOverdriveBurst} showTimeBonus />
-      <WhiteFlashOverlay show={snapshot.showMaxFlash} />
-      <Golden120Overlay show={snapshot.showMaxBurst} title={getOverdriveTitle(OVERDRIVE_CONFIG.maxPercent).name} />
-      <RainbowShockwaveOverlay show={snapshot.showMaxBurst} />
-      <Confetti120Overlay show={snapshot.showMaxBurst} />
-      <Sparkle120Overlay show={snapshot.showMaxBurst} />
     </div>
   )
 }

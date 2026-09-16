@@ -165,4 +165,20 @@ export const TIMING_SAFETY = {
   rps: {
     minTimeMs: 1900,
   },
+  /**
+   * Ver.5.0: FINAL DOPA TRIAL専用問題の時間ルール。フェーズのspeedMultiplierは存在しないため
+   * ここに書いた値がそのままtargetTimeMsになる。「速さで殺さず、認知の複雑さで殺す」方針に
+   * 従い、通常問題と極端には変えず、条件数・記憶・複合操作の分だけ現実的に長くする。
+   */
+  final: {
+    /** Q1〜Q4（反転・一段難化）：通常の数字/視覚問題とほぼ同程度 */
+    reversalMs: 2100,
+    /** Q5〜Q8（2条件処理）：判断が1段階増える分だけ長め */
+    twoConditionMs: 2600,
+    /** Q9〜Q12（記憶＋判断）：刺激を覚える時間（timeoutには含めない）と、消えた後の回答時間を分離する */
+    memoryRevealMs: 2200,
+    memoryAnswerMs: 2600,
+    /** Q13〜Q15（高難度ミックス）：複合判断のぶん最も長め */
+    mixedMs: 3200,
+  },
 }

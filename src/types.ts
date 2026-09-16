@@ -187,4 +187,52 @@ export interface FinalResultV4 {
   isNewBest: boolean
   bestPercent: number
   playCount: number
+  /** Ver.5.0: 120%へ到達しFINAL DOPA TRIALへ突入した場合のみ存在する進捗情報。 */
+  finalTrial?: FinalTrialResultInfo
+}
+
+/**
+ * Ver.5.0: FINAL DOPA TRIAL（120%到達後の16問連続正解チャレンジ）関連の型。
+ * 通常の0〜100%お題（QuestionModule）とは別の、専用の問題モジュール体系を持つ。
+ */
+export type FinalQuestionTag = 'memory' | 'number' | 'color' | 'sequence' | 'swipe' | 'reverse' | 'inhibition' | 'math' | 'rps' | 'visual'
+
+/** FINAL問題プールの階層。Q1-4=reversal、Q5-8=twoCondition、Q9-12=memory、Q13-15=mixed、Q16=boss（専用固定） */
+export type FinalPoolTier = 'reversal' | 'twoCondition' | 'memory' | 'mixed'
+
+export interface FinalQuestionResult {
+  correct: boolean
+  reactionMs: number
+}
+
+export interface FinalQuestionSpec {
+  instanceId: string
+  type: string
+  tags: FinalQuestionTag[]
+  /** 0ならtimeoutなし（FINAL QUESTIONの回答フェーズなど）。 */
+  targetTimeMs: number
+  data: Record<string, unknown>
+}
+
+export interface FinalQuestionComponentProps {
+  spec: FinalQuestionSpec
+  onResult: (result: FinalQuestionResult) => void
+}
+
+export interface FinalQuestionModule {
+  id: string
+  tags: FinalQuestionTag[]
+  tier: FinalPoolTier
+  generate: () => Record<string, unknown>
+  /** 通常のQuestionModuleと異なりフェーズのspeedMultiplierは存在しないため、最終的なms値を直接返す。 */
+  computeTargetTimeMs: (data: Record<string, unknown>) => number
+  Component: ComponentType<FinalQuestionComponentProps>
+}
+
+/** 結果画面用に持ち越すFINAL DOPA TRIALの進捗情報。 */
+export interface FinalTrialResultInfo {
+  /** 成功したFINAL問題数（0〜16）。16ならFINAL QUESTIONまで含め全問正解＝200%。 */
+  trialsCleared: number
+  /** FINAL QUESTION（16問目）に正解して200%へ到達したか */
+  cleared200: boolean
 }

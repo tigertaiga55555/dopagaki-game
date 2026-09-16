@@ -7,8 +7,6 @@ import { ResultScreen } from './screens/ResultScreen'
 import { TitleScreen } from './screens/TitleScreen'
 import { unlockAudio } from './utils/audioContext'
 import { sfx } from './utils/sound'
-import { computeFinalResult } from './engine/resultEngineV4'
-import type { RushFinishPayload } from './engine/useRushGame'
 import type { FinalResultV4, ScreenName } from './types'
 
 export default function App() {
@@ -32,8 +30,8 @@ export default function App() {
     setScreen('playing')
   }, [])
 
-  const handleFinish = useCallback((payload: RushFinishPayload) => {
-    setResult(computeFinalResult(payload))
+  const handleFinish = useCallback((result: FinalResultV4) => {
+    setResult(result)
     setScreen('result')
   }, [])
 

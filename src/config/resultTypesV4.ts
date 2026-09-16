@@ -57,13 +57,18 @@ export const TYPE_THRESHOLDS = {
  * 100%超え（OVERDRIVE）の称号。percentの範囲で決まる。
  * Ver.4.9: 120%はゲーム開始から完全ノーミスでしか到達できない別格の条件になったため、
  * 通常のOVERDRIVE称号（101〜119）とはっきり区別できる名前にした。
+ *
+ * Ver.5.0: 120%はもはや「完全攻略」ではなく、FINAL DOPA TRIALへの入口になった。
+ * 「PERFECT CLEAR」「DOPA PERFECT」「完全攻略」の表現は200%（FINAL QUESTION正解）だけの
+ * 専用表現とし、120〜199（FINAL DOPA TRIAL挑戦中・途中失敗を含む）には別の称号を割り当てる。
  */
 export const OVERDRIVE_TITLES: { max: number; type: DopagakiTypeDef }[] = [
   { max: 105, type: { id: 'overdrive1', name: '限界突破ドパガキ' } },
   { max: 110, type: { id: 'overdrive2', name: '刺激過剰摂取型ドパガキ' } },
   { max: 115, type: { id: 'overdrive3', name: 'ドーパミン暴走型' } },
   { max: 119, type: { id: 'overdrive4', name: '人類卒業型ドパガキ' } },
-  { max: 120, type: { id: 'overdrive5', name: 'DOPA PERFECT' } },
+  { max: 199, type: { id: 'finalTrial', name: 'FINAL DOPA TRIAL挑戦者' } },
+  { max: 200, type: { id: 'dopaPerfect', name: 'DOPA PERFECT' } },
 ]
 
 export function getOverdriveTitle(percent: number): DopagakiTypeDef {

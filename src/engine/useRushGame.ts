@@ -39,14 +39,6 @@ const JUDGEMENT_OVERLAY_MS = 380
 const HUNDRED_SILENCE_MS = 300
 /** Ver.4.7: 100%→101%突破時の「上限を破壊した」演出（数字の震え＋グリッチ＋LIMIT ERROR）の長さ */
 const LIMIT_ERROR_MS = 550
-/** Ver.4.7: 120%（上限）到達時、一瞬音を引く長さ */
-const MAX_SILENCE_MS = 250
-/**
- * Ver.4.11: 120%到達＝完全攻略CLEARの表示保持時間。119%までのOVERDRIVE演出の延長ではなく
- * 「ゲーム完全クリアのお祭り」として達成感を優先するため、クライマックス全体（静寂→白閃光→
- * 保持）が約3〜4秒になるよう大幅に延長した（通常のOVERDRIVE演出よりさらに長め）。
- */
-const MAX_BURST_HOLD_MS = 3000
 /** 大きいCOMBOを切った瞬間の「怯み」演出（画面暗転・BGMダック）の長さ */
 const COMBO_BREAK_FLINCH_MS = 200
 /** COMBO BREAK演出の文言を強めに出す最低COMBO数 */
@@ -177,10 +169,6 @@ export interface RushSnapshot {
   showOverdriveBurst: boolean
   /** Ver.4.7: 100%→101%突破の瞬間、数字の震え＋グリッチ＋LIMIT ERRORを表示する */
   showLimitErrorGlitch: boolean
-  /** Ver.4.7: 120%（上限）到達時の最大クライマックス演出 */
-  showMaxBurst: boolean
-  /** Ver.4.9: 120%到達CLEAR演出の冒頭、黄金爆発の直前に一瞬焚く白閃光 */
-  showMaxFlash: boolean
   overdriveActive: boolean
   /** 連続正解の節目（10/20など）で短時間だけ表示するバナー文言 */
   comboMilestoneLabel: string | null
@@ -230,7 +218,14 @@ function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3)
 }
 
-export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
+/**
+ * Ver.5.0: onEnterFinalは、rawScoreがゲーム開始から完全ノーミスで120%へ到達した瞬間に
+ * 一度だけ呼ばれる（そこまでのPlayStatsを引き継ぐ）。この時点でエンジン自体は完全に停止し
+ * （endedRef=true、以後のtick/出題は一切行わない）、以後はFINAL DOPA TRIAL側
+ * （useFinalTrial）が別エンジンとしてゲームを引き継ぐ。onFinishは非FINALな終了
+ * （時間切れ、MISS経験ありでの101〜119%終了など）でのみ呼ばれる。
+ */
+export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEnterFinal: (stats: PlayStats) => void) {
   const [snapshot, setSnapshot] = useState<RushSnapshot>({
     phaseId: 'warmup',
     remainingSec: TOTAL_GAME_SEC,
@@ -248,8 +243,6 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     showHundredBurst: false,
     showOverdriveBurst: false,
     showLimitErrorGlitch: false,
-    showMaxBurst: false,
-    showMaxFlash: false,
     overdriveActive: false,
     comboMilestoneLabel: null,
     comboMilestoneKey: 0,
@@ -276,7 +269,8 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
   const tapTimestampsRef = useRef<number[]>([])
   const gapActiveRef = useRef(true)
   const overdriveActiveRef = useRef(false)
-  const maxReachedRef = useRef(false)
+  /** Ver.5.0: rawScoreが120（OVERDRIVE_CONFIG.maxPercent）へゲーム開始から完全ノーミスで到達した瞬間だけtrueになる。FINAL DOPA TRIAL突入は1ゲーム1回のみ。 */
+  const finalEntryTriggeredRef = useRef(false)
   const judgementKeyRef = useRef(0)
   const alarmedSecondsRef = useRef(new Set<number>())
   const nextQuestionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -343,11 +337,22 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
     const target = Math.max(0, Math.min(cap, rawScore))
 
     const crossingHundred = enteringOverdriveNow
-    // 120%（既存の隠し上限=OVERDRIVE_CONFIG.maxPercent）に初めて到達した瞬間だけの
-    // 完全攻略CLEAR演出。一度でもMISSしていると cap が119止まりになるため、
-    // ここに到達できるのはゲーム開始から完全ノーミスのプレイだけ。
-    const crossingMax = !maxReachedRef.current && target >= OVERDRIVE_CONFIG.maxPercent
-    if (crossingMax) maxReachedRef.current = true
+    // Ver.5.0: 120%（=OVERDRIVE_CONFIG.maxPercent）に初めて到達した瞬間、もはや
+    // 「完全攻略CLEAR」ではなくFINAL DOPA TRIALへの入口になった。一度でもMISSしていると
+    // capが119止まりになるため、ここに到達できるのはゲーム開始から完全ノーミスのプレイだけ
+    // （2. 120%到達条件も維持）。
+    const crossingFinalEntry = !finalEntryTriggeredRef.current && target >= OVERDRIVE_CONFIG.maxPercent
+    if (crossingFinalEntry) {
+      finalEntryTriggeredRef.current = true
+      // 「120%へ到達した瞬間、ゲーム一時停止」：エンジン自体をここで即座に停止する
+      // （以後のtick・出題を一切行わない）。演出・FINAL DOPA TRIALへの引き継ぎは
+      // 呼び出し元（PlayScreen）がonEnterFinalを受けて行う。
+      endedRef.current = true
+      // tickループがこのタイミングで完全に止まるため、通常のイージングtween（420ms）を
+      // 最後まで再生する機会がない。表示が119%台のまま固まらないよう、120%へ即座にスナップする。
+      displayPercentRef.current = target
+      setSnapshot((s) => ({ ...s, displayPercent: target }))
+    }
 
     percentTweenRef.current = { from: displayPercentRef.current, to: target, startedAt: performance.now() }
 
@@ -362,31 +367,9 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         setSnapshot((s) => ({ ...s, showLimitErrorGlitch: false, showOverdriveBurst: true, overdriveActive: true }))
         setTimeout(() => {
           setSnapshot((s) => ({ ...s, showOverdriveBurst: false }))
-          if (crossingMax) runMaxClimax()
+          if (crossingFinalEntry) onEnterFinal(statsRef.current)
         }, MILESTONE_FREEZE_MS)
       }, LIMIT_ERROR_MS)
-    }
-
-    // Ver.4.9: 120%到達＝「ゲームを完全攻略した」ことが一発で分かる専用CLEAR演出。
-    // 通常の時間切れ結果と混同されないよう、一瞬の白閃光→黄金爆発→巨大な「120% PERFECT CLEAR!!」を
-    // 経てからfinishGame()を呼び、残り時間があっても即座にゲームを終える。
-    // Ver.4.11: showMaxBurstの間だけ、Golden120Overlayに加えて虹ショックウェーブ・紙吹雪・
-    // sparkle（RainbowShockwaveOverlay/Confetti120Overlay/Sparkle120Overlay）も同時に表示する
-    // （PlayScreen/Preview側でsnapshot.showMaxBurstをそのまま流用して合成する）。
-    function runMaxClimax() {
-      duckAudio(MAX_SILENCE_MS, 1)
-      setTimeout(() => {
-        setSnapshot((s) => ({ ...s, showMaxFlash: true }))
-        setTimeout(() => {
-          sfx.overdriveMax()
-          sfx.victoryFanfare()
-          setSnapshot((s) => ({ ...s, showMaxFlash: false, showMaxBurst: true }))
-          setTimeout(() => {
-            setSnapshot((s) => ({ ...s, showMaxBurst: false }))
-            finishGame()
-          }, MAX_BURST_HOLD_MS)
-        }, 180)
-      }, MAX_SILENCE_MS)
     }
 
     if (crossingHundred) {
@@ -402,10 +385,10 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
           runOverdriveBreach()
         }, MILESTONE_FREEZE_MS)
       }, HUNDRED_SILENCE_MS)
-    } else if (crossingMax) {
-      runMaxClimax()
+    } else if (crossingFinalEntry) {
+      onEnterFinal(statsRef.current)
     }
-    return { crossingHundred, crossingMax }
+    return { crossingHundred, crossingFinalEntry }
   }
 
   function buildNextQuestionSpec(): QuestionSpec | null {
@@ -574,11 +557,11 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
       }
     }
 
-    const { crossingHundred, crossingMax } = setPercentTarget()
+    const { crossingHundred, crossingFinalEntry } = setPercentTarget()
     judgementKeyRef.current += 1
     const judgementKey = judgementKeyRef.current
 
-    if (crossingHundred || crossingMax) {
+    if (crossingHundred || crossingFinalEntry) {
       // 節目の演出のときだけ、意図的に少し間を置いてから次の問題を出す
       // （どの節目を跨いだかに応じて、それぞれの演出時間ぶんだけ加算する）
       gapActiveRef.current = true
@@ -592,9 +575,10 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         comboBrokenFrom,
         comboBreakBig,
       }))
-      if (crossingMax) {
-        // Ver.4.9: 120%到達＝ゲーム完全攻略のCLEAR演出。runMaxClimax()自身がこの後finishGame()を
-        // 呼んでゲームを終えるため、ここでは次の問題を一切出さない（一瞬ゲーム停止を維持する）。
+      if (crossingFinalEntry) {
+        // Ver.5.0: 120%到達＝FINAL DOPA TRIAL突入。onEnterFinal()がこの後の演出・
+        // エンジン引き継ぎをすべて担うため、ここでは次の問題を一切出さない
+        // （setPercentTarget()内で既にendedRef=trueに設定済み）。
         return
       }
       let freezeMs = 0

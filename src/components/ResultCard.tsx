@@ -1,5 +1,5 @@
 import type { FinalResultV4 } from '../types'
-import { OVERDRIVE_CONFIG } from '../config/overdriveConfig'
+import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
 
 interface Props {
   result: FinalResultV4
@@ -27,7 +27,13 @@ const MAX_CARD_SPARKLES = [
 
 export function ResultCard({ result }: Props) {
   const isOverdrive = result.percent > 100
-  const isMax = result.percent >= OVERDRIVE_CONFIG.maxPercent
+  // Ver.5.0: 「PERFECT CLEAR」「完全攻略」は200%（FINAL QUESTION正解）だけの専用表現。
+  // 120%はもはやFINAL DOPA TRIALへの入口に過ぎないため、isMaxの基準をOVERDRIVE_CONFIG.maxPercent
+  // （=120、useRushGame.ts側のOVERDRIVE上限capには今も使われる別概念の定数）から
+  // FINAL_TRIAL_CONFIG.clearPercent（=200、真の完全攻略）へ切り替える。
+  const isMax = result.percent >= FINAL_TRIAL_CONFIG.clearPercent
+  // FINAL DOPA TRIALへ突入した（=result.finalTrialが存在する）が、200%まで到達できなかった場合。
+  const isFinalTrial = !!result.finalTrial && !isMax
   const percentColor = isOverdrive ? 'text-amber-300' : result.percent >= 100 ? 'text-amber-200' : 'text-white'
 
   const card = (
@@ -70,6 +76,8 @@ export function ResultCard({ result }: Props) {
         <p className="relative text-center text-sm font-black tracking-widest text-white drop-shadow-[0_0_10px_rgba(250,204,21,0.9)]">
           🏆 PERFECT CLEAR!! 🏆
         </p>
+      ) : isFinalTrial ? (
+        <p className="relative text-center text-xs font-black tracking-widest text-amber-300">⚡ FINAL DOPA TRIAL ⚡</p>
       ) : isOverdrive ? (
         <p className="relative text-center text-xs font-black tracking-widest text-amber-300">⚡ DOPA OVERDRIVE ⚡</p>
       ) : (
@@ -89,6 +97,12 @@ export function ResultCard({ result }: Props) {
       <p className={`relative mt-3 text-center text-lg font-black ${isOverdrive ? 'text-amber-200' : 'text-fuchsia-300'}`}>
         {result.type.name}
       </p>
+
+      {result.finalTrial && (
+        <p className="relative mt-1 text-center text-sm font-black tracking-widest text-white/70">
+          FINAL DOPA TRIAL {result.finalTrial.trialsCleared} / 16
+        </p>
+      )}
 
       <div className="mt-4 flex justify-center gap-4 text-center">
         <div>
@@ -120,7 +134,9 @@ export function ResultCard({ result }: Props) {
 
       <p className="mt-4 text-center text-sm font-bold text-white/70">「{result.comment}」</p>
 
-      <p className="mt-5 text-center text-[11px] font-bold text-white/40">{isMax ? '完全ノーミスでの完全攻略。' : '100％いける？'}</p>
+      <p className="mt-5 text-center text-[11px] font-bold text-white/40">
+        {isMax ? '完全ノーミスでの完全攻略。' : isFinalTrial ? 'FINAL DOPA TRIALで力尽きた。' : '100％いける？'}
+      </p>
     </div>
   )
 

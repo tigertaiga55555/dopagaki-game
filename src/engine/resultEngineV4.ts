@@ -2,6 +2,7 @@ import { getNearMissComment } from '../config/messagesV4'
 import { NORMAL_TYPES, TYPE_THRESHOLDS, getOverdriveTitle } from '../config/resultTypesV4'
 import { getBestPercent, getPlayCount, incrementPlayCount, updateBestPercent } from '../utils/storage'
 import type { RushFinishPayload } from './useRushGame'
+import type { FinalTrialFinishPayload } from './useFinalTrial'
 import type { DopagakiTypeDef, FinalResultV4, PlayStats, QuestionTypeId } from '../types'
 
 const SPEED_TYPES = new Set<QuestionTypeId>([
@@ -159,13 +160,19 @@ function buildCrimeRecords(stats: PlayStats): string[] {
 function buildComment(percent: number): string {
   const nearMiss = getNearMissComment(percent)
   if (nearMiss) return nearMiss
-  if (percent >= 120) return '一度もミスなく、完全にゲームを攻略した。'
   if (percent > 100) return '見てはいけないものを見た気がする。'
   if (percent >= 100) return '本当に100％とった……？'
   if (percent >= 90) return 'かなり刺激に強い。'
   if (percent >= 75) return 'なかなかのドパガキ度。'
   if (percent >= 50) return 'まずまずの滑り出し。'
   return 'まだ本気を出していないはず。'
+}
+
+/** Ver.5.0: FINAL DOPA TRIAL専用のコメント。120は「途中失敗」ではなく「これから挑む」トリガー値のため、trialsCleared=0（Q1で即MISS）でも「挑んだ」ことを称える文にする。 */
+function buildFinalTrialComment(trialsCleared: number, cleared200: boolean): string {
+  if (cleared200) return '一度もミスなく、完全にゲームを攻略した。'
+  if (trialsCleared === 0) return 'FINAL DOPA TRIALの扉を開けた、その先で力尽きた。'
+  return `FINAL DOPA TRIAL ${trialsCleared} / 16 まで到達し、そこで力尽きた。`
 }
 
 export function computeFinalResult(payload: RushFinishPayload): FinalResultV4 {
@@ -193,5 +200,40 @@ export function computeFinalResult(payload: RushFinishPayload): FinalResultV4 {
     isNewBest,
     bestPercent: isNewBest ? finalPercent : bestBefore,
     playCount: getPlayCount(),
+  }
+}
+
+/**
+ * Ver.5.0: FINAL DOPA TRIAL（120%到達後）の結果を計算する。通常のcomputeFinalResult()とは
+ * スコア域が完全に別（120〜200、rawScore式は使わない）なため専用関数として分離する。
+ * statsは120%到達までにcomputeFinalResult側と同じPlayStatsを引き継いで使う
+ * （犯行記録・最大COMBO・最速反応・正答率は通常プレイぶんの実績をそのまま表示する）。
+ */
+export function computeFinalTrialResult(payload: FinalTrialFinishPayload, stats: PlayStats): FinalResultV4 {
+  const { finalPercent, trialsCleared, cleared200 } = payload
+  const type = getOverdriveTitle(finalPercent)
+  const crimeRecords = buildCrimeRecords(stats)
+  const comment = buildFinalTrialComment(trialsCleared, cleared200)
+
+  const isFirstPlay = getPlayCount() === 0
+  const bestBefore = getBestPercent()
+  const isNewBest = updateBestPercent(finalPercent)
+  incrementPlayCount()
+
+  return {
+    percent: finalPercent,
+    rawPercent: finalPercent,
+    overdriveActive: true,
+    type,
+    comment,
+    crimeRecords,
+    maxCombo: stats.maxCombo,
+    fastestReactionMs: stats.fastestReactionMs,
+    accuracy: stats.totalAnswered > 0 ? stats.correctCount / stats.totalAnswered : 0,
+    isFirstPlay,
+    isNewBest,
+    bestPercent: isNewBest ? finalPercent : bestBefore,
+    playCount: getPlayCount(),
+    finalTrial: { trialsCleared, cleared200 },
   }
 }
