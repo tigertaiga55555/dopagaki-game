@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { FINAL_TRIAL_CONFIG, tierForQuestionNumber } from '../config/finalTrialConfig'
 import { pickFinalQuestion } from './finalQuestionPicker'
+import { FinalQuestionBoxModule } from '../questions/final/FinalQuestionBox'
 import type { FinalQuestionResult, FinalQuestionSpec, FinalQuestionTag } from '../types'
 
 /**
@@ -75,10 +76,26 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
 
   /**
    * Q16（FINAL QUESTION＝箱シャッフル）は通常のtier抽選プールに属さない専用固定問題
-   * （dedicated FinalQuestionBox component経由で処理される）。Q1〜Q15はtierForQuestionNumber()の
-   * 階層プールからanti-clusteringで抽選する。
+   * （ランダムプールからは絶対に抽選されず、dedicated FinalQuestionBoxModule経由で毎回必ず
+   * 出題される）。Q1〜Q15はtierForQuestionNumber()の階層プールからanti-clusteringで抽選する。
    */
   function buildQuestion(questionNumber: number): FinalQuestionSpec {
+    if (questionNumber === FINAL_TRIAL_CONFIG.totalQuestions) {
+      const data = FinalQuestionBoxModule.generate()
+      const targetTimeMs = FinalQuestionBoxModule.computeTargetTimeMs(data)
+      const spec: FinalQuestionSpec = {
+        instanceId: `final-boss-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        type: FinalQuestionBoxModule.id,
+        tags: FinalQuestionBoxModule.tags,
+        targetTimeMs,
+        data,
+      }
+      recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, 3)
+      recentTagsRef.current = spec.tags
+      currentSpecRef.current = spec
+      return spec
+    }
+
     const tier = tierForQuestionNumber(questionNumber) ?? 'mixed'
     const spec = pickFinalQuestion(tier, recentTypesRef.current, recentTagsRef.current)
     recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, 3)

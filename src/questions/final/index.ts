@@ -3,6 +3,7 @@ import { FinalExcludeColorModule } from './FinalExcludeColorQuestion'
 import { FinalExcludeColorSortedModule } from './FinalExcludeColorSortedQuestion'
 import { FinalMathThresholdModule } from './FinalMathThresholdQuestion'
 import { FinalMemoryPickModule } from './FinalMemoryPickQuestion'
+import { FinalQuestionBoxModule } from './FinalQuestionBox'
 import { FinalReverseSequenceModule } from './FinalReverseSequenceQuestion'
 import { FinalSecondLargestModule } from './FinalSecondLargestQuestion'
 import { FinalSmallestEvenModule } from './FinalSmallestEvenQuestion'
@@ -22,6 +23,11 @@ export const FINAL_QUESTION_POOLS: Record<FinalPoolTier, FinalQuestionModule[]> 
   mixed: [FinalMathThresholdModule, FinalExcludeColorSortedModule],
 }
 
+/**
+ * Q16（FinalQuestionBoxModule）はFINAL_QUESTION_POOLSには絶対に含めない
+ * （ランダム抽選プールに混ざるとQ1〜15でも出題されうる事故になるため）。
+ * FinalTrialScreenのComponentルックアップのためだけにFINAL_QUESTION_MODULESへ登録する。
+ */
 export const FINAL_QUESTION_MODULES: Record<string, FinalQuestionModule> = {
   [FinalSecondLargestModule.id]: FinalSecondLargestModule,
   [FinalExcludeColorModule.id]: FinalExcludeColorModule,
@@ -31,4 +37,5 @@ export const FINAL_QUESTION_MODULES: Record<string, FinalQuestionModule> = {
   [FinalReverseSequenceModule.id]: FinalReverseSequenceModule,
   [FinalMathThresholdModule.id]: FinalMathThresholdModule,
   [FinalExcludeColorSortedModule.id]: FinalExcludeColorSortedModule,
+  [FinalQuestionBoxModule.id]: FinalQuestionBoxModule,
 }
