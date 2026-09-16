@@ -9,6 +9,7 @@ import {
   comboLossPenalty,
   computeBonusGain,
   diminishingReturnsMultiplier,
+  getDiminishingReturnsFloor,
   judgeByRatio,
   momentumGainMultiplier,
   nextMomentum,
@@ -551,11 +552,15 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void) {
         // 「98→99→100」のような逆転を後押しできるようにする）。
         // Ver.4.10: DIMINISHING_RETURNSも同様に「加点前のrawScore」を基準に適用する
         // （正答率ではなくプレイヤー自身のその時点のrawScoreだけで決まる値ベースの逓減）。
+        // Ver.4.11: OVERDRIVE突入後（overdriveActiveRef.current）だけfloorを緩和する。
+        // 0〜99%の間はgetDiminishingReturnsFloor()がundefinedを返し、従来通りの
+        // DIM_FLOOR_NORMALにフォールバックするため、100%到達までの難易度は無変更。
+        const dimFloor = getDiminishingReturnsFloor(overdriveActiveRef.current, hasEverMissedRef.current)
         const gain =
           TIER_GAIN[qualityTier] *
           comboGainMultiplier(comboRef.current) *
           momentumGainMultiplier(momentumRef.current) *
-          diminishingReturnsMultiplier(rawScoreRef.current)
+          diminishingReturnsMultiplier(rawScoreRef.current, dimFloor)
         rawScoreRef.current += gain
         momentumRef.current = nextMomentum(momentumRef.current, qualityTier)
       }

@@ -107,19 +107,49 @@ export function nextMomentum(momentum: number, tier: 'PERFECT' | 'GREAT' | 'GOOD
 
 /**
  * Ver.4.10で新設：DIMINISHING_RETURNS（逓減）。rawScoreがDIM_THRESHOLDを超えた後、
- * 同じ判定でも加点が少しずつ小さくなる（下限DIM_FLOORで頭打ち）。あくまでプレイヤー
+ * 同じ判定でも加点が少しずつ小さくなる（下限floorで頭打ち）。あくまでプレイヤー
  * 自身の「その時点のrawScore」だけで決まる値ベースの仕組みであり、正答率を直接の
  * 天井にするものではない（正答率が低いプレイヤーはrawScoreが伸びにくいためこの領域に
  * 入りにくく、加点は目減りしない）。
+ *
+ * Ver.4.11（OVERDRIVE高得点帯バランス調整）：0〜99%の間はDIM_FLOOR_NORMAL（従来の0.3）を
+ * 維持し、「100%到達までの難易度」には一切手を加えない。しかしOVERDRIVE突入後
+ * （rawScore>=100）まで同じ強いブレーキをかけ続けると、「限界突破したのにスコアが
+ * ほとんど伸びない」状態になる（実ユーザーテストで正答率100%・最大COMBO49・
+ * 最速反応0.43秒という非常に高品質なノーミスプレイでも108%止まりだった主因）。
+ * 「100%＝LIMIT BREAK」という世界観に合わせ、OVERDRIVE中はfloorを明確に緩和する。
+ * さらにゲーム開始から一度もMISSしていない場合（120%候補）は、MISS経験ありより
+ * さらに緩和する（ただし正答率100%＝自動120%にはしない。追加10秒中のPERFECT/GREAT比率・
+ * COMBO・反応速度次第で115〜120に分かれる程度に留める）。定数はNode.jsでの
+ * モンテカルロシミュレーション（rawScore=100到達後、追加10秒ぶんの問題を4000試行/ケースで
+ * 検証）で決定した。詳細は完了報告を参照。
  */
 const DIM_THRESHOLD = 30
 const DIM_SLOPE = 0.011
-const DIM_FLOOR = 0.3
+const DIM_FLOOR_NORMAL = 0.3
+/** OVERDRIVE中（rawScore>=100）かつ一度でもMISSしている場合のfloor */
+const DIM_FLOOR_OVERDRIVE_MISS = 0.55
+/** OVERDRIVE中（rawScore>=100）かつゲーム開始から完全ノーミスの場合のfloor（120%候補への評価） */
+const DIM_FLOOR_OVERDRIVE_NO_MISS = 0.63
 
-export function diminishingReturnsMultiplier(currentRawScore: number): number {
+/**
+ * floorは呼び出し元（useRushGame.ts）がOVERDRIVE突入状態・MISS経験の有無に応じて
+ * 明示的に渡す。省略時（0〜99%の通常プレイ）は従来通りDIM_FLOOR_NORMALを使う。
+ */
+export function diminishingReturnsMultiplier(currentRawScore: number, floor: number = DIM_FLOOR_NORMAL): number {
   if (currentRawScore <= DIM_THRESHOLD) return 1
   const reduced = 1 - (currentRawScore - DIM_THRESHOLD) * DIM_SLOPE
-  return Math.max(DIM_FLOOR, reduced)
+  return Math.max(floor, reduced)
+}
+
+/**
+ * OVERDRIVE中のDIMINISHING_RETURNS floorを、突入状態とMISS経験の有無から決定する。
+ * OVERDRIVEへ突入していない（rawScore<100）場合はundefinedを返し、呼び出し元は
+ * diminishingReturnsMultiplier()のデフォルト（DIM_FLOOR_NORMAL）にフォールバックする。
+ */
+export function getDiminishingReturnsFloor(overdriveActive: boolean, hasEverMissed: boolean): number | undefined {
+  if (!overdriveActive) return undefined
+  return hasEverMissed ? DIM_FLOOR_OVERDRIVE_MISS : DIM_FLOOR_OVERDRIVE_NO_MISS
 }
 
 /**
