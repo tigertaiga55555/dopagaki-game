@@ -217,6 +217,15 @@ export interface FinalQuestionSpec {
 export interface FinalQuestionComponentProps {
   spec: FinalQuestionSpec
   onResult: (result: FinalQuestionResult) => void
+  /**
+   * Ver.5.0追加: Preview専用（?preview=clear200）。設定されている場合、回答受付が始まった後に
+   * この遅延で自動的に「正解」を選択する。本番の通常プレイからは絶対に渡されない。
+   * 既存38種のFINAL問題は全てこのpropを無視する（型はオプショナルなので影響なし）。
+   * 唯一FinalQuestionBoxModule（Q16）だけが、回答フェーズ開始後にこの遅延で正解の宝箱を
+   * 自動選択する（本物の選択→開封演出を経由させるため、handleResultを直接呼ぶのではなく
+   * 実際のUI操作と同じ内部関数を呼ぶ）。
+   */
+  autoSolveDelayMs?: number
 }
 
 export interface FinalQuestionModule {

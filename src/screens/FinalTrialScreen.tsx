@@ -219,15 +219,21 @@ export function FinalTrialScreen({
     handleResult({ correct: true, reactionMs: 0 })
   }
 
+  // Ver.5.0追加: Q16（FinalQuestionBoxModule）は、直接handleResult()を呼んで演出をすべて
+  // 飛ばすのではなく、実際の「選択→開封」演出を経由させたい（?preview=clear200が
+  // 宝箱開封→黄金噴出→200%クライマックスを見せられるようにするため）。そのため、
+  // 現在の問題がQ16のときはこの汎用ショートカットを使わず、CurrentQuestionへ
+  // autoSolveDelayMsをそのまま渡し、コンポーネント自身の内部で本物の選択処理を呼ばせる。
+  const isBoxQuestion = snapshot.currentSpec?.type === 'finalQuestionBox'
   const autoForceFiredRef = useRef(false)
   useEffect(() => {
-    if (autoForceCorrectDelayMs === undefined || autoForceFiredRef.current) return
+    if (autoForceCorrectDelayMs === undefined || autoForceFiredRef.current || isBoxQuestion) return
     if (!entryDone || snapshot.phase !== 'playing' || !snapshot.currentSpec) return
     autoForceFiredRef.current = true
     const t = setTimeout(() => handleResult({ correct: true, reactionMs: 0 }), autoForceCorrectDelayMs)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entryDone, snapshot.phase, snapshot.currentSpec])
+  }, [entryDone, snapshot.phase, snapshot.currentSpec, isBoxQuestion])
 
   const CurrentQuestion = snapshot.currentSpec ? FINAL_QUESTION_MODULES[snapshot.currentSpec.type]?.Component : null
   const intensity = snapshot.lastClearedNumber !== null ? finalSuccessIntensityFor(snapshot.lastClearedNumber) : 1
@@ -275,7 +281,11 @@ export function FinalTrialScreen({
       <div ref={shakeWrapperRef} className="relative z-10 flex flex-1 items-center justify-center">
         {snapshot.phase === 'playing' && CurrentQuestion && snapshot.currentSpec && (
           <div key={snapshot.currentSpec.instanceId} className="h-full w-full">
-            <CurrentQuestion spec={snapshot.currentSpec} onResult={handleResult} />
+            <CurrentQuestion
+              spec={snapshot.currentSpec}
+              onResult={handleResult}
+              autoSolveDelayMs={isBoxQuestion ? autoForceCorrectDelayMs : undefined}
+            />
           </div>
         )}
         {snapshot.phase === 'successFlash' && (
