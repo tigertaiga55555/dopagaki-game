@@ -38,6 +38,9 @@ export type QuestionTypeId =
   | 'evenNumber'
   | 'popTarget'
   | 'dragGoal'
+  | 'oddNumber'
+  | 'fewerSide'
+  | 'rps'
 
 /**
  * お題のカテゴリ（Ver.4.2、Ver.4.5で拡張）。同じカテゴリの出題が連続しすぎないよう

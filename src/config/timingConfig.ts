@@ -28,6 +28,8 @@ export const TIMING_SAFETY = {
     moreSide: 1300,
     /** 左右の丸の大きさを比較する（2択） */
     biggerShape: 1200,
+    /** Ver.5.0: 左右の点の数を比較する（2択）。moreSideと同じ帯域。 */
+    fewerSide: 1300,
   },
   hold: {
     /**
@@ -154,5 +156,13 @@ export const TIMING_SAFETY = {
   /** ドラッグ操作（掴む→運ぶ→離す）を完了できる最低時間 */
   dragGoal: {
     minTimeMs: 2250,
+  },
+  /** Ver.5.0で追加した通常お題3種の最低制限時間ルール。evenNumberと同じ帯域（対になる問題のため）。 */
+  oddNumber: {
+    minTimeMs: 1450,
+  },
+  /** じゃんけん：相手の手を見て正しい手を選ぶまでの現実的な時間（simpleMathと同程度） */
+  rps: {
+    minTimeMs: 1900,
   },
 }

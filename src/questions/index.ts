@@ -7,6 +7,7 @@ import { ColorWordQuestionModule } from './ColorWordQuestion'
 import { DifferentOneQuestionModule } from './DifferentOneQuestion'
 import { DragGoalQuestionModule } from './DragGoalQuestion'
 import { EvenNumberQuestionModule } from './EvenNumberQuestion'
+import { FewerSideQuestionModule } from './FewerSideQuestion'
 import { FindTargetQuestionModule } from './FindTargetQuestion'
 import { FlashSpotQuestionModule } from './FlashSpotQuestion'
 import { FoodSortQuestionModule } from './FoodSortQuestion'
@@ -17,12 +18,14 @@ import { MoreSideQuestionModule } from './MoreSideQuestion'
 import { MaxNumberQuestionModule, MinNumberQuestionModule } from './NumberExtremeQuestion'
 import { NoPressQuestionModule } from './NoPressQuestion'
 import { NotifRushQuestionModule } from './NotifRushQuestion'
+import { OddNumberQuestionModule } from './OddNumberQuestion'
 import { OddOneOutQuestionModule } from './OddOneOutQuestion'
 import { PopTargetQuestionModule } from './PopTargetQuestion'
 import { RapidStopQuestionModule } from './RapidStopQuestion'
 import { ReleaseZoneQuestionModule } from './ReleaseZoneQuestion'
 import { RepeatTapQuestionModule } from './RepeatTapQuestion'
 import { ReverseArrowSwipeQuestionModule } from './ReverseArrowSwipeQuestion'
+import { RpsQuestionModule } from './RpsQuestion'
 import { SameOneQuestionModule } from './SameOneQuestion'
 import { SequenceTapQuestionModule } from './SequenceTapQuestion'
 import { ShortVideoSwipeQuestionModule } from './ShortVideoSwipeQuestion'
@@ -66,4 +69,7 @@ export const QUESTION_MODULES: Record<QuestionTypeId, QuestionModule> = {
   evenNumber: EvenNumberQuestionModule,
   popTarget: PopTargetQuestionModule,
   dragGoal: DragGoalQuestionModule,
+  oddNumber: OddNumberQuestionModule,
+  fewerSide: FewerSideQuestionModule,
+  rps: RpsQuestionModule,
 }
