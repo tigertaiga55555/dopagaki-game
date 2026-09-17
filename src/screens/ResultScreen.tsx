@@ -14,27 +14,7 @@ interface Props {
 
 const TOAST_MS = 3200
 
-/**
- * Ver.5.0追加修正: 共有PNG生成専用offscreen capture wrapperのbleed（padding）を、
- * カードのbox-shadowグロー半径に応じてバリアントごとに変える。
- * 以前は全バリアント一律140pxにしていたが、実機で「カードが小さくなりすぎる」
- * 「右側・右下に黒い矩形領域が残る」不具合が報告された。一律140pxは全バリアント中
- * 最大のisMax(110pxブラー)にしか必要ない過剰な余白で、通常・OVERDRIVEカードまで
- * 無駄に大きなoffscreen領域（＝大きなキャプチャ用canvas）を生成させていたことが、
- * 実機側のレンダリング不具合（黒い矩形）を誘発しやすくしていたと考えられるため、
- * 各バリアントの実際のブラー半径に対して必要十分な値だけを個別に割り当てる
- * （通常: 20pxオフセット+40pxブラー→60px、OVERDRIVE: 60pxブラー→70px、
- * isMax: 110pxブラー→120px）。これによりカードの見た目の大きさもグローの
- * にじみ具合に対して自然な比率へ戻る。
- */
-function getCaptureBleedPx(percent: number): number {
-  if (percent >= FINAL_TRIAL_CONFIG.clearPercent) return 120
-  if (percent > 100) return 70
-  return 60
-}
-
 export function ResultScreen({ result, onRetry }: Props) {
-  const cardRef = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState(false)
   const [imageBusy, setImageBusy] = useState(false)
   const [saveBusy, setSaveBusy] = useState(false)
@@ -63,17 +43,17 @@ export function ResultScreen({ result, onRetry }: Props) {
   }
 
   /**
-   * Ver.5.0追加: 「画像付きでシェア」。結果カードDOMをそのままPNG化し、
-   * Web Share API（ファイル共有対応環境）→テキスト＋URLのみの通常共有→
-   * クリップボードコピー＋画像ダウンロードの順でフォールバックする
-   * （share.tsのshareResultWithImage()に集約。詳細はそちらのコメント参照）。
+   * Ver.5.0追加: 「画像付きでシェア」。resultデータからCanvas 2Dで共有PNGを直接描画し
+   * （shareImage.ts→shareCanvas.ts、DOMキャプチャは経由しない）、Web Share API
+   * （ファイル共有対応環境）→テキスト＋URLのみの通常共有→クリップボードコピー＋
+   * 画像ダウンロードの順でフォールバックする（share.tsのshareResultWithImage()に集約）。
    * ユーザー自身が共有シートをキャンセルした場合（AbortError）はトーストを出さない。
    */
   async function handleShareImage() {
-    if (!cardRef.current || imageBusy) return
+    if (imageBusy) return
     setImageBusy(true)
     try {
-      const blob = await captureResultCardPng(cardRef.current)
+      const blob = await captureResultCardPng(result)
       const outcome = await shareResultWithImage(blob, result.percent, result.type.name, result.finalTrial)
       if (outcome === 'fallback-copied') {
         showToast('画像付き共有に非対応の環境のため、画像を保存し共有文をコピーしました')
@@ -91,10 +71,10 @@ export function ResultScreen({ result, onRetry }: Props) {
 
   /** Ver.5.0追加: 「画像を保存」。共有せず、結果カードのPNGだけを端末へ保存する。 */
   async function handleSaveImage() {
-    if (!cardRef.current || saveBusy) return
+    if (saveBusy) return
     setSaveBusy(true)
     try {
-      const blob = await captureResultCardPng(cardRef.current)
+      const blob = await captureResultCardPng(result)
       downloadPngBlob(blob)
       showToast('画像を保存しました')
     } catch {
@@ -161,38 +141,6 @@ export function ResultScreen({ result, onRetry }: Props) {
       >
         {getRetryLabel(result.percent)}
       </button>
-
-      {/*
-        Ver.5.0追加修正: 共有PNG生成専用のoffscreen capture DOM。画面に表示されている
-        ResultCardとは完全に別のDOMツリー（同じpropsで独立にレンダリングした複製）。
-        以前はResultCard本体を画面上でpadding/negative marginのブリード枠に包んでいたが、
-        そのnegative marginが実画面のflexレイアウトへ漏れ出し、カードの位置や下の
-        「今回/自己ベスト」・ボタン群との間隔が崩れる不具合を引き起こした
-        （実機で確認）。position:fixedで画面外（left:-9999px）へ完全に逃がすことで、
-        実画面のレイアウトには一切干渉しない独立した構造にした。display:noneは
-        使わない（レイアウトボックスを持たない要素はhtml-to-imageで正しく
-        キャプチャできないため）。pointer-events:noneでユーザー操作の対象にもならない。
-        widthは端末幅に関わらず常に320px固定（実画面のようにpx-6の余白と競合しない
-        独立した領域のため、意図した完成サイズでそのまま書き出せる）。paddingは
-        getCaptureBleedPx()でバリアントごとに必要最小限の値を割り当てる（詳細は同関数の
-        コメント参照）。
-
-        Ver.5.0追加修正: ここでレンダーするResultCardにだけforCapture={true}を渡す。
-        実機（iPhone Safari）で共有PNGの右側に黒い矩形が写り込む不具合の原因が、
-        ResultCard本体のoverflow-hidden+rounded-3xl+box-shadowの組み合わせ
-        （border-radius＋overflow:hidden＋box-shadowを同一要素に持たせた場合の
-        Safari/WebKit既知のレンダリング不具合パターン）と判明したため、共有PNG生成時
-        だけbox-shadowを別要素へ分離する（詳細はResultCard.tsxのforCaptureコメント参照）。
-        ライブ画面側（上のResultCard、forCapture未指定）の見た目・DOM構造は一切変えていない。
-      */}
-      <div aria-hidden="true" style={{ position: 'fixed', top: 0, left: -9999, pointerEvents: 'none' }}>
-        <div
-          ref={cardRef}
-          style={{ width: 320, padding: getCaptureBleedPx(result.percent), backgroundColor: '#0b0620', boxSizing: 'content-box' }}
-        >
-          <ResultCard result={result} forCapture />
-        </div>
-      </div>
     </div>
   )
 }

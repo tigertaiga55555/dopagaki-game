@@ -1,62 +1,20 @@
-import { toBlob } from 'html-to-image'
+import { renderResultSharePng } from './shareCanvas'
+import type { FinalResultV4 } from '../types'
 
 /**
- * 結果カードDOM要素（ResultCardが公開するref先のノード）をそのままPNG画像化する。
- *
- * html2canvasではなくhtml-to-imageを採用しているのは、このプロジェクトのTailwind CSS v4が
- * 配色にoklch()／不透明度指定にcolor-mix()を多用しているため（例: text-amber-300や
- * text-white/70など）。html2canvasは独自にCSSをパースしてcanvasへ手描きする実装のため
- * oklch()/color-mix()を解釈できず、該当箇所が黒潰れ・透明になってしまう。html-to-imageは
- * 計算済みスタイルをSVGのforeignObjectへそのまま埋め込み、ブラウザ自身にレンダリングさせる
- * ため、oklch()/color-mix()を含む最新のCSS関数もブラウザがサポートしている限りそのまま
- * 正しく描画できる。
- *
- * ResultCard自体はCSSアニメーション（回転する虹色ボーダーのみ）を除き静止した見た目のため、
- * キャプチャのタイミングによる崩れは基本的に発生しない（回転リングは連続的な円環グラデーション
- * のため、どの角度で止めても見た目が破綻することはない）。
- *
- * Ver.5.0追加修正: 実機で「角丸の外側に白い領域が見える」不具合を確認した。原因は
- * ResultCardのbox-shadow（isMax時の3px白リング＋110px黄金グロー等）が要素自身の矩形の
- * 外側にはみ出して描画されるため、captureする矩形（ResultScreen側で用意した
- * ブリード用ラッパー、#0b0620で塗った余白込み）の端でその半透明グラデーションが
- * 切り取られ、透明ピクセルとして残っていたこと（多くのSNS/OSの共有・保存パイプラインは
- * 透明PNGを白背景に合成して表示するため「白い外周」に見える）。
- * ここでは念のためbackgroundColorをアプリ本体と同じ#0b0620に明示指定し、
- * 万一captureノード自体やその余白の外側に透過ピクセルが残っても、白ではなく
- * アプリの背景色で塗りつぶされるようにしている（主な修正はResultScreen側の
- * ブリードラッパーだが、これは二重の安全策）。
- *
- * Ver.5.0追加修正: 実機で「PNG右側・右下に黒い矩形領域が残る」不具合を確認した。
- * html-to-imageは内部でnode.clientWidth/clientHeightから自動でサイズを算出するが、
- * これをoptionsのwidth/height/canvasWidth/canvasHeightとして明示的に固定値で渡す
- * ことで、内部の自動計測（レイアウトのタイミングやサブピクセルの丸め方次第で
- * ブラウザ間・実機端末間で結果が変わり得る）に依存しない、決定的なサイズでの
- * キャプチャにした。加えて、captureを呼ぶ直前に1フレーム待つことで、直前の
- * Reactの再レンダー（結果が切り替わった直後など）がまだ反映しきっていない
- * 過渡的なレイアウト状態を読んでしまう可能性を排除している。
+ * Ver.5.0追加修正: 共有PNGをresultデータから直接Canvas 2Dで描画する（shareCanvas.ts）。
+ * 以前はResultCard本体のDOMをhtml-to-image（SVGのforeignObject経由）で画像化していたが、
+ * 実機（iPhone Safari）で「カード右側に黒い矩形が写り込む」不具合が、box-shadow分離など
+ * 複数回のDOM構造修正を経てもなお再発した。この不具合はforeignObject経由でのDOM→画像
+ * 変換経路そのものに起因する、この開発環境（WebKitブラウザを起動できないサンドボックス）
+ * からは直接再現・特定しきれないWebKit固有の問題と判断し、共有PNG生成をDOMキャプチャから
+ * 完全に切り離してCanvas直接描画方式へ置き換えた（詳細はshareCanvas.tsの冒頭コメント参照）。
+ * これにより、ライブ画面用のDOM（ResultScreen/ResultCard）を経由する必要が一切なくなった
+ * （offscreen clone・box-shadow分離用のforCapture・キャプチャ用bleed paddingは全て不要になり
+ * 削除済み）。
  */
-export async function captureResultCardPng(node: HTMLElement): Promise<Blob> {
-  // SNS共有に耐える解像度にするため、devicePixelRatio任せにせず最低2倍・最大3倍を保証する
-  // （デスクトップ等のdevicePixelRatio=1環境でぼやけた画像になるのを防ぐ）。
-  const pixelRatio = typeof window !== 'undefined' ? Math.min(3, Math.max(2, window.devicePixelRatio || 1)) : 2
-
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-
-  const rect = node.getBoundingClientRect()
-  const width = Math.round(rect.width)
-  const height = Math.round(rect.height)
-
-  const blob = await toBlob(node, {
-    pixelRatio,
-    cacheBust: true,
-    backgroundColor: '#0b0620',
-    width,
-    height,
-    canvasWidth: Math.round(width * pixelRatio),
-    canvasHeight: Math.round(height * pixelRatio),
-  })
-  if (!blob) throw new Error('結果カード画像の生成に失敗しました')
-  return blob
+export async function captureResultCardPng(result: FinalResultV4): Promise<Blob> {
+  return renderResultSharePng(result)
 }
 
 export function pngBlobToFile(blob: Blob, filename = 'dopagaki-result.png'): File {

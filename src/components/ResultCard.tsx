@@ -3,31 +3,6 @@ import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
 
 interface Props {
   result: FinalResultV4
-  /**
-   * Ver.5.0追加修正: 共有PNG生成専用のoffscreen cloneをレンダーする時だけtrueにする。
-   * 実機（iPhone Safari）で「画像付きでシェア」のPNGにだけ、カード右側に細い黒帯・
-   * 太い黒矩形・右下矩形が写り込む不具合が報告された。ライブ画面（このpropを渡さない
-   * 通常表示）では一切発生しない。
-   *
-   * 原因: カード本体のdiv（`overflow-hidden` + `rounded-3xl` + `box-shadow`を同一要素に
-   * 同居させている）が、border-radius＋overflow:hidden＋box-shadowという組み合わせの、
-   * Safari/WebKit系エンジンで長年報告されている既知のレンダリング不具合パターンに
-   * 一致する。通常のブラウザ合成パイプラインでは問題にならないが、html-to-imageが
-   * この要素をSVGのforeignObjectへ複製しdata URI化した`<img>`として再ラスタライズする
-   * 経路（ライブ画面では通らない、共有PNG生成時だけ通る特殊な経路）でこの組み合わせが
-   * 壊れると考えられる（isolate/absolute overlay/mask/pseudo-element/filter/gradientの
-   * 各layerを個別に無効化してPlaywright+html-to-imageで検証したが、これらはどれも
-   * 単独では黒い矩形の発生・消失に影響しなかった。box-shadowが乗っている要素自体に
-   * overflow-hiddenも同居している構造だけが全バリアント[通常/OVERDRIVE/isMax]に
-   * 共通しており、Chromiumでは再現しないためWebKit固有と判断した）。
-   *
-   * 対策: forCapture時だけ、box-shadowをoverflow-hidden/rounded-3xlを持つ要素とは
-   * 別の外側ラッパーへ分離する（box-shadowを持つ要素自身はoverflow:visibleのまま、
-   * 角丸クリップは内側の別要素だけが担当する）。見た目はライブ画面と完全に同一のまま、
-   * DOM構造だけを変える。ライブ画面側（forCapture未指定）は既存のまま1要素に
-   * overflow-hidden+box-shadowが同居する、この変更前と全く同じ構造。
-   */
-  forCapture?: boolean
 }
 
 /** ゴールド結果カードの装飾パーティクル位置（画面端寄り、控えめな数に限定） */
@@ -66,21 +41,11 @@ const MAX_CARD_COINS = [
 ]
 
 /**
- * Ver.5.0追加修正: カード下部の一言CTAは、isMax/isFinalTrialのような表示上の分岐ではなく、
- * result.percentだけを唯一の判定材料にする（ライブ画面・共有PNG・画像保存はすべて同じ
- * ResultCardをレンダーしているため、この関数を1箇所に置くだけで3経路が自動的に一致する）。
- * 以前はisMax/isFinalTrialで分岐しており、「finalTrialへ突入する前のOVERDRIVE（100〜119%）」が
- * どちらの分岐にも該当せず、進行と矛盾する固定文言「100％いける？」が表示される不具合があった。
+ * Ver.5.0追加修正: isOverdrive/isMax/isFinalTrialの判定を1箇所に集約する。
+ * ライブ画面（このファイル）と、共有PNG専用のCanvas描画（shareCanvas.ts）の
+ * 両方が同じこの関数を使うことで、判定ロジックが2箇所に分かれてズレる事故を防ぐ。
  */
-function getBottomStatusLine(percent: number): string {
-  if (percent >= FINAL_TRIAL_CONFIG.clearPercent) return '完全攻略。'
-  if (percent === FINAL_TRIAL_CONFIG.clearPercent - FINAL_TRIAL_CONFIG.percentPerCorrect) return 'あと1問。200％いける？'
-  if (percent >= FINAL_TRIAL_CONFIG.startPercent) return '200％まで行ける？'
-  if (percent >= 100) return 'FINALまで辿り着ける？'
-  return '100％いける？'
-}
-
-export function ResultCard({ result, forCapture }: Props) {
+export function getResultCardVariant(result: FinalResultV4) {
   const isOverdrive = result.percent > 100
   // Ver.5.0: 「PERFECT CLEAR」「完全攻略」は200%（FINAL QUESTION正解）だけの専用表現。
   // 120%はもはやFINAL DOPA TRIALへの入口に過ぎないため、isMaxの基準をOVERDRIVE_CONFIG.maxPercent
@@ -89,19 +54,39 @@ export function ResultCard({ result, forCapture }: Props) {
   const isMax = result.percent >= FINAL_TRIAL_CONFIG.clearPercent
   // FINAL DOPA TRIALへ突入した（=result.finalTrialが存在する）が、200%まで到達できなかった場合。
   const isFinalTrial = !!result.finalTrial && !isMax
-  const percentColor = isOverdrive ? 'text-amber-300' : result.percent >= 100 ? 'text-amber-200' : 'text-white'
+  return { isOverdrive, isMax, isFinalTrial }
+}
 
-  const shadowClass = isMax
-    ? 'shadow-[0_0_0_3px_rgba(255,255,255,0.85),0_0_110px_rgba(250,204,21,0.75)]'
-    : isOverdrive
-      ? 'shadow-[0_0_0_1px_rgba(250,204,21,0.4),0_0_60px_rgba(250,204,21,0.35)]'
-      : 'shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_20px_40px_rgba(0,0,0,0.5)]'
+/**
+ * Ver.5.0追加修正: カード下部の一言CTAは、isMax/isFinalTrialのような表示上の分岐ではなく、
+ * result.percentだけを唯一の判定材料にする（ライブ画面・共有PNG・画像保存はすべて同じ
+ * このロジックを使うため、この関数を1箇所に置くだけで3経路が自動的に一致する）。
+ * 以前はisMax/isFinalTrialで分岐しており、「finalTrialへ突入する前のOVERDRIVE（100〜119%）」が
+ * どちらの分岐にも該当せず、進行と矛盾する固定文言「100％いける？」が表示される不具合があった。
+ */
+export function getBottomStatusLine(percent: number): string {
+  if (percent >= FINAL_TRIAL_CONFIG.clearPercent) return '完全攻略。'
+  if (percent === FINAL_TRIAL_CONFIG.clearPercent - FINAL_TRIAL_CONFIG.percentPerCorrect) return 'あと1問。200％いける？'
+  if (percent >= FINAL_TRIAL_CONFIG.startPercent) return '200％まで行ける？'
+  if (percent >= 100) return 'FINALまで辿り着ける？'
+  return '100％いける？'
+}
+
+export function ResultCard({ result }: Props) {
+  const { isOverdrive, isMax, isFinalTrial } = getResultCardVariant(result)
+  const percentColor = isOverdrive ? 'text-amber-300' : result.percent >= 100 ? 'text-amber-200' : 'text-white'
 
   const card = (
     <div
       className={`relative isolate w-full overflow-hidden rounded-3xl bg-gradient-to-b p-5 ${
         isMax ? 'from-[#2e2408] to-[#120a02]' : isOverdrive ? 'from-[#241606] to-[#0b0620]' : 'from-[#1c1033] to-[#0b0620]'
-      } ${forCapture ? '' : shadowClass}`}
+      } ${
+        isMax
+          ? 'shadow-[0_0_0_3px_rgba(255,255,255,0.85),0_0_110px_rgba(250,204,21,0.75)]'
+          : isOverdrive
+            ? 'shadow-[0_0_0_1px_rgba(250,204,21,0.4),0_0_60px_rgba(250,204,21,0.35)]'
+            : 'shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_20px_40px_rgba(0,0,0,0.5)]'
+      }`}
     >
       {isOverdrive && !isMax && (
         <div className="pointer-events-none absolute inset-0 -z-10">
@@ -198,18 +183,15 @@ export function ResultCard({ result, forCapture }: Props) {
     </div>
   )
 
-  // forCapture時だけ、box-shadowをoverflow-hiddenを持たない別要素へ分離する（詳細はPropsのコメント参照）。
-  const shadowSplit = forCapture ? <div className={`rounded-3xl ${shadowClass}`}>{card}</div> : card
-
   // Ver.4.11: 120%（PERFECT CLEAR）だけ、カードの外側に虹色プレミアムボーダーを回す
   // （カード自身はoverflow-hiddenのため、ボーダーの疑似要素は別のラッパーに付ける）。
   if (isMax) {
     return (
       <div className="rainbow-premium-border w-full max-w-xs rounded-3xl p-[3px]">
-        {shadowSplit}
+        {card}
       </div>
     )
   }
 
-  return <div className="w-full max-w-xs">{shadowSplit}</div>
+  return <div className="w-full max-w-xs">{card}</div>
 }
