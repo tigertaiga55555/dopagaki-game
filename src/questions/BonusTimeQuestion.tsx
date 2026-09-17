@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { randInt } from '../engine/random'
 import { createResolveOnce } from '../engine/resolveOnce'
+import { computeBonusGain } from '../config/scoreConfigV4'
 import { sfx } from '../utils/sound'
 import type { QuestionComponentProps, QuestionModule, QuestionResult } from '../types'
 
@@ -74,6 +75,8 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     sfx.bonusTap(next)
   }
 
+  const bonusPercent = computeBonusGain(hitCount)
+
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-6 px-6 py-4 text-center select-none">
       {phase === 'intro' && (
@@ -89,12 +92,22 @@ function Component({ spec, onResult }: QuestionComponentProps) {
             {hitCount}
             <span className="ml-1 text-lg">HIT</span>
           </button>
+          {/*
+            Ver.5.0追加修正: 新仕様「2タップで+1%、最大+10%」を、タップの度に軽い反応
+            （ボタン自体のactive:scale-95＋sfx.bonusTapのピッチ変化）を出しつつ、
+            実際に%が上がる2タップごとのタイミングでだけ、この表示をkey付きで
+            再マウントして「anim-pop」を打ち直す（＝毎タップの小反応と、2タップごとに
+            本当に数値が増える瞬間とを見た目でもはっきり区別する）。
+          */}
+          <p key={bonusPercent} className="anim-pop text-2xl font-black text-amber-300">
+            +{bonusPercent}%
+          </p>
         </>
       )}
       {phase === 'outro' && (
         <div className="anim-pop flex flex-col items-center gap-1">
           <p className="text-3xl font-black text-amber-300">{hitCount} HIT！</p>
-          <p className="text-2xl font-black text-white">DOPA BOOST！</p>
+          <p className="text-2xl font-black text-white">+{bonusPercent}% DOPA BOOST！</p>
         </div>
       )}
     </div>

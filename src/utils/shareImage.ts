@@ -25,12 +25,36 @@ import { toBlob } from 'html-to-image'
  * 万一captureノード自体やその余白の外側に透過ピクセルが残っても、白ではなく
  * アプリの背景色で塗りつぶされるようにしている（主な修正はResultScreen側の
  * ブリードラッパーだが、これは二重の安全策）。
+ *
+ * Ver.5.0追加修正: 実機で「PNG右側・右下に黒い矩形領域が残る」不具合を確認した。
+ * html-to-imageは内部でnode.clientWidth/clientHeightから自動でサイズを算出するが、
+ * これをoptionsのwidth/height/canvasWidth/canvasHeightとして明示的に固定値で渡す
+ * ことで、内部の自動計測（レイアウトのタイミングやサブピクセルの丸め方次第で
+ * ブラウザ間・実機端末間で結果が変わり得る）に依存しない、決定的なサイズでの
+ * キャプチャにした。加えて、captureを呼ぶ直前に1フレーム待つことで、直前の
+ * Reactの再レンダー（結果が切り替わった直後など）がまだ反映しきっていない
+ * 過渡的なレイアウト状態を読んでしまう可能性を排除している。
  */
 export async function captureResultCardPng(node: HTMLElement): Promise<Blob> {
   // SNS共有に耐える解像度にするため、devicePixelRatio任せにせず最低2倍・最大3倍を保証する
   // （デスクトップ等のdevicePixelRatio=1環境でぼやけた画像になるのを防ぐ）。
   const pixelRatio = typeof window !== 'undefined' ? Math.min(3, Math.max(2, window.devicePixelRatio || 1)) : 2
-  const blob = await toBlob(node, { pixelRatio, cacheBust: true, backgroundColor: '#0b0620' })
+
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+  const rect = node.getBoundingClientRect()
+  const width = Math.round(rect.width)
+  const height = Math.round(rect.height)
+
+  const blob = await toBlob(node, {
+    pixelRatio,
+    cacheBust: true,
+    backgroundColor: '#0b0620',
+    width,
+    height,
+    canvasWidth: Math.round(width * pixelRatio),
+    canvasHeight: Math.round(height * pixelRatio),
+  })
   if (!blob) throw new Error('結果カード画像の生成に失敗しました')
   return blob
 }

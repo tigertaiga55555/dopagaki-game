@@ -154,19 +154,20 @@ export function getDiminishingReturnsFloor(overdriveActive: boolean, hasEverMiss
 
 /**
  * DOPA BONUS TIME（MISSの一切ない連打ボーナス）の得点設計。
- * 「1タップ=1%」のような直接変換は絶対にせず、通常の問題1〜2問ぶん相当（TIER_GAIN.PERFECTの
- * 約1.5倍）を上限とする、firmly cappedなボーナスにする。
+ * Ver.5.0追加修正: 「2タップで+1%、最大+10%」の明確な段階式に変更（ユーザー指定）。
+ * 0〜1タップ=+0%、2〜3タップ=+1%、4〜5タップ=+2%……20タップ以上で上限の+10%に達する。
+ * BonusTimeQuestion.tsx側もこの関数をそのまま使い、タップ数から見せる%表示を計算する
+ * （得点の実装が2箇所に分かれて数値がズレることを防ぐ）。
  */
 export const BONUS_TIME_CONFIG = {
-  /** これ以上のタップ数で満点ボーナス（それ未満は比例配分） */
-  expectedMaxTaps: 15,
-  /** 満点時に加算する生スコアの上限 */
-  maxGain: 6.5,
+  /** この人数のタップごとに+1% */
+  tapsPerPercent: 2,
+  /** 加算する生スコア（％）の上限 */
+  maxGain: 10,
 }
 
 export function computeBonusGain(tapCount: number): number {
-  const ratio = Math.max(0, Math.min(1, tapCount / BONUS_TIME_CONFIG.expectedMaxTaps))
-  return Math.round(ratio * BONUS_TIME_CONFIG.maxGain * 10) / 10
+  return Math.min(BONUS_TIME_CONFIG.maxGain, Math.floor(tapCount / BONUS_TIME_CONFIG.tapsPerPercent))
 }
 
 /** 反応時間 / 制限時間 の比率で判定する閾値（Ver.4.1から変更なし） */

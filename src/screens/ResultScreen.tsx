@@ -14,6 +14,25 @@ interface Props {
 
 const TOAST_MS = 3200
 
+/**
+ * Ver.5.0追加修正: 共有PNG生成専用offscreen capture wrapperのbleed（padding）を、
+ * カードのbox-shadowグロー半径に応じてバリアントごとに変える。
+ * 以前は全バリアント一律140pxにしていたが、実機で「カードが小さくなりすぎる」
+ * 「右側・右下に黒い矩形領域が残る」不具合が報告された。一律140pxは全バリアント中
+ * 最大のisMax(110pxブラー)にしか必要ない過剰な余白で、通常・OVERDRIVEカードまで
+ * 無駄に大きなoffscreen領域（＝大きなキャプチャ用canvas）を生成させていたことが、
+ * 実機側のレンダリング不具合（黒い矩形）を誘発しやすくしていたと考えられるため、
+ * 各バリアントの実際のブラー半径に対して必要十分な値だけを個別に割り当てる
+ * （通常: 20pxオフセット+40pxブラー→60px、OVERDRIVE: 60pxブラー→70px、
+ * isMax: 110pxブラー→120px）。これによりカードの見た目の大きさもグローの
+ * にじみ具合に対して自然な比率へ戻る。
+ */
+function getCaptureBleedPx(percent: number): number {
+  if (percent >= FINAL_TRIAL_CONFIG.clearPercent) return 120
+  if (percent > 100) return 70
+  return 60
+}
+
 export function ResultScreen({ result, onRetry }: Props) {
   const cardRef = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState(false)
@@ -154,21 +173,15 @@ export function ResultScreen({ result, onRetry }: Props) {
         使わない（レイアウトボックスを持たない要素はhtml-to-imageで正しく
         キャプチャできないため）。pointer-events:noneでユーザー操作の対象にもならない。
         widthは端末幅に関わらず常に320px固定（実画面のようにpx-6の余白と競合しない
-        独立した領域のため、意図した完成サイズでそのまま書き出せる）。
-
-        Ver.5.0追加修正: paddingは32→140pxへ拡大した。ResultCardのbox-shadow
-        グロー（isMax=110pxブラー、OVERDRIVE=60pxブラー、通常=下方向40pxブラー＋
-        20pxオフセット）は要素自身のborder boxの外側へ描画されるが、旧padding=32では
-        いずれのブラー半径よりも小さく、キャプチャ矩形の端でグローが完全にフェード
-        しきる前に切り取られていた（実機で「金色の縁が中途半端にはみ出て見える」
-        「途中で切れたgold border」として報告）。全バリアント中最大のisMaxの
-        ブラー半径110pxに十分な余裕（+約30px）を持たせた140pxへ統一することで、
-        どのスコア帯でもグローがキャプチャ矩形内で完全に減衰してから端に達するようにし、
-        非対称な切れ目が出ないようにした（ライブ画面側のResultCard自体・box-shadow値は
-        一切変更していない。影響はこのoffscreen capture用ラッパーのpaddingのみ）。
+        独立した領域のため、意図した完成サイズでそのまま書き出せる）。paddingは
+        getCaptureBleedPx()でバリアントごとに必要最小限の値を割り当てる（詳細は同関数の
+        コメント参照）。
       */}
       <div aria-hidden="true" style={{ position: 'fixed', top: 0, left: -9999, pointerEvents: 'none' }}>
-        <div ref={cardRef} style={{ width: 320, padding: 140, backgroundColor: '#0b0620', boxSizing: 'content-box' }}>
+        <div
+          ref={cardRef}
+          style={{ width: 320, padding: getCaptureBleedPx(result.percent), backgroundColor: '#0b0620', boxSizing: 'content-box' }}
+        >
           <ResultCard result={result} />
         </div>
       </div>
