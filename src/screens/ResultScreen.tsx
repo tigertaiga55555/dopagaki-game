@@ -100,28 +100,7 @@ export function ResultScreen({ result, onRetry }: Props) {
         </p>
       )}
 
-      {/*
-        Ver.5.0追加修正: 画像化専用のブリード枠。ResultCard自体（isMax時の3px白リング＋
-        110px黄金グロー等）はbox-shadowで自分の要素の外側にはみ出して描画されるため、
-        html-to-imageがResultCardの要素そのものの矩形だけを切り取ると、box-shadowが
-        境界で不自然に断ち切られ、その断面の半透明ピクセルがSNSアプリ等の合成先で
-        白く見えてしまっていた（実機で確認した「白い四隅・外周」の原因）。
-
-        キャプチャ対象そのもの（capture wrapper、ref先）にはpadding（上下左右
-        まったく同じ32px）とアプリ本体と全く同じ背景色(#0b0620)だけを持たせ、
-        negative marginは一切入れない＝ResultCardはcapture wrapperの完全な中央に
-        並ぶ（左右対称・上下対称が幾何学的に保証される）。
-        画面上のレイアウト補正（このブリード分だけ画面が広がって見えないようにする
-        負の余白）は、capture wrapperの外側にあるこのlayout compensation wrapper
-        （幅をw-full max-w-xsで確定させた上でnegative marginを持つ）だけに閉じ込める。
-        こうすることでcapture wrapper自身のサイズ計算はnegative marginの影響を
-        一切受けず、html-to-imageが取得する矩形とResultCardの視覚中心が必ず一致する。
-      */}
-      <div className="w-full max-w-xs" style={{ margin: -32 }}>
-        <div ref={cardRef} style={{ width: '100%', padding: 32, backgroundColor: '#0b0620', boxSizing: 'content-box' }}>
-          <ResultCard result={result} />
-        </div>
-      </div>
+      <ResultCard result={result} />
 
       {!result.isFirstPlay && (
         <div className="w-full max-w-xs space-y-1 rounded-2xl bg-white/5 px-4 py-3 text-sm">
@@ -163,6 +142,25 @@ export function ResultScreen({ result, onRetry }: Props) {
       >
         {getRetryLabel(result.percent)}
       </button>
+
+      {/*
+        Ver.5.0追加修正: 共有PNG生成専用のoffscreen capture DOM。画面に表示されている
+        ResultCardとは完全に別のDOMツリー（同じpropsで独立にレンダリングした複製）。
+        以前はResultCard本体を画面上でpadding/negative marginのブリード枠に包んでいたが、
+        そのnegative marginが実画面のflexレイアウトへ漏れ出し、カードの位置や下の
+        「今回/自己ベスト」・ボタン群との間隔が崩れる不具合を引き起こした
+        （実機で確認）。position:fixedで画面外（left:-9999px）へ完全に逃がすことで、
+        実画面のレイアウトには一切干渉しない独立した構造にした。display:noneは
+        使わない（レイアウトボックスを持たない要素はhtml-to-imageで正しく
+        キャプチャできないため）。pointer-events:noneでユーザー操作の対象にもならない。
+        widthは端末幅に関わらず常に320px固定（実画面のようにpx-6の余白と競合しない
+        独立した領域のため、意図した完成サイズでそのまま書き出せる）。
+      */}
+      <div aria-hidden="true" style={{ position: 'fixed', top: 0, left: -9999, pointerEvents: 'none' }}>
+        <div ref={cardRef} style={{ width: 320, padding: 32, backgroundColor: '#0b0620', boxSizing: 'content-box' }}>
+          <ResultCard result={result} />
+        </div>
+      </div>
     </div>
   )
 }
