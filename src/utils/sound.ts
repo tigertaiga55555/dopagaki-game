@@ -94,31 +94,6 @@ function noiseBurst(freq: number, q: number, durationMs: number, gainValue: numb
 }
 
 /**
- * Ver.4.11: 120% PERFECT CLEAR専用のオリジナル勝利ファンファーレ。既存作品のメロディは
- * 一切模倣せず、「短い上昇音（テッ）→明るいメジャーコード（テレーン！）→bell/sparkleの
- * 余韻」の3部構成で作る。低音impact＋brass風sawtoothのコード＋sine/triangleのベル成分を
- * 組み合わせたオリジナル構成。overdriveMax（衝撃SE）と同時に鳴らすことを想定し、
- * こちらは「祝福感」だけを担当する。
- */
-function victoryFanfare() {
-  // 1. 短い上昇プレップ音（テッ）
-  sweep(420, 880, 140, 'triangle', 0.13)
-  // 2. 明るいメジャーコード（テレーン！）：低音impact＋brass風コード＋sine上音
-  setTimeout(() => {
-    beep(98, 380, 'sine', 0.22)
-    beep(523.25, 420, 'sawtooth', 0.1)
-    beep(659.25, 420, 'sawtooth', 0.09)
-    beep(784.0, 420, 'sawtooth', 0.09)
-    beep(1046.5, 460, 'sine', 0.1)
-  }, 150)
-  // 3. bell / sparkleの余韻（高次倍音を少しずつ遅らせて鳴らし、自然な余韻を作る）
-  setTimeout(() => beep(1568.0, 500, 'sine', 0.08), 380)
-  setTimeout(() => beep(1975.5, 550, 'sine', 0.07), 460)
-  setTimeout(() => beep(2349.3, 650, 'sine', 0.06), 560)
-  setTimeout(() => beep(3136.0, 700, 'triangle', 0.05), 680)
-}
-
-/**
  * Ver.5.0追加: FINAL DOPA TRIAL突入専用のオリジナルSE、再設計版。
  *
  * 格付け：通常 < FINAL問題正解 < 100%OVERDRIVE(overdriveMax) < 120%FINAL突入(この関数)
@@ -192,55 +167,120 @@ function finalMiss() {
 }
 
 /**
- * Ver.5.0追加: 200% 真のPERFECT CLEAR専用の超大型ファンファーレ、再設計版。
- * TASK C「ゲーム史上最大の脳汁」の中核。C-8で示された8部構成を明示的に実装する：
- * 1. 上昇する短い3〜5音の駆け上がり
- * 2. 巨大なmajor chord
- * 3. brass風synth（2と同時に重ねる）
- * 4. sub impact（1と同時、ドォォォン！の芯）
- * 5. bell
- * 6. sparkle
- * 7. さらに上へ行く短い勝利フレーズ
- * 8. 最後に長い明るいコード
- * 音を一度に全部鳴らさず、約3秒かけて祝福が段階的に広がるようにする。
- * 既存の120%時代のvictoryFanfare()を内部の一部として引き続き活用しつつ、
- * それを大きく上回るレイヤー数・音域・長さにする（46. 完全オリジナル構成、
- * 既存作品の旋律は一切模倣しない）。
+ * Ver.5.0追加修正: Q16 ULTIMATE QUESTION突入演出専用のオリジナル緊急警告サイレン。
+ * 実在の作品・製品のサイレン音を模倣せず、低音インパクト＋金属質ヒット＋独自の
+ * 上下スイープ（sawtooth）の反復だけで構成する。突入演出の間だけ最大音量で鳴らし、
+ * 実際の問題UIが表示された後はFinalTrialScreen側でduckAudio()により大きく絞る
+ * （5. 問題本編では警告演出を強く弱め、中央の問題表示を一切妨げない）。
+ */
+function ultimateSiren() {
+  beep(46, 340, 'sine', 0.24)
+  noiseBurst(3400, 7, 160, 0.12)
+  sweep(560, 1180, 380, 'sawtooth', 0.13)
+  setTimeout(() => sweep(1180, 560, 380, 'sawtooth', 0.12), 380)
+  setTimeout(() => sweep(560, 1180, 380, 'sawtooth', 0.11), 760)
+  setTimeout(() => sweep(1180, 560, 380, 'sawtooth', 0.1), 1140)
+}
+
+/**
+ * Ver.5.0追加修正: ULTIMATE QUESTION失敗（ULTIMATE FAILED）専用SE。「警告音が崩れる」演出のため、
+ * finalMiss()よりさらに歪んだ質感（高音サイレンが不協和に崩落→ノイズ→重い低音）にする。
+ */
+function ultimateFail() {
+  sweep(1300, 340, 260, 'sawtooth', 0.15)
+  noiseBurst(2200, 4, 200, 0.13)
+  setTimeout(() => noiseBurst(900, 3, 240, 0.12), 120)
+  setTimeout(() => beep(180, 90, 'square', 0.1), 180)
+  setTimeout(() => beep(140, 100, 'square', 0.09), 260)
+  setTimeout(() => sweep(700, 80, 340, 'sawtooth', 0.14), 320)
+  setTimeout(() => beep(60, 460, 'sine', 0.18), 500)
+}
+
+/**
+ * Ver.5.0追加修正(TASK D-1/D-2): 200% CLEARの一撃目、ゲーム中で単独最大の低音サブインパクト
+ * 「ドォォォン！！！！」。overdriveMax/finalEntry/megaImpact系のどれよりも低く重くする。
+ * 溜め（無音）の直後に、前振りなしでいきなり最大出力で鳴らす。
+ */
+function megaImpact() {
+  beep(28, 720, 'sine', 0.36)
+  setTimeout(() => beep(44, 620, 'sine', 0.26), 20)
+  noiseBurst(1300, 2.2, 280, 0.15, 'lowpass')
+  setTimeout(() => beep(58, 520, 'sine', 0.18), 90)
+}
+
+/**
+ * Ver.5.0追加修正(TASK D-3): 「200% SLAM」を叩きつける2発の追加インパクト。
+ * megaImpact()よりやや軽く、金属的なプリズムエッジの煌めきを一緒に鳴らして
+ * 「数字そのもののミニ演出」を演出する。
+ */
+function slamImpact() {
+  beep(52, 300, 'sine', 0.24)
+  noiseBurst(2200, 5, 150, 0.1)
+  setTimeout(() => beep(1900, 90, 'sine', 0.06), 30)
+}
+
+/**
+ * Ver.5.0追加修正(TASK D-5): 200%ファンファーレの拍タイミング（ms、perfectFanfare200()
+ * 呼び出し時点を0とする）。FinalTrialScreen側の花火同期・テキスト段階表示（D-7/D-8/D-10）が
+ * この値を直接参照することで、SEと視覚演出の同期を1箇所の定数で管理する。
+ */
+export const PERFECT_FANFARE_200_TIMING_MS = {
+  beat1RisingPhrase: 0,
+  beat2BrassResponse: 280,
+  beat3HigherPhrase: 620,
+  beat4MajorChord: 1000,
+  tailStart: 1450,
+  totalMs: 3200,
+}
+
+/**
+ * Ver.5.0追加修正(TASK D-4/D-5/D-6): 200% 真のPERFECT CLEAR専用ファンファーレ、全面再設計版。
+ * 「キュピーンを1回鳴らす」のではなく、実際の勝利メロディとして聞こえる4ビート構成にする：
+ * Beat1 短い上昇フレーズ→Beat2 力強いbrass風の応答（低音impact/timpani付き）→
+ * Beat3 さらに高い勝利フレーズ→Beat4 巨大なmajor chord（timpani連打）→
+ * 長い明るいコード＋bell＋sparkleの余韻。高い「キュピーン」系の音は最後の余韻でのみ
+ * 装飾として使い、絶対に曲の先頭・主役にはしない（D-6）。完全オリジナル構成で、
+ * 既存作品の旋律は一切模倣しない。呼び出し側は「200% SLAM」の直後（無音→衝撃→SLAM
+ * が終わった後）にこの関数を呼ぶこと。
  */
 function perfectFanfare200() {
-  // 1. 上昇する短い4音の駆け上がり（テッテレレ、の出だし）
-  ;[440, 587.33, 698.46, 880].forEach((freq, i) => {
-    setTimeout(() => beep(freq, 110, 'triangle', 0.12), i * 55)
+  const t = PERFECT_FANFARE_200_TIMING_MS
+  // Beat1: 短い上昇フレーズ
+  ;[523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+    setTimeout(() => beep(freq, 110, 'triangle', 0.13), t.beat1RisingPhrase + i * 55)
   })
-  // 4. sub impact（1と同時に響かせる、200%到達の重みを一発目に叩き込む）
-  beep(40, 560, 'sine', 0.3)
-  setTimeout(() => beep(56, 460, 'sine', 0.22), 30)
-  // 2〜3. 巨大なmajor chord＋brass風synth（既存のvictoryFanfare()の構成をそのまま内包しつつ、
-  // さらに低音を1オクターブ下に重ねて厚みを出す）
+  // Beat2: 力強いbrass風の応答（sawtoothコード＋低音impact/timpani）
   setTimeout(() => {
-    victoryFanfare()
-    beep(130.81, 460, 'sawtooth', 0.09)
-    beep(196.0, 460, 'sawtooth', 0.08)
-  }, 260)
-  // 5. bell（既存victoryFanfare内のbell/sparkleより高次・長めの層を追加で重ねる）
-  setTimeout(() => beep(2093.0, 700, 'sine', 0.07), 560)
-  setTimeout(() => beep(2637.0, 750, 'sine', 0.06), 660)
-  // 6. sparkle（きらめきが降りてくる）
-  setTimeout(() => beep(3520.0, 400, 'triangle', 0.05), 780)
-  setTimeout(() => beep(4186.0, 420, 'sine', 0.04), 880)
-  // 7. さらに上へ行く短い勝利フレーズ（駆け上がる4音、1.より広い音域で「もう一段上」を表現）
+    beep(45, 380, 'sine', 0.26)
+    beep(130.81, 340, 'sawtooth', 0.12)
+    beep(196.0, 340, 'sawtooth', 0.11)
+    beep(261.63, 340, 'sawtooth', 0.1)
+  }, t.beat2BrassResponse)
+  // Beat3: さらに高い勝利フレーズ（Beat1より広い音域の駆け上がり）
   setTimeout(() => {
     ;[784, 987.77, 1174.66, 1567.98, 1975.5].forEach((freq, i) => {
-      setTimeout(() => beep(freq, 140, 'triangle', 0.1), i * 65)
+      setTimeout(() => beep(freq, 130, 'triangle', 0.11), i * 60)
     })
-  }, 1000)
-  // 8. 最後に長い明るいコード（ルート＋3度＋5度＋オクターブを長く伸ばして余韻を作る）
+  }, t.beat3HigherPhrase)
+  // Beat4: 巨大なmajor chord（timpani連打＋ルート/3度/5度/オクターブ）
   setTimeout(() => {
-    beep(261.63, 1800, 'sine', 0.09)
-    beep(329.63, 1700, 'triangle', 0.07)
-    beep(392.0, 1650, 'sine', 0.07)
-    beep(523.25, 1500, 'triangle', 0.06)
-  }, 1450)
+    beep(41, 520, 'sine', 0.3)
+    beep(61.5, 460, 'sine', 0.2)
+    beep(261.63, 900, 'sawtooth', 0.1)
+    beep(329.63, 900, 'sawtooth', 0.09)
+    beep(392.0, 900, 'sine', 0.09)
+    beep(523.25, 850, 'triangle', 0.08)
+  }, t.beat4MajorChord)
+  // tail: 長い明るいコード＋bell＋sparkleの余韻（キュピーン系は装飾としてここでのみ使う）
+  setTimeout(() => {
+    beep(261.63, 1700, 'sine', 0.08)
+    beep(329.63, 1600, 'triangle', 0.06)
+    beep(392.0, 1550, 'sine', 0.06)
+  }, t.tailStart)
+  setTimeout(() => beep(2093.0, 650, 'sine', 0.07), t.tailStart + 100)
+  setTimeout(() => beep(2637.0, 700, 'sine', 0.06), t.tailStart + 200)
+  setTimeout(() => beep(3520.0, 420, 'triangle', 0.05), t.tailStart + 330)
+  setTimeout(() => beep(4186.0, 440, 'sine', 0.04), t.tailStart + 430)
 }
 
 /** Ver.5.0追加: 200% CLEAR演出の花火に合わせて鳴らす「ドン！」という低い爆発音。 */
@@ -370,16 +410,22 @@ export const sfx = {
     setTimeout(() => beep(2800, 220, 'triangle', 0.11), 200)
     setTimeout(() => beep(3400, 280, 'sine', 0.09), 320)
   },
-  /** Ver.4.11: 120% PERFECT CLEAR専用のオリジナル勝利ファンファーレ（overdriveMaxの直後に鳴らす） */
-  victoryFanfare,
   /** Ver.5.0: FINAL DOPA TRIAL突入専用SE（祝福ではなく警告・ボス戦突入の感触） */
   finalEntry,
   /** Ver.5.0: FINAL DOPA TRIAL、1問正解ごとの成功SE（intensity 1〜5で段階的に派手になる） */
   finalSuccess,
   /** Ver.5.0: FINAL DOPA TRIAL失敗（TRIAL FAILED）専用SE */
   finalMiss,
+  /** Ver.5.0追加修正: Q16 ULTIMATE QUESTION突入演出専用のオリジナル緊急警告サイレン */
+  ultimateSiren,
+  /** Ver.5.0追加修正: ULTIMATE QUESTION失敗（ULTIMATE FAILED）専用SE */
+  ultimateFail,
   /** Ver.5.0: 200% 真のPERFECT CLEAR専用の超大型ファンファーレ（ゲーム最大の演出） */
   perfectFanfare200,
+  /** Ver.5.0追加修正: 200% CLEARの一撃目、ゲーム中で単独最大のサブインパクト */
+  megaImpact,
+  /** Ver.5.0追加修正: 「200% SLAM」の追加インパクト2発用 */
+  slamImpact,
   /** Ver.5.0追加: 200% CLEAR演出の花火に合わせて鳴らす「ドン！」 */
   fireworkBoom,
   /** Ver.5.0追加: 200%結果画面表示時のごく控えめな余韻チャイム */

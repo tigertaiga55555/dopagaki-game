@@ -689,3 +689,47 @@ body {
   animation: prism-collapse 0.7s ease-in forwards;
 }
 
+/* Ver.5.0追加修正: Q16 ULTIMATE QUESTION専用の「赤＋黒＋非常警告」世界観。
+   通常=紫、OVERDRIVE=黄金、FINAL DOPA TRIAL(Q1-15)=黒＋白＋プリズムに対し、
+   ULTIMATEだけは独立した赤黒の緊急警告演出にする。中央の問題表示領域には
+   一切かからない外周のみのリングで、strongは突入演出中だけ、weakは問題本編中に使う。 */
+@keyframes warning-pulse-ring {
+  0%,
+  100% {
+    opacity: 0.35;
+    box-shadow: inset 0 0 60px 10px rgba(239, 68, 68, 0.55);
+  }
+  50% {
+    opacity: 0.9;
+    box-shadow: inset 0 0 110px 26px rgba(239, 68, 68, 0.85);
+  }
+}
+
+.anim-warning-pulse-strong {
+  animation: warning-pulse-ring 0.6s ease-in-out infinite;
+}
+
+.anim-warning-pulse-weak {
+  animation: warning-pulse-ring 1.6s ease-in-out infinite;
+  opacity: 0.45;
+}
+
+@keyframes warning-text-flicker {
+  0%,
+  18%,
+  22%,
+  62%,
+  66%,
+  100% {
+    opacity: 1;
+  }
+  20%,
+  64% {
+    opacity: 0.3;
+  }
+}
+
+.anim-warning-flicker {
+  animation: warning-text-flicker 0.9s steps(1) infinite;
+}
+

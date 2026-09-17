@@ -142,13 +142,24 @@ export function GoldenClearOverlay({
   percent,
   title,
   showPerfectClearWording = false,
+  revealStage = 'full',
 }: {
   show: boolean
   percent: number
   title: string
   showPerfectClearWording?: boolean
+  /**
+   * Ver.5.0追加修正(TASK D-7/D-8): 200%専用ファンファーレの拍に同期して文字を段階的に
+   * 出すためのステージ。'percent'→'perfectClear'→'title'→'full'の順で1つずつ増える
+   * （一度出た行は消えない）。showPerfectClearWording=falseの通常呼び出し（他画面）には
+   * 影響しない（従来通りtitleのみ即時表示）。
+   */
+  revealStage?: 'percent' | 'perfectClear' | 'title' | 'full'
 }) {
   if (!show) return null
+  const showPerfect = showPerfectClearWording && revealStage !== 'percent'
+  const showTitle = !showPerfectClearWording || revealStage === 'title' || revealStage === 'full'
+  const showKanji = showPerfectClearWording && revealStage === 'full'
   return (
     <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center gap-1 bg-black/90">
       <div className="anim-golden-vignette absolute inset-0" />
@@ -162,14 +173,16 @@ export function GoldenClearOverlay({
       </p>
       {showPerfectClearWording ? (
         <>
-          <p className="anim-pop relative px-4 text-center text-4xl font-black italic leading-tight text-white drop-shadow-[0_0_25px_rgba(250,204,21,1)]">
-            PERFECT CLEAR!!
-          </p>
-          <p className="anim-pop relative mt-2 text-xl font-black tracking-widest text-amber-200">{title}</p>
-          <p className="anim-pop relative text-sm font-bold tracking-widest text-white/70">完全攻略</p>
+          {showPerfect && (
+            <p className="anim-pop relative px-4 text-center text-4xl font-black italic leading-tight text-white drop-shadow-[0_0_25px_rgba(250,204,21,1)]">
+              PERFECT CLEAR!!
+            </p>
+          )}
+          {showTitle && <p className="anim-pop relative mt-2 text-xl font-black tracking-widest text-amber-200">{title}</p>}
+          {showKanji && <p className="anim-pop relative text-sm font-bold tracking-widest text-white/70">完全攻略</p>}
         </>
       ) : (
-        <p className="anim-pop relative mt-2 text-xl font-black tracking-widest text-amber-200">{title}</p>
+        showTitle && <p className="anim-pop relative mt-2 text-xl font-black tracking-widest text-amber-200">{title}</p>
       )}
     </div>
   )

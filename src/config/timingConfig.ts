@@ -180,5 +180,15 @@ export const TIMING_SAFETY = {
     memoryAnswerMs: 2600,
     /** Q13〜Q15（高難度ミックス）：複合判断のぶん最も長め */
     mixedMs: 3200,
+    /**
+     * Ver.5.0追加修正: Q16 ULTIMATE QUESTION（卒業試験）専用の時間ルール。
+     * 「問題文が理解できない／物理的に無理な制限時間で難しくする」ことは禁止のため、
+     * mixedMsよりさらに長く、実機Playwrightの人間ディレイ検証で調整した値を使う。
+     */
+    ultimate1Ms: 4600,
+    ultimate2AnswerMs: 4600,
+    ultimate3Ms: 5000,
+    ultimate4AnswerMs: 5200,
+    ultimate5Ms: 4200,
   },
 }

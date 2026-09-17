@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { FINAL_TRIAL_CONFIG, tierForQuestionNumber } from '../config/finalTrialConfig'
 import { pickFinalQuestion } from './finalQuestionPicker'
-import { FinalQuestionBoxModule } from '../questions/final/FinalQuestionBox'
+import { ULTIMATE_QUESTION_POOL } from '../questions/final'
+import { pick } from './random'
 import type { FinalQuestionResult, FinalQuestionSpec, FinalQuestionTag } from '../types'
 
 /**
@@ -25,9 +26,12 @@ const MILESTONE_NUMBERS = new Set([4, 8, 12, 15])
 function successFlashDurationFor(clearedNumber: number): number {
   return MILESTONE_NUMBERS.has(clearedNumber) ? SUCCESS_FLASH_MS_MILESTONE : SUCCESS_FLASH_MS_NORMAL
 }
-/** 15問目クリア後だけ入る特別な中継演出（30. BGMが落ち、画面が暗くなり、
- *  「FINAL QUESTION / 最後まで見失うな」を見せてからQ16へ入る）の表示時間。 */
-const FINAL_QUESTION_INTRO_MS = 1600
+/**
+ * Ver.5.0追加修正: 15問目クリア後だけ入る「ULTIMATE QUESTION」緊急警告演出の表示時間。
+ * FinalTrialScreen側でdarken（暗転・静寂）→warning（赤フラッシュ＋WARNING）→
+ * banner（ULTIMATE QUESTION＋煽り文）の3ビートに内部分割して使う。
+ */
+const ULTIMATE_INTRO_MS = 2400
 const FAIL_TRANSITION_MS = 1400
 /**
  * Ver.5.0追加(TASK C-10): 200%だけは結果画面へ急いで移動せず、宝箱開封からPERFECT CLEARの
@@ -36,7 +40,7 @@ const FAIL_TRANSITION_MS = 1400
  */
 const CLEAR200_TRANSITION_MS = 6200
 
-export type FinalTrialPhase = 'playing' | 'successFlash' | 'finalQuestionIntro' | 'failed' | 'clear200'
+export type FinalTrialPhase = 'playing' | 'successFlash' | 'ultimateIntro' | 'failed' | 'clear200'
 
 export interface FinalTrialSnapshot {
   /** 現在挑戦中の問題番号（1〜16） */
@@ -108,18 +112,21 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
   }, [])
 
   /**
-   * Q16（FINAL QUESTION＝箱シャッフル）は通常のtier抽選プールに属さない専用固定問題
-   * （ランダムプールからは絶対に抽選されず、dedicated FinalQuestionBoxModule経由で毎回必ず
-   * 出題される）。Q1〜Q15はtierForQuestionNumber()の階層プールからanti-clusteringで抽選する。
+   * Q16（ULTIMATE QUESTION）は通常のtier抽選プールに属さない専用抽選プール
+   * （ULTIMATE_QUESTION_POOL、ランダムプールからは絶対に抽選されない）から、毎回1種類を
+   * ランダムに抽選する。全16問中1回きりの一発抽選のため、Q1〜Q15のような反復履歴を
+   * 前提としたanti-clusteringは不要（単純なpick()で十分）。Q1〜Q15はtierForQuestionNumber()
+   * の階層プールからanti-clusteringで抽選する。
    */
   function buildQuestion(questionNumber: number): FinalQuestionSpec {
     if (questionNumber === FINAL_TRIAL_CONFIG.totalQuestions) {
-      const data = FinalQuestionBoxModule.generate()
-      const targetTimeMs = FinalQuestionBoxModule.computeTargetTimeMs(data)
+      const module = pick(ULTIMATE_QUESTION_POOL)
+      const data = module.generate()
+      const targetTimeMs = module.computeTargetTimeMs(data)
       const spec: FinalQuestionSpec = {
-        instanceId: `final-boss-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        type: FinalQuestionBoxModule.id,
-        tags: FinalQuestionBoxModule.tags,
+        instanceId: `final-ultimate-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        type: module.id,
+        tags: module.tags,
         targetTimeMs,
         data,
       }
@@ -137,10 +144,57 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
     return spec
   }
 
-  /** FINAL突入演出が終わったタイミングで、呼び出し元（FinalTrialScreen）が1度だけ呼ぶ。 */
+  /**
+   * Ver.5.0追加修正: clearedNumber突破直後の演出遷移（successFlash→[ULTIMATE緊急警告]→次の問題）
+   * を1箇所にまとめた共通処理。handleResult()の通常成功パスと、Preview
+   * （?preview=finalquestion/clear200のstartAtQuestion=16直接開始）の両方から同じ関数を呼ぶことで、
+   * Previewでも「195%/15-16 CLEAR→ULTIMATE QUESTION緊急警告→実際の問題」という本物の遷移を
+   * そのまま再生できるようにする（52. フェイク版は一切作らない）。
+   */
+  function triggerPostClearFlow(clearedNumber: number) {
+    setSnapshot((s) => ({
+      ...s,
+      phase: 'successFlash',
+      percent: percentRef.current,
+      questionNumber: questionNumberRef.current,
+      currentSpec: null,
+      judgementKey: judgementKeyRef.current,
+      lastClearedNumber: clearedNumber,
+      milestoneLabel: milestoneLabelFor(clearedNumber),
+    }))
+
+    if (successTimerRef.current) clearTimeout(successTimerRef.current)
+    successTimerRef.current = setTimeout(() => {
+      if (endedRef.current) return
+      // Ver.5.0追加修正: 15問目を突破した直後だけ、Q16（ULTIMATE QUESTION）へ即座には入らず、
+      // 「緊急警告演出」（darken→warning→banner）を一度挟む。
+      if (clearedNumber === FINAL_TRIAL_CONFIG.totalQuestions - 1) {
+        setSnapshot((s) => ({ ...s, phase: 'ultimateIntro', milestoneLabel: null }))
+        successTimerRef.current = setTimeout(() => {
+          if (endedRef.current) return
+          const spec = buildQuestion(questionNumberRef.current)
+          setSnapshot((s) => ({ ...s, phase: 'playing', currentSpec: spec }))
+        }, ULTIMATE_INTRO_MS)
+        return
+      }
+      const spec = buildQuestion(questionNumberRef.current)
+      setSnapshot((s) => ({ ...s, phase: 'playing', currentSpec: spec, milestoneLabel: null }))
+    }, successFlashDurationFor(clearedNumber))
+  }
+
+  /**
+   * FINAL突入演出が終わったタイミングで、呼び出し元（FinalTrialScreen）が1度だけ呼ぶ。
+   * Ver.5.0追加修正: initialQuestionNumber===16（Preview専用の直接開始）の場合だけは、
+   * いきなりQ16を出題せず、15問目クリア時と全く同じtriggerPostClearFlow(15)を再生する
+   * （195%/15-16 CLEAR→ULTIMATE QUESTION緊急警告→実際の問題、という本物の遷移）。
+   */
   function start() {
     if (startedRef.current || endedRef.current) return
     startedRef.current = true
+    if (questionNumberRef.current === FINAL_TRIAL_CONFIG.totalQuestions) {
+      triggerPostClearFlow(FINAL_TRIAL_CONFIG.totalQuestions - 1)
+      return
+    }
     const spec = buildQuestion(questionNumberRef.current)
     setSnapshot((s) => ({ ...s, currentSpec: spec }))
   }
@@ -185,34 +239,7 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
     }
 
     questionNumberRef.current = clearedNumber + 1
-    setSnapshot((s) => ({
-      ...s,
-      phase: 'successFlash',
-      percent: percentRef.current,
-      questionNumber: questionNumberRef.current,
-      currentSpec: null,
-      judgementKey: judgementKeyRef.current,
-      lastClearedNumber: clearedNumber,
-      milestoneLabel: milestoneLabelFor(clearedNumber),
-    }))
-
-    if (successTimerRef.current) clearTimeout(successTimerRef.current)
-    successTimerRef.current = setTimeout(() => {
-      if (endedRef.current) return
-      // Ver.5.0(30.): 15問目を突破した直後だけ、Q16（FINAL QUESTION）へ即座には入らず、
-      // 「FINAL QUESTION / 最後まで見失うな」の専用中継演出を一度挟む。
-      if (clearedNumber === FINAL_TRIAL_CONFIG.totalQuestions - 1) {
-        setSnapshot((s) => ({ ...s, phase: 'finalQuestionIntro', milestoneLabel: null }))
-        successTimerRef.current = setTimeout(() => {
-          if (endedRef.current) return
-          const spec = buildQuestion(questionNumberRef.current)
-          setSnapshot((s) => ({ ...s, phase: 'playing', currentSpec: spec }))
-        }, FINAL_QUESTION_INTRO_MS)
-        return
-      }
-      const spec = buildQuestion(questionNumberRef.current)
-      setSnapshot((s) => ({ ...s, phase: 'playing', currentSpec: spec, milestoneLabel: null }))
-    }, successFlashDurationFor(clearedNumber))
+    triggerPostClearFlow(clearedNumber)
   }
 
   return { snapshot, start, handleResult }

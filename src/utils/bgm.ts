@@ -20,6 +20,9 @@ const OVERDRIVE_BPM = 166
 /** Ver.5.0: FINAL DOPA TRIAL専用BGMのBPM。OVERDRIVEよりわずかに遅くし、
  *  「速さ」ではなく「重さ・緊迫感（ボス戦）」で威圧するテンポにする。 */
 const FINAL_BPM = 150
+/** Ver.5.0追加修正: Q16 ULTIMATE QUESTION専用BGMのBPM。FINAL_BPMよりさらに遅く重くし、
+ *  「速さ」ではなく緊急事態・ラスボス戦の圧のみで威圧する。 */
+const ULTIMATE_BPM = 132
 
 let running = false
 let schedulerTimer: ReturnType<typeof setInterval> | null = null
@@ -36,6 +39,10 @@ let overdriveMode = false
 let finalMode = false
 /** Ver.5.0: FINAL DOPA TRIALの問題番号（1〜16）に応じて0〜3の4段階でレイヤーを積み増す。 */
 let finalIntensityRef = 0
+/** Ver.5.0追加修正: Q16 ULTIMATE QUESTION回答中だけ有効な専用BGMサブモード。finalMode必須。
+ *  通常のFINAL BGM（scheduleFinalStep）を完全に差し替え、ハートビート・低ドローン・
+ *  警告ビープだけの「緊急事態」テーマにする。 */
+let ultimateMode = false
 let noiseBuffer: AudioBuffer | null = null
 
 function getNoiseBuffer(ctx: AudioContext): AudioBuffer {
@@ -49,7 +56,7 @@ function getNoiseBuffer(ctx: AudioContext): AudioBuffer {
 }
 
 function currentBpm(): number {
-  if (finalMode) return FINAL_BPM
+  if (finalMode) return ultimateMode ? ULTIMATE_BPM : FINAL_BPM
   return overdriveMode ? OVERDRIVE_BPM : STAGE_BPM[Math.max(0, Math.min(STAGE_BPM.length - 1, stageRef))]
 }
 
@@ -492,6 +499,69 @@ function playFinalSubBass(time: number, intensity: number) {
   }
 }
 
+/** Ver.5.0追加修正: ULTIMATE QUESTION専用の低いドローン（sawtoothの唸り、緊急事態の持続音）。 */
+function playUltimateDrone(time: number) {
+  const ctx = getAudioContext()
+  const out = getBgmGain()
+  if (!ctx || !out) return
+  const osc = ctx.createOscillator()
+  const filter = ctx.createBiquadFilter()
+  const gain = ctx.createGain()
+  osc.type = 'sawtooth'
+  osc.frequency.value = 55
+  filter.type = 'lowpass'
+  filter.frequency.value = 340
+  gain.gain.setValueAtTime(0.001, time)
+  gain.gain.linearRampToValueAtTime(0.1, time + 0.5)
+  gain.gain.linearRampToValueAtTime(0.001, time + 1.9)
+  osc.connect(filter)
+  filter.connect(gain)
+  gain.connect(out)
+  osc.start(time)
+  osc.stop(time + 1.95)
+  osc.onended = () => {
+    osc.disconnect()
+    filter.disconnect()
+    gain.disconnect()
+  }
+}
+
+/** Ver.5.0追加修正: ULTIMATE QUESTION専用の警告ビープ（控えめ、常時鳴らさず裏拍だけ）。 */
+function playUltimateWarningBeep(time: number) {
+  const ctx = getAudioContext()
+  const out = getBgmGain()
+  if (!ctx || !out) return
+  const osc = ctx.createOscillator()
+  const gain = ctx.createGain()
+  osc.type = 'square'
+  osc.frequency.value = 1180
+  gain.gain.setValueAtTime(0.045, time)
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.08)
+  osc.connect(gain)
+  gain.connect(out)
+  osc.start(time)
+  osc.stop(time + 0.09)
+  osc.onended = () => {
+    osc.disconnect()
+    gain.disconnect()
+  }
+}
+
+/**
+ * Ver.5.0追加修正: Q16 ULTIMATE QUESTION専用BGM。「緊急事態→世界が止まる寸前」の緊張感を
+ * ハートビート（毎拍）＋低ドローン（小節頭）＋控えめな警告ビープ（裏拍）だけで作る。
+ * 問題文・選択肢の視認性を邪魔しないよう、ここに登場するSFXは全てbgmGain経由（sfxGainとは
+ * 別バス）で、問題ごとの正誤SFXの聞こえやすさには一切影響しない。
+ */
+function scheduleUltimateStep(step: number, time: number) {
+  const beat = Math.floor(step / STEPS_PER_BEAT)
+  const sub = step % STEPS_PER_BEAT
+  if (sub === 0) playFinalHeartbeatKick(time)
+  if (sub === 0 && beat === 0) playFinalSubBass(time, 3)
+  if (step % STEPS_PER_BAR === 0) playUltimateDrone(time)
+  if (sub === 2 && beat === 3) playUltimateWarningBeep(time)
+}
+
 /**
  * Ver.5.0: FINAL DOPA TRIAL専用BGM本体。通常/OVERDRIVEの全レイヤーとは完全に独立した
  * 別パターン（10. ボス戦のような緊張感：速く重いベース、細かいハイハット、金属質
@@ -531,7 +601,11 @@ function scheduleFinalStep(step: number, time: number) {
 
 function scheduleStep(step: number, time: number) {
   if (finalMode) {
-    scheduleFinalStep(step, time)
+    if (ultimateMode) {
+      scheduleUltimateStep(step, time)
+    } else {
+      scheduleFinalStep(step, time)
+    }
     return
   }
   const stage = stageRef
@@ -611,6 +685,7 @@ export function startBgm() {
   overdriveMode = false
   finalMode = false
   finalIntensityRef = 0
+  ultimateMode = false
   stageRef = 0
   comboCountRef = 0
   stepIndex = 0
@@ -622,6 +697,7 @@ export function stopBgm() {
   running = false
   overdriveMode = false
   finalMode = false
+  ultimateMode = false
   if (schedulerTimer !== null) {
     clearInterval(schedulerTimer)
     schedulerTimer = null
@@ -648,6 +724,12 @@ export function setFinalMode(active: boolean) {
 /** Ver.5.0: FINAL DOPA TRIALの問題進行（0〜3）に応じてBGMレイヤーを段階的に増やす。 */
 export function setFinalIntensity(level: number) {
   finalIntensityRef = Math.max(0, Math.min(3, level))
+}
+
+/** Ver.5.0追加修正: Q16 ULTIMATE QUESTION回答中だけtrueにする専用BGMサブモード切り替え。
+ *  finalMode=trueの間だけ意味を持つ（finalMode=falseの間はscheduleStep側で無視される）。 */
+export function setUltimateMode(active: boolean) {
+  ultimateMode = active
 }
 
 /**

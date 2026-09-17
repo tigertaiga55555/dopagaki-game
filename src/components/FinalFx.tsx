@@ -99,14 +99,28 @@ export function FinalSuccessBurst({ judgementKey, intensity }: { judgementKey: n
   )
 }
 
-/** FINAL DOPA TRIAL失敗（TRIAL FAILED）演出。黄金/虹の世界が崩れ落ち、暗く沈んでいく。 */
-export function FinalFailOverlay({ show, percent, clearedCount }: { show: boolean; percent: number; clearedCount: number }) {
+/**
+ * FINAL DOPA TRIAL失敗演出。黄金/虹の世界が崩れ落ち、暗く沈んでいく。
+ * Ver.5.0追加修正: Q16 ULTIMATE QUESTIONで失敗した場合だけlabelを「ULTIMATE FAILED」に
+ * 差し替える（8. 警告表示のまま失敗を伝える）。それ以外は従来通り「TRIAL FAILED」。
+ */
+export function FinalFailOverlay({
+  show,
+  percent,
+  clearedCount,
+  label = 'TRIAL FAILED',
+}: {
+  show: boolean
+  percent: number
+  clearedCount: number
+  label?: string
+}) {
   if (!show) return null
   return (
     <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center gap-2 bg-black/70 text-center">
       <div className="anim-prism-collapse absolute inset-0 bg-gradient-to-b from-red-950/60 via-black/40 to-black" />
       <p className="anim-pop relative text-4xl font-black tracking-widest text-red-400 drop-shadow-[0_0_16px_rgba(248,113,113,0.8)]">
-        TRIAL FAILED
+        {label}
       </p>
       <p className="anim-pop relative text-2xl font-black tabular-nums text-white/80">{percent}%</p>
       <p className="anim-pop relative text-sm font-bold text-white/50">FINAL DOPA TRIAL {clearedCount} / 16</p>
@@ -114,30 +128,82 @@ export function FinalFailOverlay({ show, percent, clearedCount }: { show: boolea
   )
 }
 
-/** 15問目突破後の専用中継演出：「FINAL QUESTION / 最後まで見失うな」。 */
-export function FinalQuestionIntroOverlay({ show }: { show: boolean }) {
-  if (!show) return null
+/**
+ * Ver.5.0追加修正: 15問目突破後、Q16「ULTIMATE QUESTION」へ入る専用の緊急警告演出。
+ * 「新しいミニゲームではなく卒業試験」の重みを出すため、既存の地味な中継バナーを廃止し、
+ * 赤＋黒＋非常警告の専用ワールドへ切り替える3ビート構成にした：
+ * darken（暗転・静寂）→warning（赤フラッシュ＋WARNING）→banner（ULTIMATE QUESTION＋煽り文）。
+ * 中央のテキスト自体は演出の主役のため強い色フィルターの制約対象外だが、
+ * 外周のwarning-pulseリングは常に外周のみで中央を覆わない。
+ */
+export function UltimateIntroOverlay({ beat }: { beat: 'darken' | 'warning' | 'banner' | null }) {
+  if (!beat) return null
   return (
-    <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center gap-2 bg-black/85 text-center">
-      <p className="anim-pop text-4xl font-black tracking-widest text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.6)]">
-        FINAL QUESTION
-      </p>
-      <p className="anim-pop text-lg font-bold text-amber-200/90">最後まで見失うな</p>
+    <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center gap-2 bg-black text-center">
+      {(beat === 'warning' || beat === 'banner') && <div className="anim-warning-pulse-strong absolute inset-0" />}
+      {beat === 'warning' && (
+        <p className="anim-warning-flicker text-6xl font-black tracking-[0.3em] text-red-500 drop-shadow-[0_0_28px_rgba(239,68,68,0.9)]">
+          WARNING
+        </p>
+      )}
+      {beat === 'banner' && (
+        <div className="anim-pop flex flex-col items-center gap-2 px-6">
+          <p className="text-4xl font-black tracking-widest text-red-400 drop-shadow-[0_0_24px_rgba(239,68,68,0.9)]">
+            ULTIMATE QUESTION
+          </p>
+          <p className="text-base font-bold text-white/80">これを解けば200%</p>
+        </div>
+      )}
     </div>
   )
 }
 
 /**
- * 200% CLEAR演出冒頭の「200」の前振り（C-6）。本番の巨大テキストが出る直前の一拍として、
- * scale＋glow＋プリズムshockwaveリングを伴って一度だけ強く脈打つように見せる。
+ * Ver.5.0追加修正: Q16 ULTIMATE QUESTION回答中だけ表示する専用アンビエンス（赤＋黒）。
+ * FinalWorldAmbience（黒＋白＋プリズム）から世界観を切り替えるが、突入演出中のstrongな
+ * warning-pulseとは違い、ここでは弱いweak版のみを外周に薄く漂わせる
+ * （5. 問題本編に入ったら警告演出を明確に弱め、中央の問題表示領域は一切妨げない）。
  */
-export function Clear200PreludeOverlay({ show }: { show: boolean }) {
+export function UltimateWorldAmbience() {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+      <div className="anim-warning-pulse-weak absolute inset-0" />
+      <div className="absolute -left-16 -top-16 h-48 w-48 rounded-full bg-red-600/20 blur-3xl" />
+      <div className="absolute -right-16 -bottom-16 h-48 w-48 rounded-full bg-red-900/25 blur-3xl" />
+    </div>
+  )
+}
+
+/**
+ * Ver.5.0追加修正(TASK D-2): 200% CLEARの一撃目。テキストは一切出さず、白フラッシュ＋
+ * 黄金ショックウェーブ＋巨大なgold-burstだけで「ゲーム最大の一撃」を表現する
+ * （溜め→無音の直後に来る、数字が出る前のprepなしの純粋な衝撃）。
+ */
+export function Clear200ImpactOverlay({ show }: { show: boolean }) {
+  if (!show) return null
+  return (
+    <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-white">
+      <div className="anim-golden-shockwave absolute h-24 w-24 rounded-full" style={{ animationDuration: '0.5s' }} />
+      <div className="anim-gold-burst absolute h-96 w-96 rounded-full bg-amber-200 blur-3xl" />
+    </div>
+  )
+}
+
+/**
+ * Ver.5.0追加修正(TASK D-3): 「200% SLAM」。一撃目の白閃光が引いた直後、奥から手前へ
+ * 叩きつけるように「200%」が現れる瞬間。scale＋impact＋shockwave＋金色glow＋
+ * プリズムエッジの全部盛りで、この数字自体が単独のミニ演出になるようにする。
+ */
+export function Clear200SlamOverlay({ show }: { show: boolean }) {
   if (!show) return null
   return (
     <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-black">
-      <div className="anim-rainbow-shockwave absolute h-16 w-16" style={{ ['--rainbow-color' as string]: '#facc15' }} />
-      <p className="anim-pop relative text-5xl font-black tabular-nums text-white drop-shadow-[0_0_30px_rgba(255,255,255,0.9)]">
+      <div className="anim-rainbow-shockwave absolute h-24 w-24" style={{ ['--rainbow-color' as string]: '#facc15' }} />
+      <div className="anim-rainbow-shockwave absolute h-24 w-24" style={{ animationDelay: '0.12s', ['--rainbow-color' as string]: '#ffffff' }} />
+      <div className="anim-gold-burst absolute h-64 w-64 rounded-full bg-amber-300/70 blur-3xl" />
+      <p className="anim-pop relative text-7xl font-black tabular-nums leading-none text-white drop-shadow-[0_0_40px_rgba(250,204,21,1)]">
         200
+        <span className="text-4xl text-amber-300">%</span>
       </p>
     </div>
   )

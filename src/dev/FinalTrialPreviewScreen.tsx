@@ -14,9 +14,10 @@ import type { FinalResultV4, PlayStats } from '../types'
  * ゲームロジック・演出コンポーネント・結果画面（ResultScreen/ResultCard）は一切複製しない。
  *
  * - finaltrial: 120%到達→FINAL DOPA TRIAL突入演出→Q1から実際にプレイ可能
- * - finalquestion: 195%から開始し、FINAL QUESTION（箱シャッフル）を実際に回答可能な状態で確認
- * - clear200: 195%から開始し、FINAL QUESTIONを自動で正解扱いにして200%真のPERFECT CLEAR演出
- *   （ゲーム最大の演出）と専用結果画面を確認できる
+ * - finalquestion: 195%から開始し、195%/15-16 CLEAR→ULTIMATE QUESTION緊急警告演出→
+ *   実際のULTIMATE QUESTION（5種からランダム抽選）を回答可能な状態まで、本物の遷移をそのまま確認
+ * - clear200: finalquestionと同じ実際の遷移を経たうえで、ULTIMATE QUESTIONを自動で正解扱いにして
+ *   200%真のPERFECT CLEAR演出（ゲーム最大の演出）と専用結果画面を確認できる
  */
 export type FinalPreviewMode = 'finaltrial' | 'finalquestion' | 'clear200'
 
@@ -48,7 +49,7 @@ const FAKE_STATS: PlayStats = {
 
 const MODE_LABEL: Record<FinalPreviewMode, string> = {
   finaltrial: '🔧 FINAL DOPA TRIAL PREVIEW（本番には出ません）',
-  finalquestion: '🔧 FINAL QUESTION PREVIEW（本番には出ません）',
+  finalquestion: '🔧 ULTIMATE QUESTION PREVIEW（本番には出ません）',
   clear200: '🔧 200% CLEAR PREVIEW（本番には出ません）',
 }
 
