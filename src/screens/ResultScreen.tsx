@@ -176,13 +176,21 @@ export function ResultScreen({ result, onRetry }: Props) {
         独立した領域のため、意図した完成サイズでそのまま書き出せる）。paddingは
         getCaptureBleedPx()でバリアントごとに必要最小限の値を割り当てる（詳細は同関数の
         コメント参照）。
+
+        Ver.5.0追加修正: ここでレンダーするResultCardにだけforCapture={true}を渡す。
+        実機（iPhone Safari）で共有PNGの右側に黒い矩形が写り込む不具合の原因が、
+        ResultCard本体のoverflow-hidden+rounded-3xl+box-shadowの組み合わせ
+        （border-radius＋overflow:hidden＋box-shadowを同一要素に持たせた場合の
+        Safari/WebKit既知のレンダリング不具合パターン）と判明したため、共有PNG生成時
+        だけbox-shadowを別要素へ分離する（詳細はResultCard.tsxのforCaptureコメント参照）。
+        ライブ画面側（上のResultCard、forCapture未指定）の見た目・DOM構造は一切変えていない。
       */}
       <div aria-hidden="true" style={{ position: 'fixed', top: 0, left: -9999, pointerEvents: 'none' }}>
         <div
           ref={cardRef}
           style={{ width: 320, padding: getCaptureBleedPx(result.percent), backgroundColor: '#0b0620', boxSizing: 'content-box' }}
         >
-          <ResultCard result={result} />
+          <ResultCard result={result} forCapture />
         </div>
       </div>
     </div>
