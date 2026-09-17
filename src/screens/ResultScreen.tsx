@@ -106,18 +106,21 @@ export function ResultScreen({ result, onRetry }: Props) {
         html-to-imageがResultCardの要素そのものの矩形だけを切り取ると、box-shadowが
         境界で不自然に断ち切られ、その断面の半透明ピクセルがSNSアプリ等の合成先で
         白く見えてしまっていた（実機で確認した「白い四隅・外周」の原因）。
-        この外枠にpadding分の余白（box-shadowの見た目上の広がりを十分に収める量）と
-        アプリ本体と全く同じ背景色(#0b0620)を持たせ、かつ同量のnegative marginで
-        レイアウト上の見た目（現在の画面デザイン・余白）を一切変えずに打ち消すことで、
-        「ResultCard自体のデザインは変えず、画像化のときだけ正しい背景で余白ごと
-        切り取れる」状態にする。
+
+        キャプチャ対象そのもの（capture wrapper、ref先）にはpadding（上下左右
+        まったく同じ32px）とアプリ本体と全く同じ背景色(#0b0620)だけを持たせ、
+        negative marginは一切入れない＝ResultCardはcapture wrapperの完全な中央に
+        並ぶ（左右対称・上下対称が幾何学的に保証される）。
+        画面上のレイアウト補正（このブリード分だけ画面が広がって見えないようにする
+        負の余白）は、capture wrapperの外側にあるこのlayout compensation wrapper
+        （幅をw-full max-w-xsで確定させた上でnegative marginを持つ）だけに閉じ込める。
+        こうすることでcapture wrapper自身のサイズ計算はnegative marginの影響を
+        一切受けず、html-to-imageが取得する矩形とResultCardの視覚中心が必ず一致する。
       */}
-      <div
-        ref={cardRef}
-        className="w-full max-w-xs"
-        style={{ padding: 32, margin: -32, backgroundColor: '#0b0620', boxSizing: 'content-box' }}
-      >
-        <ResultCard result={result} />
+      <div className="w-full max-w-xs" style={{ margin: -32 }}>
+        <div ref={cardRef} style={{ width: '100%', padding: 32, backgroundColor: '#0b0620', boxSizing: 'content-box' }}>
+          <ResultCard result={result} />
+        </div>
       </div>
 
       {!result.isFirstPlay && (
