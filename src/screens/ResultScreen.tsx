@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ResultCard } from '../components/ResultCard'
 import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
 import { getRetryLabel } from '../config/messagesV4'
-import { copyShareText, getLineShareUrl, getXShareUrl, shareResult } from '../utils/share'
+import { captureResultCardPng, downloadPngBlob } from '../utils/shareImage'
+import { copyShareText, shareResultWithImage } from '../utils/share'
 import { sfx } from '../utils/sound'
 import type { FinalResultV4 } from '../types'
 
@@ -11,10 +12,15 @@ interface Props {
   onRetry: () => void
 }
 
-const canNativeShare = typeof navigator !== 'undefined' && Boolean((navigator as Navigator & { share?: unknown }).share)
+const TOAST_MS = 3200
 
 export function ResultScreen({ result, onRetry }: Props) {
+  const cardRef = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState(false)
+  const [imageBusy, setImageBusy] = useState(false)
+  const [saveBusy, setSaveBusy] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Ver.5.0追加(TASK C-12): 200%結果画面へ切り替わった瞬間、完全無音にせず
   // bell/sparkle/victory chordのごく控えめな余韻を一度だけ残す。
@@ -25,10 +31,61 @@ export function ResultScreen({ result, onRetry }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleNativeShare = () => {
-    void shareResult(result.percent, result.type.name, result.finalTrial)
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    }
+  }, [])
+
+  function showToast(message: string) {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    setToast(message)
+    toastTimerRef.current = setTimeout(() => setToast(null), TOAST_MS)
   }
 
+  /**
+   * Ver.5.0追加: 「画像付きでシェア」。結果カードDOMをそのままPNG化し、
+   * Web Share API（ファイル共有対応環境）→テキスト＋URLのみの通常共有→
+   * クリップボードコピー＋画像ダウンロードの順でフォールバックする
+   * （share.tsのshareResultWithImage()に集約。詳細はそちらのコメント参照）。
+   * ユーザー自身が共有シートをキャンセルした場合（AbortError）はトーストを出さない。
+   */
+  async function handleShareImage() {
+    if (!cardRef.current || imageBusy) return
+    setImageBusy(true)
+    try {
+      const blob = await captureResultCardPng(cardRef.current)
+      const outcome = await shareResultWithImage(blob, result.percent, result.type.name, result.finalTrial)
+      if (outcome === 'fallback-copied') {
+        showToast('画像付き共有に非対応の環境のため、画像を保存し共有文をコピーしました')
+      } else if (outcome === 'shared-text-only') {
+        showToast('この環境では画像を共有できないため、文章のみ共有しました（画像は「画像を保存」からどうぞ）')
+      }
+    } catch (e) {
+      if ((e as Error)?.name !== 'AbortError') {
+        showToast('共有に失敗しました。もう一度お試しください。')
+      }
+    } finally {
+      setImageBusy(false)
+    }
+  }
+
+  /** Ver.5.0追加: 「画像を保存」。共有せず、結果カードのPNGだけを端末へ保存する。 */
+  async function handleSaveImage() {
+    if (!cardRef.current || saveBusy) return
+    setSaveBusy(true)
+    try {
+      const blob = await captureResultCardPng(cardRef.current)
+      downloadPngBlob(blob)
+      showToast('画像を保存しました')
+    } catch {
+      showToast('画像の保存に失敗しました。もう一度お試しください。')
+    } finally {
+      setSaveBusy(false)
+    }
+  }
+
+  /** 「結果をコピー」は従来通り画像を含めず、共有文＋URLのテキストのみコピーする。 */
   const handleCopy = async () => {
     const ok = await copyShareText(result.percent, result.type.name, result.finalTrial)
     setCopied(ok)
@@ -43,7 +100,7 @@ export function ResultScreen({ result, onRetry }: Props) {
         </p>
       )}
 
-      <ResultCard result={result} />
+      <ResultCard ref={cardRef} result={result} />
 
       {!result.isFirstPlay && (
         <div className="w-full max-w-xs space-y-1 rounded-2xl bg-white/5 px-4 py-3 text-sm">
@@ -59,36 +116,24 @@ export function ResultScreen({ result, onRetry }: Props) {
       )}
 
       <div className="w-full max-w-xs space-y-2">
-        {canNativeShare ? (
-          <button onClick={handleNativeShare} className="w-full rounded-2xl bg-white/10 py-3.5 text-sm font-bold text-white">
-            結果をシェアする
-          </button>
-        ) : (
-          <div className="flex gap-2">
-            <a
-              href={getXShareUrl(result.percent, result.type.name, result.finalTrial)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl bg-white/10 py-3.5 text-center text-sm font-bold text-white"
-            >
-              <svg className="h-3.5 w-3.5 fill-white" viewBox="0 0 19 19" aria-hidden="true">
-                <use href="/icons.svg#x-icon" />
-              </svg>
-              Xでシェア
-            </a>
-            <a
-              href={getLineShareUrl(result.percent, result.type.name, result.finalTrial)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 rounded-2xl bg-white/10 py-3.5 text-center text-sm font-bold text-white"
-            >
-              LINEでシェア
-            </a>
-          </div>
-        )}
-        <button onClick={handleCopy} className="w-full rounded-2xl bg-white/5 py-2.5 text-xs font-bold text-white/60">
-          {copied ? 'コピーしました！' : '結果テキストをコピー'}
+        <button
+          onClick={handleShareImage}
+          disabled={imageBusy}
+          className="w-full rounded-2xl bg-white py-3.5 text-sm font-black text-[#1c1033] transition-transform active:scale-[0.98] disabled:opacity-60"
+        >
+          {imageBusy ? '画像を生成中…' : '🖼️ 画像付きでシェア'}
         </button>
+        <button
+          onClick={handleSaveImage}
+          disabled={saveBusy}
+          className="w-full rounded-2xl bg-white/10 py-3 text-sm font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-60"
+        >
+          {saveBusy ? '画像を生成中…' : '画像を保存'}
+        </button>
+        <button onClick={handleCopy} className="w-full rounded-2xl bg-white/5 py-2.5 text-xs font-bold text-white/60">
+          {copied ? 'コピーしました！' : '結果をコピー'}
+        </button>
+        {toast && <p className="anim-pop text-center text-xs font-bold text-amber-200/90">{toast}</p>}
       </div>
 
       <button

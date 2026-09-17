@@ -1,3 +1,4 @@
+import { forwardRef } from 'react'
 import type { FinalResultV4 } from '../types'
 import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
 
@@ -40,7 +41,12 @@ const MAX_CARD_COINS = [
   { x: 88, y: 60 },
 ]
 
-export function ResultCard({ result }: Props) {
+/**
+ * Ver.5.0追加: 結果画面の「画像付きでシェア」「画像を保存」がPNG化する対象ノードを
+ * 参照できるよう、外側のラッパーdiv（isMax時は虹色プレミアムボーダーごと）にrefを転送する。
+ * 見た目・ロジックはforwardRef化以外一切変更していない。
+ */
+export const ResultCard = forwardRef<HTMLDivElement, Props>(function ResultCard({ result }, ref) {
   const isOverdrive = result.percent > 100
   // Ver.5.0: 「PERFECT CLEAR」「完全攻略」は200%（FINAL QUESTION正解）だけの専用表現。
   // 120%はもはやFINAL DOPA TRIALへの入口に過ぎないため、isMaxの基準をOVERDRIVE_CONFIG.maxPercent
@@ -164,11 +170,15 @@ export function ResultCard({ result }: Props) {
   // （カード自身はoverflow-hiddenのため、ボーダーの疑似要素は別のラッパーに付ける）。
   if (isMax) {
     return (
-      <div className="rainbow-premium-border w-full max-w-xs rounded-3xl p-[3px]">
+      <div ref={ref} className="rainbow-premium-border w-full max-w-xs rounded-3xl p-[3px]">
         {card}
       </div>
     )
   }
 
-  return <div className="w-full max-w-xs">{card}</div>
-}
+  return (
+    <div ref={ref} className="w-full max-w-xs">
+      {card}
+    </div>
+  )
+})
