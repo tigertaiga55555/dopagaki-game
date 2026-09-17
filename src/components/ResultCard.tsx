@@ -40,6 +40,21 @@ const MAX_CARD_COINS = [
   { x: 88, y: 60 },
 ]
 
+/**
+ * Ver.5.0追加修正: カード下部の一言CTAは、isMax/isFinalTrialのような表示上の分岐ではなく、
+ * result.percentだけを唯一の判定材料にする（ライブ画面・共有PNG・画像保存はすべて同じ
+ * ResultCardをレンダーしているため、この関数を1箇所に置くだけで3経路が自動的に一致する）。
+ * 以前はisMax/isFinalTrialで分岐しており、「finalTrialへ突入する前のOVERDRIVE（100〜119%）」が
+ * どちらの分岐にも該当せず、進行と矛盾する固定文言「100％いける？」が表示される不具合があった。
+ */
+function getBottomStatusLine(percent: number): string {
+  if (percent >= FINAL_TRIAL_CONFIG.clearPercent) return '完全攻略。'
+  if (percent === FINAL_TRIAL_CONFIG.clearPercent - FINAL_TRIAL_CONFIG.percentPerCorrect) return 'あと1問。200％いける？'
+  if (percent >= FINAL_TRIAL_CONFIG.startPercent) return '200％まで行ける？'
+  if (percent >= 100) return 'FINALまで辿り着ける？'
+  return '100％いける？'
+}
+
 export function ResultCard({ result }: Props) {
   const isOverdrive = result.percent > 100
   // Ver.5.0: 「PERFECT CLEAR」「完全攻略」は200%（FINAL QUESTION正解）だけの専用表現。
@@ -154,9 +169,7 @@ export function ResultCard({ result }: Props) {
 
       <p className="mt-4 whitespace-pre-line text-center text-sm font-bold text-white/70">「{result.comment}」</p>
 
-      <p className="mt-5 text-center text-[11px] font-bold text-white/40">
-        {isMax ? '完全ノーミスでの完全攻略。' : isFinalTrial ? 'FINAL DOPA TRIALで力尽きた。' : '100％いける？'}
-      </p>
+      <p className="mt-5 text-center text-[11px] font-bold text-white/40">{getBottomStatusLine(result.percent)}</p>
     </div>
   )
 

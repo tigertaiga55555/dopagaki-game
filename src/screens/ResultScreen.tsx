@@ -155,9 +155,20 @@ export function ResultScreen({ result, onRetry }: Props) {
         キャプチャできないため）。pointer-events:noneでユーザー操作の対象にもならない。
         widthは端末幅に関わらず常に320px固定（実画面のようにpx-6の余白と競合しない
         独立した領域のため、意図した完成サイズでそのまま書き出せる）。
+
+        Ver.5.0追加修正: paddingは32→140pxへ拡大した。ResultCardのbox-shadow
+        グロー（isMax=110pxブラー、OVERDRIVE=60pxブラー、通常=下方向40pxブラー＋
+        20pxオフセット）は要素自身のborder boxの外側へ描画されるが、旧padding=32では
+        いずれのブラー半径よりも小さく、キャプチャ矩形の端でグローが完全にフェード
+        しきる前に切り取られていた（実機で「金色の縁が中途半端にはみ出て見える」
+        「途中で切れたgold border」として報告）。全バリアント中最大のisMaxの
+        ブラー半径110pxに十分な余裕（+約30px）を持たせた140pxへ統一することで、
+        どのスコア帯でもグローがキャプチャ矩形内で完全に減衰してから端に達するようにし、
+        非対称な切れ目が出ないようにした（ライブ画面側のResultCard自体・box-shadow値は
+        一切変更していない。影響はこのoffscreen capture用ラッパーのpaddingのみ）。
       */}
       <div aria-hidden="true" style={{ position: 'fixed', top: 0, left: -9999, pointerEvents: 'none' }}>
-        <div ref={cardRef} style={{ width: 320, padding: 32, backgroundColor: '#0b0620', boxSizing: 'content-box' }}>
+        <div ref={cardRef} style={{ width: 320, padding: 140, backgroundColor: '#0b0620', boxSizing: 'content-box' }}>
           <ResultCard result={result} />
         </div>
       </div>
