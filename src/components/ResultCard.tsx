@@ -152,7 +152,7 @@ export function ResultCard({ result }: Props) {
         </div>
       )}
 
-      <p className="mt-4 text-center text-sm font-bold text-white/70">「{result.comment}」</p>
+      <p className="mt-4 whitespace-pre-line text-center text-sm font-bold text-white/70">「{result.comment}」</p>
 
       <p className="mt-5 text-center text-[11px] font-bold text-white/40">
         {isMax ? '完全ノーミスでの完全攻略。' : isFinalTrial ? 'FINAL DOPA TRIALで力尽きた。' : '100％いける？'}

@@ -160,7 +160,7 @@ function buildCrimeRecords(stats: PlayStats): string[] {
 function buildComment(percent: number): string {
   const nearMiss = getNearMissComment(percent)
   if (nearMiss) return nearMiss
-  if (percent > 100) return '見てはいけないものを見た気がする。'
+  if (percent > 100) return '見てはいけないものを\n見た気がする。'
   if (percent >= 100) return '本当に100％とった……？'
   if (percent >= 90) return 'かなり刺激に強い。'
   if (percent >= 75) return 'なかなかのドパガキ度。'
@@ -168,11 +168,16 @@ function buildComment(percent: number): string {
   return 'まだ本気を出していないはず。'
 }
 
-/** Ver.5.0: FINAL DOPA TRIAL専用のコメント。120は「途中失敗」ではなく「これから挑む」トリガー値のため、trialsCleared=0（Q1で即MISS）でも「挑んだ」ことを称える文にする。 */
+/**
+ * Ver.5.0: FINAL DOPA TRIAL専用のコメント。120は「途中失敗」ではなく「これから挑む」トリガー値のため、trialsCleared=0（Q1で即MISS）でも「挑んだ」ことを称える文にする。
+ * 結果画面追加修正: ResultCard側でwhitespace-pre-lineを効かせているため、CSSの機械的な
+ * 自動折返し任せにせず、助詞・句読点が行頭に来ない・括弧が単独行にならない自然な位置へ
+ * 改行を明示的に埋め込む（実機390px幅で確認済み）。
+ */
 function buildFinalTrialComment(trialsCleared: number, cleared200: boolean): string {
-  if (cleared200) return '一度もミスなく、完全にゲームを攻略した。'
-  if (trialsCleared === 0) return 'FINAL DOPA TRIALの扉を開けた、その先で力尽きた。'
-  return `FINAL DOPA TRIAL ${trialsCleared} / 16 まで到達し、そこで力尽きた。`
+  if (cleared200) return '一度もミスなく、\n完全にゲームを攻略した。'
+  if (trialsCleared === 0) return 'FINAL DOPA TRIALの\n扉を開けた、\nその先で力尽きた。'
+  return `FINAL DOPA TRIAL\n${trialsCleared} / 16 まで到達し、\nそこで力尽きた。`
 }
 
 export function computeFinalResult(payload: RushFinishPayload): FinalResultV4 {

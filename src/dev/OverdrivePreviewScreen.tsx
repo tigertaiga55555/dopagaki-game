@@ -48,7 +48,7 @@ function buildPreviewResult(): FinalResultV4 {
     rawPercent: finalPercent,
     overdriveActive: true,
     type: getOverdriveTitle(finalPercent),
-    comment: '見てはいけないものを見た気がする。',
+    comment: '見てはいけないものを\n見た気がする。',
     crimeRecords: ['（プレビュー用のダミーデータです）'],
     maxCombo: 24,
     fastestReactionMs: 210,
