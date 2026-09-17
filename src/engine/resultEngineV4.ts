@@ -113,7 +113,13 @@ function buildCrimeRecords(stats: PlayStats): string[] {
     candidates.push({ text: `最大COMBO ${stats.maxCombo}`, weight: 20 + stats.maxCombo })
   }
   if (stats.earlyPressCount > 0) {
-    candidates.push({ text: `GOやSKIPを待てずに${stats.earlyPressCount}回フライングしました`, weight: 55 + stats.earlyPressCount * 6 })
+    // 結果画像追加修正: 「GOやSKIPを待てずに1回フライングしました」がSNS共有画像の実寸幅で
+    // 「...フライングしまし」「た」のように単語の途中で不自然に折り返されていたため、
+    // 「回」の直後（回数の桁数に依存しない自然な区切り）へ明示改行を入れる。
+    candidates.push({
+      text: `GOやSKIPを待てずに${stats.earlyPressCount}回\nフライングしました`,
+      weight: 55 + stats.earlyPressCount * 6,
+    })
   }
   if (stats.overPressCount > 0) {
     candidates.push({ text: `指定回数を${stats.overPressCount}回オーバーして押しました`, weight: 50 + stats.overPressCount * 5 })

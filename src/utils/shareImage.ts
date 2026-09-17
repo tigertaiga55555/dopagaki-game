@@ -14,12 +14,23 @@ import { toBlob } from 'html-to-image'
  * ResultCard自体はCSSアニメーション（回転する虹色ボーダーのみ）を除き静止した見た目のため、
  * キャプチャのタイミングによる崩れは基本的に発生しない（回転リングは連続的な円環グラデーション
  * のため、どの角度で止めても見た目が破綻することはない）。
+ *
+ * Ver.5.0追加修正: 実機で「角丸の外側に白い領域が見える」不具合を確認した。原因は
+ * ResultCardのbox-shadow（isMax時の3px白リング＋110px黄金グロー等）が要素自身の矩形の
+ * 外側にはみ出して描画されるため、captureする矩形（ResultScreen側で用意した
+ * ブリード用ラッパー、#0b0620で塗った余白込み）の端でその半透明グラデーションが
+ * 切り取られ、透明ピクセルとして残っていたこと（多くのSNS/OSの共有・保存パイプラインは
+ * 透明PNGを白背景に合成して表示するため「白い外周」に見える）。
+ * ここでは念のためbackgroundColorをアプリ本体と同じ#0b0620に明示指定し、
+ * 万一captureノード自体やその余白の外側に透過ピクセルが残っても、白ではなく
+ * アプリの背景色で塗りつぶされるようにしている（主な修正はResultScreen側の
+ * ブリードラッパーだが、これは二重の安全策）。
  */
 export async function captureResultCardPng(node: HTMLElement): Promise<Blob> {
   // SNS共有に耐える解像度にするため、devicePixelRatio任せにせず最低2倍・最大3倍を保証する
   // （デスクトップ等のdevicePixelRatio=1環境でぼやけた画像になるのを防ぐ）。
   const pixelRatio = typeof window !== 'undefined' ? Math.min(3, Math.max(2, window.devicePixelRatio || 1)) : 2
-  const blob = await toBlob(node, { pixelRatio, cacheBust: true })
+  const blob = await toBlob(node, { pixelRatio, cacheBust: true, backgroundColor: '#0b0620' })
   if (!blob) throw new Error('結果カード画像の生成に失敗しました')
   return blob
 }

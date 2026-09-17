@@ -3,10 +3,12 @@ import { pngBlobToFile, downloadPngBlob } from './shareImage'
 
 type FinalTrialShareInfo = { trialsCleared: number; cleared200: boolean } | undefined
 
+/**
+ * Ver.5.0追加修正: 共有URLは常にV4_SHARE_URL（本番URL）固定。window.location.hrefを
+ * 参照していた旧実装は、Preview（?preview=finalquestion等）から実行した場合にそのURLが
+ * そのまま共有されてしまう経路が存在したため、常に本番URLだけを返すよう変更した。
+ */
 export function getShareUrl(): string {
-  if (typeof window !== 'undefined' && window.location?.href) {
-    return window.location.href
-  }
   return V4_SHARE_URL
 }
 
