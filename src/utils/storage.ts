@@ -1,21 +1,27 @@
-const BEST_KEY = 'dopagaki:bestPoint'
-const PLAY_COUNT_KEY = 'dopagaki:playCount'
+const BEST_PERCENT_KEY = 'dopagaki:bestPercentV4'
+const PLAY_COUNT_KEY = 'dopagaki:playCountV4'
 
-export function getBestPoint(): number {
+function readNumber(key: string): number | null {
   try {
-    const raw = localStorage.getItem(BEST_KEY)
-    return raw ? Number(raw) || 0 : 0
+    const raw = localStorage.getItem(key)
+    if (raw === null) return null
+    const value = Number(raw)
+    return Number.isFinite(value) ? value : null
   } catch {
-    return 0
+    return null
   }
 }
 
+export function getBestPercent(): number {
+  return readNumber(BEST_PERCENT_KEY) ?? 0
+}
+
 /** 自己ベストを更新する。更新されたら true を返す */
-export function updateBestPoint(point: number): boolean {
+export function updateBestPercent(percent: number): boolean {
   try {
-    const current = getBestPoint()
-    if (point > current) {
-      localStorage.setItem(BEST_KEY, String(point))
+    const current = getBestPercent()
+    if (percent > current) {
+      localStorage.setItem(BEST_PERCENT_KEY, String(percent))
       return true
     }
     return false
@@ -25,12 +31,7 @@ export function updateBestPoint(point: number): boolean {
 }
 
 export function getPlayCount(): number {
-  try {
-    const raw = localStorage.getItem(PLAY_COUNT_KEY)
-    return raw ? Number(raw) || 0 : 0
-  } catch {
-    return 0
-  }
+  return readNumber(PLAY_COUNT_KEY) ?? 0
 }
 
 export function incrementPlayCount(): number {

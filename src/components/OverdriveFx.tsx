@@ -1,0 +1,287 @@
+import { MILESTONE_TEXT } from '../config/messagesV4'
+
+/**
+ * Ver.4.7: 黄金DOPA OVERDRIVE演出の共有プレゼンテーション層。
+ *
+ * 実ゲーム（PlayScreen）とVercel Preview確認画面（OverdrivePreviewScreen）の両方から
+ * 同じコンポーネントを使うことで、「Previewで見た演出」と「実際にOVERDRIVEが発動した時の
+ * 演出」がほぼ同じになるようにしている（見た目のロジックはここに一本化）。
+ *
+ * 通常ゲームのロジック・スコア計算・OVERDRIVE発動条件・正誤判定・問題制限時間には
+ * 一切関与しない、純粋な表示コンポーネント群。全要素にpointer-events-noneを設定し、
+ * お題の操作を妨げない。中央60〜70%程度の問題表示領域には常に何も描画しない
+ * （エッジ・背景・HUD周辺・外周にのみ演出を寄せる）。
+ */
+
+export type OverdriveTier = 0 | 1 | 2 | 3 | 4
+
+/** percent（100超えの実測値）からOVERDRIVE演出の段階を決める。101未満は非OVERDRIVE。 */
+export function getOverdriveTier(percent: number): OverdriveTier {
+  if (percent < 101) return 0
+  if (percent < 110) return 1
+  if (percent < 115) return 2
+  if (percent < 120) return 3
+  return 4
+}
+
+const TIER_SIREN_MS: Record<OverdriveTier, number> = { 0: 900, 1: 850, 2: 650, 3: 420, 4: 260 }
+const TIER_RING_MS: Record<OverdriveTier, number> = { 0: 1100, 1: 1100, 2: 900, 3: 650, 4: 420 }
+const TIER_PARTICLE_COUNT: Record<OverdriveTier, number> = { 0: 0, 1: 0, 2: 4, 3: 6, 4: 8 }
+
+/**
+ * 中央60〜70%程度の問題表示領域には絶対にかからないよう、パーティクルは画面端の
+ * 帯（左右それぞれ0〜15%・85〜100%）にのみ配置する（信号・色問題・通知色などの
+ * 視認性を守るため）。
+ */
+const AMBIENCE_PARTICLE_SLOTS = [
+  { x: 3, delay: 0 },
+  { x: 9, delay: 0.3 },
+  { x: 5, delay: 0.6 },
+  { x: 12, delay: 0.9 },
+  { x: 97, delay: 0.15 },
+  { x: 91, delay: 0.45 },
+  { x: 95, delay: 0.75 },
+  { x: 88, delay: 1.05 },
+]
+
+/** frameClass（PlayScreen/Previewの外枠divに足すbox-shadowクラス）。tier===0なら空文字。 */
+export function getOverdriveFrameClass(tier: OverdriveTier): string {
+  return tier > 0 ? 'overdrive-ring' : ''
+}
+
+/**
+ * 画面端の黄金サイレン（回転灯）＋外周の金色パーティクル。tier===0では何も描画しない。
+ * 中央の問題表示領域には触れない（画面端に固定した細い帯とパーティクルのみ）。
+ */
+export function OverdriveAmbience({ tier }: { tier: OverdriveTier }) {
+  if (tier === 0) return null
+  const sirenMs = TIER_SIREN_MS[tier]
+  const ringMs = TIER_RING_MS[tier]
+  const particleCount = TIER_PARTICLE_COUNT[tier]
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" style={{ ['--ring-ms' as string]: `${ringMs}ms` }}>
+      <div
+        className="golden-siren-bar absolute inset-y-0 left-0 w-5"
+        style={{ ['--siren-ms' as string]: `${sirenMs}ms`, animationDelay: '0ms' }}
+      />
+      <div
+        className="golden-siren-bar absolute inset-y-0 right-0 w-5"
+        style={{ ['--siren-ms' as string]: `${sirenMs}ms`, animationDelay: `${sirenMs / 2}ms` }}
+      />
+      {particleCount > 0 &&
+        AMBIENCE_PARTICLE_SLOTS.slice(0, particleCount).map((p, i) => (
+          <span
+            key={i}
+            className="anim-golden-particle absolute text-sm text-amber-300"
+            style={{ left: `${p.x}%`, bottom: '4%', animationDelay: `${p.delay}s` }}
+          >
+            ✦
+          </span>
+        ))}
+    </div>
+  )
+}
+
+/**
+ * 100%→101%突破の「上限を破壊した」演出。数字の震え（呼び出し側で anim-limit-shake を
+ * 独自の%表示に付与）に続けて、グリッチ＋暗転＋「LIMIT ERROR」を一瞬だけ表示する。
+ */
+export function LimitErrorOverlay({ show }: { show: boolean }) {
+  if (!show) return null
+  return (
+    <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80">
+      <div className="anim-glitch absolute inset-0 bg-amber-400" />
+      <p className="anim-pop relative text-3xl font-black tracking-[0.2em] text-red-400">LIMIT ERROR</p>
+    </div>
+  )
+}
+
+/**
+ * DOPA OVERDRIVE本体の到達演出。中央から金色衝撃波が広がる。
+ * Ver.4.9: showTimeBonus=trueのとき、同じ演出の中で「+10 SEC」も一緒に見せる
+ * （実ゲームでOVERDRIVE正式突入時に残り時間+10秒を加算するのはこの瞬間なので、
+ * 新しい演出ビートを追加せずゲームテンポを止めすぎないようにする）。
+ * Previewモードでは時間の概念がないためshowTimeBonusを渡さない＝falseのまま。
+ */
+export function OverdriveRevealOverlay({ show, showTimeBonus }: { show: boolean; showTimeBonus?: boolean }) {
+  if (!show) return null
+  return (
+    <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/85">
+      <div className="anim-golden-vignette absolute inset-0" />
+      <div className="anim-golden-shockwave absolute h-24 w-24 rounded-full" />
+      <div className="anim-glitch absolute inset-0 bg-amber-300" />
+      <p className="anim-pop relative text-4xl font-black tracking-widest text-amber-300 drop-shadow-[0_0_20px_rgba(250,204,21,0.8)]">
+        {MILESTONE_TEXT.overdrive}
+      </p>
+      {showTimeBonus && (
+        <p className="anim-pop relative mt-2 text-2xl font-black tracking-widest text-white drop-shadow-[0_0_14px_rgba(250,204,21,0.9)]">
+          +10 SEC
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * 黄金爆発の中央にpercentとtitleを表示する汎用CLEAR演出オーバーレイ。
+ * Ver.4.9〜4.11: もともとは120%到達＝「ゲームを完全攻略した」ことが一発で分かる専用演出として、
+ * 直前にWhiteFlashOverlay（白閃光）を挟んでから表示し、RainbowShockwaveOverlay／
+ * Confetti120Overlay／Sparkle120Overlayと合わせて「黄金+白+虹の超強力な爆発」を作っていた
+ * （このコンポーネント自体は中央のテキスト＋黄金爆発のみを担当し、虹・紙吹雪・sparkleは
+ * それぞれ専用コンポーネントに分離して合成する、という構造は変わらない）。
+ *
+ * Ver.5.0: 「PERFECT CLEAR!!」「完全攻略」の文言は200%（真のPERFECT CLEAR）専用に
+ * 予約されたため、showPerfectClearWording（既定false）で明示的にオプトインした
+ * 呼び出し元だけがこの文言を表示できるようにした。120%はもはやゲームのCLEARではなく
+ * FINAL DOPA TRIALの入口に過ぎないため、この文言を出してはならない
+ * （?preview=overdriveのクライマックスは119%止まりでこのオプトインをしない）。
+ */
+export function GoldenClearOverlay({
+  show,
+  percent,
+  title,
+  showPerfectClearWording = false,
+  revealStage = 'full',
+}: {
+  show: boolean
+  percent: number
+  title: string
+  showPerfectClearWording?: boolean
+  /**
+   * Ver.5.0追加修正(TASK D-7/D-8): 200%専用ファンファーレの拍に同期して文字を段階的に
+   * 出すためのステージ。'percent'→'perfectClear'→'title'→'full'の順で1つずつ増える
+   * （一度出た行は消えない）。showPerfectClearWording=falseの通常呼び出し（他画面）には
+   * 影響しない（従来通りtitleのみ即時表示）。
+   */
+  revealStage?: 'percent' | 'perfectClear' | 'title' | 'full'
+}) {
+  if (!show) return null
+  const showPerfect = showPerfectClearWording && revealStage !== 'percent'
+  const showTitle = !showPerfectClearWording || revealStage === 'title' || revealStage === 'full'
+  const showKanji = showPerfectClearWording && revealStage === 'full'
+  return (
+    <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center gap-1 bg-black/90">
+      <div className="anim-golden-vignette absolute inset-0" />
+      <div className="anim-golden-shockwave absolute h-16 w-16 rounded-full" style={{ animationDuration: '1.1s' }} />
+      <div className="anim-golden-shockwave absolute h-16 w-16 rounded-full" style={{ animationDelay: '0.15s', animationDuration: '1.1s' }} />
+      <div className="anim-golden-shockwave absolute h-16 w-16 rounded-full" style={{ animationDelay: '0.3s', animationDuration: '1.1s' }} />
+      <div className="anim-gold-burst absolute h-72 w-72 rounded-full bg-amber-300 blur-3xl" />
+      <p className="relative text-5xl font-black tabular-nums leading-none text-amber-300 drop-shadow-[0_0_30px_rgba(250,204,21,0.9)]">
+        {percent}
+        <span className="text-2xl">%</span>
+      </p>
+      {showPerfectClearWording ? (
+        <>
+          {showPerfect && (
+            <p className="anim-pop relative px-4 text-center text-4xl font-black italic leading-tight text-white drop-shadow-[0_0_25px_rgba(250,204,21,1)]">
+              PERFECT CLEAR!!
+            </p>
+          )}
+          {showTitle && <p className="anim-pop relative mt-2 text-xl font-black tracking-widest text-amber-200">{title}</p>}
+          {showKanji && <p className="anim-pop relative text-sm font-bold tracking-widest text-white/70">完全攻略</p>}
+        </>
+      ) : (
+        showTitle && <p className="anim-pop relative mt-2 text-xl font-black tracking-widest text-amber-200">{title}</p>
+      )}
+    </div>
+  )
+}
+
+/** Ver.4.9: 120%CLEAR演出の冒頭で一瞬だけ焚く、黄金爆発をさらに強く見せるための白閃光。 */
+export function WhiteFlashOverlay({ show }: { show: boolean }) {
+  if (!show) return null
+  return <div className="flash-white-overlay pointer-events-none absolute inset-0 z-50 bg-white" />
+}
+
+/**
+ * Ver.4.11: 120%到達の瞬間だけ、黄金世界が虹色に割れる2〜3本のリング。常時虹色背景には
+ * せず、あくまで「その瞬間だけ」の演出として中央から外へ広がる（Golden120Overlayと重ねて使う）。
+ * 1本ずつ別の色相の正円リングにすることで、3本まとめて見たときに虹色の印象を作る
+ * （border-imageはborder-radiusを無視して四角くなってしまうため使わない）。
+ */
+const RAINBOW_RING_COLORS = ['#ff5757', '#5cc8ff', '#7dfcae']
+
+export function RainbowShockwaveOverlay({ show }: { show: boolean }) {
+  if (!show) return null
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[51] flex items-center justify-center">
+      {RAINBOW_RING_COLORS.map((color, i) => (
+        <div
+          key={color}
+          className="anim-rainbow-shockwave absolute h-20 w-20"
+          style={{ animationDelay: `${i * 0.18}s`, ['--rainbow-color' as string]: color }}
+        />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Ver.4.11: 120%限定の紙吹雪（黄金・白・虹）。中央のPERFECT CLEAR文字を隠さないよう、
+ * 上部・左右外周にのみ配置し、中央60%の帯には一切かからないようにする。pointer-events-none。
+ */
+const CONFETTI_COLORS = ['#facc15', '#ffffff', '#ff5757', '#7dfcae', '#5cc8ff', '#b98bff', '#ffb347']
+const CONFETTI_SLOTS = [
+  { x: 4, delay: 0 },
+  { x: 12, delay: 0.3 },
+  { x: 20, delay: 0.1 },
+  { x: 80, delay: 0.2 },
+  { x: 88, delay: 0 },
+  { x: 96, delay: 0.35 },
+  { x: 2, delay: 0.5 },
+  { x: 98, delay: 0.5 },
+  { x: 16, delay: 0.6 },
+  { x: 84, delay: 0.6 },
+]
+
+export function Confetti120Overlay({ show }: { show: boolean }) {
+  if (!show) return null
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[52] overflow-hidden">
+      {CONFETTI_SLOTS.map((slot, i) => (
+        <span
+          key={i}
+          className="anim-confetti absolute top-0 h-2.5 w-1.5 rounded-sm"
+          style={{
+            left: `${slot.x}%`,
+            animationDelay: `${slot.delay}s`,
+            backgroundColor: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Ver.4.11: CLEAR直後に増え、徐々に減衰していく星／sparkle／虹色光点。confettiと同様、
+ * 外周・四隅寄りに配置して中央の文字と重ならないようにする。
+ */
+const SPARKLE_SLOTS = [
+  { x: 8, y: 15, delay: 0, glyph: '✦', color: '#facc15' },
+  { x: 92, y: 18, delay: 0.1, glyph: '✧', color: '#ffffff' },
+  { x: 6, y: 55, delay: 0.25, glyph: '✦', color: '#5cc8ff' },
+  { x: 94, y: 58, delay: 0.15, glyph: '✦', color: '#ff5757' },
+  { x: 14, y: 82, delay: 0.4, glyph: '✧', color: '#7dfcae' },
+  { x: 86, y: 84, delay: 0.3, glyph: '✦', color: '#b98bff' },
+  { x: 50, y: 8, delay: 0.2, glyph: '✧', color: '#facc15' },
+  { x: 50, y: 92, delay: 0.45, glyph: '✦', color: '#ffffff' },
+]
+
+export function Sparkle120Overlay({ show }: { show: boolean }) {
+  if (!show) return null
+  return (
+    <div className="pointer-events-none absolute inset-0 z-[52]">
+      {SPARKLE_SLOTS.map((s, i) => (
+        <span
+          key={i}
+          className="anim-sparkle-pop absolute text-2xl"
+          style={{ left: `${s.x}%`, top: `${s.y}%`, animationDelay: `${s.delay}s`, color: s.color }}
+        >
+          {s.glyph}
+        </span>
+      ))}
+    </div>
+  )
+}

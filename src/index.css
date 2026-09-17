@@ -95,6 +95,40 @@ body {
   }
 }
 
+/* Ver.4.4: 大きいCOMBOを切った瞬間の「怯み」演出（画面が一瞬暗転する） */
+@keyframes flash-dark {
+  0% {
+    background-color: rgba(0, 0, 0, 0);
+  }
+  30% {
+    background-color: rgba(0, 0, 0, 0.75);
+  }
+  100% {
+    background-color: rgba(0, 0, 0, 0);
+  }
+}
+
+.flash-dark-overlay {
+  animation: flash-dark 0.22s ease-out;
+}
+
+/* Ver.4.9: 120%到達＝完全攻略CLEARの最大クライマックス冒頭で焚く、黄金+白の閃光 */
+@keyframes flash-white {
+  0% {
+    background-color: rgba(255, 255, 255, 0);
+  }
+  35% {
+    background-color: rgba(255, 255, 255, 0.95);
+  }
+  100% {
+    background-color: rgba(255, 255, 255, 0);
+  }
+}
+
+.flash-white-overlay {
+  animation: flash-white 0.3s ease-out;
+}
+
 @keyframes pop-in {
   0% {
     opacity: 0;
@@ -118,6 +152,10 @@ body {
 
 .anim-shake {
   animation: shake 0.5s ease-in-out;
+}
+
+.anim-shake-fast {
+  animation: shake 0.25s ease-in-out;
 }
 
 .anim-spike {
@@ -148,3 +186,550 @@ body {
 .bg-blob {
   animation: float-bg 10s ease-in-out infinite;
 }
+
+@keyframes popup-float {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.9);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0) scale(1.05);
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(-18px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-30px) scale(1);
+  }
+}
+
+.anim-popup-float {
+  animation: popup-float 0.9s ease-out forwards;
+}
+
+/* ==== Ver.4: ラッシュゲーム用の演出 ==== */
+
+@keyframes final-blink {
+  0%,
+  100% {
+    opacity: 0.12;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.anim-final-blink {
+  animation: final-blink 1s ease-in-out infinite;
+}
+
+@keyframes gold-burst {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  25% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+.anim-gold-burst {
+  animation: gold-burst 0.65s ease-out forwards;
+}
+
+@keyframes glitch-flash {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  10%,
+  30%,
+  50% {
+    opacity: 0.8;
+  }
+  20%,
+  40% {
+    opacity: 0;
+  }
+}
+
+.anim-glitch {
+  animation: glitch-flash 0.5s steps(2) forwards;
+}
+
+@keyframes judgement-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+.anim-judgement {
+  animation: judgement-pop 0.5s ease-out forwards;
+}
+
+@keyframes particle-drift {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-120px) scale(0.4);
+    opacity: 0;
+  }
+}
+
+.anim-particle {
+  animation: particle-drift 1.6s ease-out infinite;
+}
+
+.glow-frame {
+  box-shadow: 0 0 40px rgba(217, 70, 239, 0.35);
+}
+
+.neon-frame {
+  box-shadow:
+    0 0 30px rgba(217, 70, 239, 0.5),
+    0 0 60px rgba(56, 189, 248, 0.25);
+}
+
+.gold-frame {
+  box-shadow:
+    0 0 45px rgba(250, 204, 21, 0.45),
+    0 0 90px rgba(217, 70, 239, 0.3);
+}
+
+.intense-frame {
+  box-shadow:
+    0 0 55px rgba(250, 204, 21, 0.6),
+    0 0 110px rgba(236, 72, 153, 0.5);
+}
+
+/* Ver.4.5: 信号連打。色の切り替え自体を文章より強く見せるための発光とパルス */
+@keyframes signal-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.signal-pulse {
+  animation: signal-pulse 0.5s ease-in-out infinite;
+}
+
+.signal-green-glow {
+  box-shadow:
+    0 0 30px rgba(16, 185, 129, 0.85),
+    0 0 60px rgba(16, 185, 129, 0.45);
+}
+
+.signal-red-glow {
+  box-shadow:
+    0 0 35px rgba(239, 68, 68, 0.95),
+    0 0 70px rgba(239, 68, 68, 0.55);
+}
+
+/* ==== Ver.4.7: 黄金DOPA OVERDRIVE演出（FINALの赤サイレンとは明確に別物にする） ==== */
+
+@keyframes golden-siren-sweep {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scaleY(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+.golden-siren-bar {
+  animation: golden-siren-sweep var(--siren-ms, 900ms) ease-in-out infinite;
+  background: linear-gradient(180deg, rgba(250, 204, 21, 0) 0%, rgba(250, 204, 21, 0.9) 50%, rgba(250, 204, 21, 0) 100%);
+}
+
+@keyframes golden-ring-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 40px rgba(250, 204, 21, 0.35),
+      0 0 80px rgba(250, 204, 21, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 70px rgba(250, 204, 21, 0.75),
+      0 0 130px rgba(250, 204, 21, 0.4);
+  }
+}
+
+.overdrive-ring {
+  animation: golden-ring-pulse var(--ring-ms, 1100ms) ease-in-out infinite;
+}
+
+@keyframes golden-shockwave {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+    border-width: 10px;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.4);
+    border-width: 1px;
+  }
+}
+
+.anim-golden-shockwave {
+  animation: golden-shockwave 0.8s ease-out forwards;
+  border-style: solid;
+  border-color: rgba(250, 204, 21, 0.9);
+  border-radius: 9999px;
+}
+
+@keyframes golden-vignette-flash {
+  0% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.anim-golden-vignette {
+  animation: golden-vignette-flash 0.5s ease-out forwards;
+  background: radial-gradient(ellipse at center, rgba(250, 204, 21, 0) 45%, rgba(250, 204, 21, 0.55) 100%);
+}
+
+@keyframes limit-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px) rotate(-1deg);
+  }
+  40% {
+    transform: translateX(4px) rotate(1deg);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+
+.anim-limit-shake {
+  animation: limit-shake 0.12s ease-in-out infinite;
+}
+
+@keyframes golden-particle-drift {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-140px) scale(0.3);
+    opacity: 0;
+  }
+}
+
+.anim-golden-particle {
+  animation: golden-particle-drift 1.3s ease-out infinite;
+}
+
+/* ==== Ver.4.11: 120% PERFECT CLEAR専用演出（119%までの黄金OVERDRIVEとは別格にする） ==== */
+
+/* 120%到達の瞬間だけ、黄金世界が虹色に割れるショックウェーブ（常時虹背景にはしない） */
+@keyframes rainbow-shockwave {
+  0% {
+    opacity: 0;
+    transform: scale(0.15);
+    border-width: 12px;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.8);
+    border-width: 1px;
+  }
+}
+
+.anim-rainbow-shockwave {
+  animation: rainbow-shockwave 1.1s ease-out forwards;
+  border-style: solid;
+  border-radius: 9999px;
+  /* border-imageはborder-radiusを無視して四角く描画されてしまうため使わない。
+     単色border（呼び出し側でring毎に別の色相を指定）＋border-radiusで、
+     3本それぞれが違う色の正円リングとして広がることで虹色の印象を作る。 */
+  border-color: var(--rainbow-color, #ff5757);
+}
+
+@keyframes rainbow-ring-spin {
+  0% {
+    filter: hue-rotate(0deg);
+  }
+  100% {
+    filter: hue-rotate(360deg);
+  }
+}
+
+/* カード等の縁を回る虹色プレミアムボーダー（静止画スクショでも虹のグラデーションが分かるように） */
+.rainbow-premium-border {
+  position: relative;
+}
+
+.rainbow-premium-border::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(from 0deg, #ff5757, #ffb347, #fff27a, #7dfcae, #5cc8ff, #b98bff, #ff5757);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: rainbow-ring-spin 4s linear infinite;
+  pointer-events: none;
+}
+
+/* 120%限定の紙吹雪。中央の文字を隠さないよう外周・上部・左右にのみ配置して使う */
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-10vh) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(60vh) rotate(340deg);
+    opacity: 0;
+  }
+}
+
+.anim-confetti {
+  animation: confetti-fall 2.6s ease-in forwards;
+}
+
+/* CLEAR直後に増え、徐々に減衰していくsparkle（星／きらめき／虹色光点） */
+@keyframes sparkle-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) rotate(0deg);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1.15) rotate(45deg);
+  }
+  70% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.5) rotate(90deg);
+  }
+}
+
+.anim-sparkle-pop {
+  animation: sparkle-pop 1.8s ease-out forwards;
+}
+
+/* 爆発の瞬間だけの軽い画面shake（Question subtreeのkeyには一切触れない、外枠divへの適用専用） */
+@keyframes climax-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-6px, 2px);
+  }
+  40% {
+    transform: translate(5px, -3px);
+  }
+  60% {
+    transform: translate(-4px, 3px);
+  }
+  80% {
+    transform: translate(3px, -2px);
+  }
+}
+
+.anim-climax-shake {
+  animation: climax-shake 0.18s ease-in-out;
+}
+
+/* Ver.5.0: 200% CLEAR等、超大型演出専用の強い画面shake（climax-shakeより振幅・時間ともに大きい）。
+   FINAL DOPA TRIAL中の出題エリアには絶対に適用しない（celebration系オーバーレイの外枠divのみ）。 */
+@keyframes climax-shake-strong {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  15% {
+    transform: translate(-12px, 5px);
+  }
+  30% {
+    transform: translate(10px, -7px);
+  }
+  45% {
+    transform: translate(-9px, 6px);
+  }
+  60% {
+    transform: translate(8px, -5px);
+  }
+  75% {
+    transform: translate(-5px, 3px);
+  }
+  90% {
+    transform: translate(3px, -2px);
+  }
+}
+
+.anim-climax-shake-strong {
+  animation: climax-shake-strong 0.4s ease-in-out;
+}
+
+/* Ver.5.0: 120%→FINAL DOPA TRIAL突入時の「黄金HUDにヒビが入る」演出。金色の細い亀裂線が
+   数回明滅してから消える。中央の問題表示領域を避け、画面全体を覆うオーバーレイとして使う。 */
+@keyframes hud-crack {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  10%,
+  30%,
+  50% {
+    opacity: 1;
+  }
+  20%,
+  40%,
+  60% {
+    opacity: 0.2;
+  }
+  70% {
+    opacity: 0;
+  }
+}
+
+.anim-hud-crack {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(105deg, transparent 42%, rgba(250, 204, 21, 0.9) 43%, transparent 44%),
+    linear-gradient(72deg, transparent 58%, rgba(250, 204, 21, 0.7) 59%, transparent 60%),
+    linear-gradient(130deg, transparent 21%, rgba(255, 255, 255, 0.8) 21.6%, transparent 22.2%);
+  animation: hud-crack 0.5s steps(3) forwards;
+}
+
+/* Ver.5.0: FINAL世界観の「プリズム／虹色エネルギー」を表す、ゆっくり色相が回転する
+   円環グロー。中心の問題表示領域には重ならない外周専用（pointer-events-none）。 */
+@keyframes prism-spin {
+  0% {
+    transform: rotate(0deg);
+    filter: hue-rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+    filter: hue-rotate(360deg);
+  }
+}
+
+.anim-prism-spin {
+  animation: prism-spin 3.2s linear infinite;
+}
+
+/* Ver.5.0: FINAL DOPA TRIAL失敗（TRIAL FAILED）演出用。黄金/虹の世界が一気に崩れ落ち、
+   暗く沈んでいく感触の暗転フェード。 */
+@keyframes prism-collapse {
+  0% {
+    opacity: 0;
+    filter: brightness(1.4) saturate(1.6);
+  }
+  40% {
+    opacity: 1;
+    filter: brightness(0.6) saturate(0.4);
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(0.3) saturate(0);
+  }
+}
+
+.anim-prism-collapse {
+  animation: prism-collapse 0.7s ease-in forwards;
+}
+
+/* Ver.5.0追加修正: Q16 ULTIMATE QUESTION専用の「赤＋黒＋非常警告」世界観。
+   通常=紫、OVERDRIVE=黄金、FINAL DOPA TRIAL(Q1-15)=黒＋白＋プリズムに対し、
+   ULTIMATEだけは独立した赤黒の緊急警告演出にする。中央の問題表示領域には
+   一切かからない外周のみのリングで、strongは突入演出中だけ、weakは問題本編中に使う。 */
+@keyframes warning-pulse-ring {
+  0%,
+  100% {
+    opacity: 0.35;
+    box-shadow: inset 0 0 60px 10px rgba(239, 68, 68, 0.55);
+  }
+  50% {
+    opacity: 0.9;
+    box-shadow: inset 0 0 110px 26px rgba(239, 68, 68, 0.85);
+  }
+}
+
+.anim-warning-pulse-strong {
+  animation: warning-pulse-ring 0.6s ease-in-out infinite;
+}
+
+.anim-warning-pulse-weak {
+  animation: warning-pulse-ring 1.6s ease-in-out infinite;
+  opacity: 0.45;
+}
+
+@keyframes warning-text-flicker {
+  0%,
+  18%,
+  22%,
+  62%,
+  66%,
+  100% {
+    opacity: 1;
+  }
+  20%,
+  64% {
+    opacity: 0.3;
+  }
+}
+
+.anim-warning-flicker {
+  animation: warning-text-flicker 0.9s steps(1) infinite;
+}
+
