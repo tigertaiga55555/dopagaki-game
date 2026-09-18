@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ResultCard } from '../components/ResultCard'
 import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
 import { getRetryLabel } from '../config/messagesV4'
+import { trackResultView, trackShareClick } from '../utils/analytics'
 import { captureResultCardPng, downloadPngBlob } from '../utils/shareImage'
 import { copyShareText, shareResultWithImage } from '../utils/share'
 import { sfx } from '../utils/sound'
@@ -30,6 +31,12 @@ export function ResultScreen({ result, onRetry }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Ver.5.0追加: GA4のresult_viewを結果画面表示のたびに一度だけ送信する。
+  useEffect(() => {
+    trackResultView(result.percent)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
@@ -51,6 +58,7 @@ export function ResultScreen({ result, onRetry }: Props) {
    */
   async function handleShareImage() {
     if (imageBusy) return
+    trackShareClick()
     setImageBusy(true)
     try {
       const blob = await captureResultCardPng(result)
