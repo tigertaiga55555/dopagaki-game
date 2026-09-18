@@ -63,7 +63,11 @@ export function ResultScreen({ result, onRetry }: Props) {
     try {
       const blob = await captureResultCardPng(result)
       const outcome = await shareResultWithImage(blob, result.percent, result.type.name, result.finalTrial)
-      if (outcome === 'fallback-copied') {
+      if (outcome === 'shared-with-image-ios') {
+        showToast('投稿文をコピーしました。必要ならXで貼り付けてください')
+      } else if (outcome === 'ios-share-failed-fallback') {
+        showToast('直接共有できなかったため、画像を保存して投稿文をコピーしました。')
+      } else if (outcome === 'fallback-copied') {
         showToast('画像付き共有に非対応の環境のため、画像を保存し共有文をコピーしました')
       } else if (outcome === 'shared-text-only') {
         showToast('この環境では画像を共有できないため、文章のみ共有しました（画像は「画像を保存」からどうぞ）')
