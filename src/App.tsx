@@ -10,6 +10,7 @@ import {
 import { PlayScreen } from './screens/PlayScreen'
 import { ResultScreen } from './screens/ResultScreen'
 import { TitleScreen } from './screens/TitleScreen'
+import { trackGameStart, trackReplayStart } from './utils/analytics'
 import { unlockAudio } from './utils/audioContext'
 import { sfx } from './utils/sound'
 import type { FinalResultV4, ScreenName } from './types'
@@ -29,11 +30,19 @@ export default function App() {
   const [showFinalQuestionPreview] = useState(isFinalQuestionPreviewRequested)
   const [showClear200Preview] = useState(isClear200PreviewRequested)
 
-  const startPlay = useCallback(() => {
+  /**
+   * Ver.5.0追加: GA4のgame_start（常に）とreplay_start（結果画面からのリトライ時のみ）を
+   * ここで送信する。sourceはこの関数の呼び出し元（タイトルのSTART / 結果画面のリトライ）を
+   * 区別するためだけの引数で、ゲームの開始処理自体（unlockAudio/sfx/画面遷移）は
+   * sourceに関わらず完全に同一。
+   */
+  const startPlay = useCallback((source: 'title' | 'retry') => {
     // iPhone SafariはAudioContextの生成/resumeをユーザー操作の同期コールバック内でしか許可しないため、
     // START/リトライの両方で使われるこのハンドラの中で必ず呼ぶ。
     unlockAudio()
     sfx.startPress()
+    trackGameStart()
+    if (source === 'retry') trackReplayStart()
     setPlayKey((k) => k + 1)
     setScreen('playing')
   }, [])
@@ -60,9 +69,9 @@ export default function App() {
         <FinalTrialPreviewScreen mode="clear200" />
       ) : (
         <>
-          {screen === 'title' && <TitleScreen onStart={startPlay} />}
+          {screen === 'title' && <TitleScreen onStart={() => startPlay('title')} />}
           {screen === 'playing' && <PlayScreen key={playKey} onFinish={handleFinish} />}
-          {screen === 'result' && result && <ResultScreen result={result} onRetry={startPlay} />}
+          {screen === 'result' && result && <ResultScreen result={result} onRetry={() => startPlay('retry')} />}
         </>
       )}
     </div>
