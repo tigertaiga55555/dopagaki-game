@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { pick, shuffle } from '../engine/random'
+import { colorSymbol, COLOR_SYMBOL_STYLE } from './colorSymbols'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
@@ -33,15 +34,17 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction={`${target.label}を押せ！`}>
+    <QuestionShell instruction={`${target.label}（${colorSymbol(target.id)}）を押せ！`}>
       <div className="grid grid-cols-2 gap-5">
         {options.map((c) => (
           <button
             key={c.id}
             onPointerDown={() => finish(c.id === target.id, performance.now() - startRef.current)}
-            className="h-20 w-20 rounded-full active:scale-90"
+            className="flex h-20 w-20 items-center justify-center rounded-full text-2xl active:scale-90"
             style={{ backgroundColor: c.hex }}
-          />
+          >
+            <span style={COLOR_SYMBOL_STYLE}>{colorSymbol(c.id)}</span>
+          </button>
         ))}
       </div>
     </QuestionShell>

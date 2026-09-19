@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { pick, pickExcluding, shuffle } from '../engine/random'
 import { sfx } from '../utils/sound'
+import { colorSymbol, COLOR_SYMBOL_STYLE } from './colorSymbols'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
@@ -54,17 +55,22 @@ function Component({ spec, onResult }: QuestionComponentProps) {
 
   return (
     <QuestionShell sub="文字の意味は無視する" instruction={'文字の色と同じ\n丸を押せ！'}>
-      <p className="text-6xl font-black" style={{ color: displayColor.hex }}>
+      <p className="flex items-center gap-2 text-6xl font-black" style={{ color: displayColor.hex }}>
         {word}
+        <span className="text-4xl" style={COLOR_SYMBOL_STYLE}>
+          {colorSymbol(displayColor.id)}
+        </span>
       </p>
       <div className="grid grid-cols-2 gap-4">
         {options.map((c) => (
           <button
             key={c.id}
             onPointerDown={() => finish(c.id === displayColor.id, c.id)}
-            className="h-16 w-16 rounded-full active:scale-90"
+            className="flex h-16 w-16 items-center justify-center rounded-full text-xl active:scale-90"
             style={{ backgroundColor: c.hex }}
-          />
+          >
+            <span style={COLOR_SYMBOL_STYLE}>{colorSymbol(c.id)}</span>
+          </button>
         ))}
       </div>
     </QuestionShell>

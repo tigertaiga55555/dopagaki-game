@@ -5,8 +5,11 @@ import { createResolveOnce } from '../engine/resolveOnce'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule, QuestionResult } from '../types'
 
-const ODD_DIGITS = [1, 3, 5, 7, 9]
-const EVEN_DIGITS = [0, 2, 4, 6, 8]
+const DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+// Ver.5.1修正: 偶数判定は原則 n % 2 === 0 とする（0は数学上必ず偶数）。
+// ハードコードの配列も、この判定式から導出することで判定ロジックとのズレを構造的に防ぐ。
+const ODD_DIGITS = DIGITS.filter((n) => n % 2 !== 0)
+const EVEN_DIGITS = DIGITS.filter((n) => n % 2 === 0)
 
 function pickDistinct(pool: number[], count: number): number[] {
   const shuffled = shuffle(pool)
@@ -17,6 +20,8 @@ function pickDistinct(pool: number[], count: number): number[] {
  * Ver.4.9で追加。「偶数を押せ！」：4つの一桁数字のうち、必ず1つだけ偶数になるよう
  * 生成する（奇数3つ+偶数1つを別々にランダム抽選してから混ぜる）。難しい計算は
  * 一切なく、瞬時に判断できる認知問題として使う。
+ * ODD_DIGITS/EVEN_DIGITSが完全に排反なため、選択肢内に正解となる偶数が複数存在する
+ * ことは構造的に起こり得ない（0を含め、偶数はこの1個だけ）。
  */
 function generate() {
   const odds = pickDistinct(ODD_DIGITS, 3)
@@ -30,7 +35,7 @@ function computeMinTargetTimeMs() {
 }
 
 function Component({ spec, onResult }: QuestionComponentProps) {
-  const { numbers, target } = spec.data as { numbers: number[]; target: number }
+  const { numbers } = spec.data as { numbers: number[] }
   const startRef = useRef(performance.now())
   const guardRef = useRef<ReturnType<typeof createResolveOnce<QuestionResult>> | null>(null)
   if (!guardRef.current) guardRef.current = createResolveOnce(onResult)
@@ -51,7 +56,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
         {numbers.map((n, i) => (
           <button
             key={i}
-            onPointerDown={() => finish(n === target)}
+            onPointerDown={() => finish(n % 2 === 0)}
             className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white/10 text-3xl font-black text-white active:scale-90"
           >
             {n}

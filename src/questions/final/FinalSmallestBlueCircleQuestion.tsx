@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { randInt, shuffle } from '../../engine/random'
+import { colorSymbol, COLOR_SYMBOL_STYLE } from '../colorSymbols'
 import { QuestionShell } from '../QuestionShell'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
@@ -11,9 +12,11 @@ const OTHER_COLORS = [
   { id: 'yellow', hex: '#eab308' },
 ] as const
 const BLUE_HEX = '#3b82f6'
+const BLUE_ID = 'blue'
 
 interface Circle {
   id: number
+  colorId: string
   hex: string
   size: number
 }
@@ -34,8 +37,8 @@ function generate() {
   const otherSizes = [trapSize, ...sizeList.slice(1 + blueCount)]
 
   const circles: Circle[] = [
-    ...others.map((c, i) => ({ id: i, hex: c.hex, size: otherSizes[i] })),
-    ...blueSizes.map((s, i) => ({ id: 2 + i, hex: BLUE_HEX, size: s })),
+    ...others.map((c, i) => ({ id: i, colorId: c.id, hex: c.hex, size: otherSizes[i] })),
+    ...blueSizes.map((s, i) => ({ id: 2 + i, colorId: BLUE_ID, hex: BLUE_HEX, size: s })),
   ]
   const target = Math.min(...blueSizes)
   return { circles: shuffle(circles), target }
@@ -62,11 +65,16 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction={'青い丸の中で\n一番小さいものを押せ！'}>
+    <QuestionShell instruction={`青（${colorSymbol(BLUE_ID)}）い丸の中で\n一番小さいものを押せ！`}>
       <div className="grid grid-cols-3 gap-3">
         {circles.map((c) => (
           <button key={c.id} onPointerDown={() => finish(c.size === target && c.hex === BLUE_HEX)} className="flex h-20 w-20 items-center justify-center active:scale-90">
-            <span className="rounded-full" style={{ width: c.size, height: c.size, backgroundColor: c.hex }} />
+            <span
+              className="flex items-center justify-center rounded-full"
+              style={{ width: c.size, height: c.size, backgroundColor: c.hex }}
+            >
+              <span style={{ ...COLOR_SYMBOL_STYLE, fontSize: Math.max(12, c.size * 0.45) }}>{colorSymbol(c.colorId)}</span>
+            </span>
           </button>
         ))}
       </div>

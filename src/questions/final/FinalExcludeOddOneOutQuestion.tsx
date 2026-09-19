@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { pickExcluding, randInt, shuffle } from '../../engine/random'
+import { colorSymbol, COLOR_SYMBOL_STYLE } from '../colorSymbols'
 import { QuestionShell } from '../QuestionShell'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
@@ -14,6 +15,7 @@ const COLORS = [
 
 interface Circle {
   id: number
+  colorId: string
   hex: string
 }
 
@@ -28,6 +30,7 @@ function generate() {
   const oddId = randInt(0, 4)
   const circles: Circle[] = Array.from({ length: 5 }, (_, i) => ({
     id: i,
+    colorId: i === oddId ? odd.id : main.id,
     hex: i === oddId ? odd.hex : main.hex,
   }))
   return { circles: shuffle(circles), oddId, requiredCount: 4 }
@@ -82,9 +85,11 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
           <button
             key={c.id}
             onPointerDown={() => handleTap(c)}
-            className="h-16 w-16 rounded-full transition-opacity active:scale-90"
+            className="flex h-16 w-16 items-center justify-center rounded-full text-lg transition-opacity active:scale-90"
             style={{ backgroundColor: c.hex, opacity: cleared.has(c.id) ? 0.15 : 1 }}
-          />
+          >
+            <span style={COLOR_SYMBOL_STYLE}>{colorSymbol(c.colorId)}</span>
+          </button>
         ))}
       </div>
     </QuestionShell>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { pickExcluding, randInt } from '../engine/random'
 import { sfx } from '../utils/sound'
+import { colorSymbol, COLOR_SYMBOL_STYLE } from './colorSymbols'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
@@ -18,8 +19,10 @@ const NON_GREEN_COLORS = [
   { id: 'yellow', hex: '#eab308' },
 ] as const
 const GREEN_HEX = '#22c55e'
+const GREEN_ID = 'green'
 
 interface Step {
+  id: string
   hex: string
   durationMs: number
 }
@@ -31,7 +34,7 @@ function generate() {
   for (let i = 0; i < stepCount; i++) {
     const color = pickExcluding(NON_GREEN_COLORS, prev)
     prev = color
-    steps.push({ hex: color.hex, durationMs: randInt(260, 420) })
+    steps.push({ id: color.id, hex: color.hex, durationMs: randInt(260, 420) })
   }
   const waitMs = steps.reduce((sum, s) => sum + s.durationMs, 0)
   return { steps, waitMs }
@@ -99,16 +102,19 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   const currentHex = isGreen ? GREEN_HEX : steps[stepIndex].hex
+  const currentColorId = isGreen ? GREEN_ID : steps[stepIndex].id
 
   return (
-    <QuestionShell instruction="緑で押せ！">
+    <QuestionShell instruction={`緑（${colorSymbol(GREEN_ID)}）で押せ！`}>
       <button
         onPointerDown={handlePress}
-        className={`h-32 w-32 rounded-full border-4 transition-colors duration-75 active:scale-95 ${
+        className={`flex h-32 w-32 items-center justify-center rounded-full border-4 text-4xl transition-colors duration-75 active:scale-95 ${
           isGreen ? 'signal-pulse signal-green-glow border-emerald-200' : 'border-white/20'
         }`}
         style={{ backgroundColor: currentHex }}
-      />
+      >
+        <span style={COLOR_SYMBOL_STYLE}>{colorSymbol(currentColorId)}</span>
+      </button>
     </QuestionShell>
   )
 }

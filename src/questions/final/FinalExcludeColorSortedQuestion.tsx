@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { pick, randInt, shuffle } from '../../engine/random'
+import { colorSymbol, COLOR_SYMBOL_STYLE } from '../colorSymbols'
 import { QuestionShell } from '../QuestionShell'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
@@ -97,16 +98,19 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction={`${excludeLabel}以外を\n小さい順に全て押せ！`}>
+    <QuestionShell instruction={`${excludeLabel}（${colorSymbol(excludeColorId)}）以外を\n小さい順に全て押せ！`}>
       <div className="grid grid-cols-3 gap-3">
         {items.map((it) => (
           <button
             key={it.id}
             onPointerDown={() => handleTap(it)}
-            className="flex h-16 w-16 items-center justify-center rounded-2xl text-2xl font-black text-white active:scale-90"
+            className="relative flex h-16 w-16 items-center justify-center rounded-2xl text-2xl font-black text-white active:scale-90"
             style={{ backgroundColor: `${it.hex}33` }}
           >
             {it.value}
+            <span className="absolute right-1 top-0.5 text-xs" style={COLOR_SYMBOL_STYLE}>
+              {colorSymbol(it.colorId)}
+            </span>
           </button>
         ))}
       </div>

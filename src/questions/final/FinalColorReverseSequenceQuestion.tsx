@@ -2,14 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { shuffle } from '../../engine/random'
+import { colorSymbol, COLOR_SYMBOL_STYLE } from '../colorSymbols'
 import { QuestionShell } from '../QuestionShell'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
 const COLORS = [
-  { id: 0, hex: '#ef4444' },
-  { id: 1, hex: '#3b82f6' },
-  { id: 2, hex: '#22c55e' },
-  { id: 3, hex: '#eab308' },
+  { id: 0, name: 'red', hex: '#ef4444' },
+  { id: 1, name: 'blue', hex: '#3b82f6' },
+  { id: 2, name: 'green', hex: '#22c55e' },
+  { id: 3, name: 'yellow', hex: '#eab308' },
 ] as const
 
 const LIGHT_STEP_MS = 550
@@ -92,9 +93,11 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
             key={c.id}
             onPointerDown={() => handleTap(c.id)}
             disabled={!revealDone}
-            className="h-20 w-20 rounded-2xl transition-opacity active:scale-90"
+            className="flex h-20 w-20 items-center justify-center rounded-2xl text-2xl transition-opacity active:scale-90"
             style={{ backgroundColor: c.hex, opacity: litIndex === c.id ? 1 : revealDone ? 1 : 0.25 }}
-          />
+          >
+            <span style={COLOR_SYMBOL_STYLE}>{colorSymbol(c.name)}</span>
+          </button>
         ))}
       </div>
     </QuestionShell>

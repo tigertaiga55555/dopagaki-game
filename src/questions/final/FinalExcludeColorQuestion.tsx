@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { pick, shuffle } from '../../engine/random'
+import { colorSymbol, COLOR_SYMBOL_STYLE } from '../colorSymbols'
 import { QuestionShell } from '../QuestionShell'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
@@ -85,15 +86,17 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction={`${targetLabel}以外を\n全て押せ！`}>
+    <QuestionShell instruction={`${targetLabel}（${colorSymbol(targetColorId)}）以外を\n全て押せ！`}>
       <div className="grid grid-cols-2 gap-4">
         {circles.map((c) => (
           <button
             key={c.id}
             onPointerDown={() => handleTap(c)}
-            className="h-20 w-20 rounded-full transition-opacity active:scale-90"
+            className="flex h-20 w-20 items-center justify-center rounded-full text-2xl transition-opacity active:scale-90"
             style={{ backgroundColor: c.hex, opacity: cleared.has(c.id) ? 0.15 : 1 }}
-          />
+          >
+            <span style={COLOR_SYMBOL_STYLE}>{colorSymbol(c.colorId)}</span>
+          </button>
         ))}
       </div>
     </QuestionShell>

@@ -2,15 +2,21 @@ import { useEffect, useRef, useState } from 'react'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { randInt, shuffle } from '../engine/random'
 import { sfx } from '../utils/sound'
+import { colorSymbol, COLOR_SYMBOL_STYLE } from './colorSymbols'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
-const OTHER_COLORS = ['#3b82f6', '#22c55e', '#a855f7']
+const OTHER_COLORS = [
+  { id: 'blue', hex: '#3b82f6' },
+  { id: 'green', hex: '#22c55e' },
+  { id: 'purple', hex: '#a855f7' },
+]
 
 interface Badge {
   id: number
   isTarget: boolean
   hex: string
+  colorId: string
 }
 
 /**
@@ -25,12 +31,11 @@ function generate() {
   const targetCount = randInt(3, 4)
   const distractorCount = randInt(2, 3)
   const badges: Badge[] = [
-    ...Array.from({ length: targetCount }, (_, i) => ({ id: i, isTarget: true, hex: '#ef4444' })),
-    ...Array.from({ length: distractorCount }, (_, i) => ({
-      id: targetCount + i,
-      isTarget: false,
-      hex: OTHER_COLORS[randInt(0, OTHER_COLORS.length - 1)],
-    })),
+    ...Array.from({ length: targetCount }, (_, i) => ({ id: i, isTarget: true, hex: '#ef4444', colorId: 'red' })),
+    ...Array.from({ length: distractorCount }, (_, i) => {
+      const color = OTHER_COLORS[randInt(0, OTHER_COLORS.length - 1)]
+      return { id: targetCount + i, isTarget: false, hex: color.hex, colorId: color.id }
+    }),
   ]
   return { badges: shuffle(badges), targetCount }
 }
@@ -90,15 +95,17 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction="赤い通知だけ消せ！">
+    <QuestionShell instruction={`赤（${colorSymbol('red')}）の通知だけ消せ！`}>
       <div className="grid grid-cols-3 gap-4">
         {badges.map((badge) => (
           <button
             key={badge.id}
             onPointerDown={() => handleTap(badge)}
-            className="flex h-16 w-16 items-center justify-center rounded-full transition-opacity active:scale-90"
+            className="flex h-16 w-16 items-center justify-center rounded-full text-lg transition-opacity active:scale-90"
             style={{ backgroundColor: badge.hex, opacity: cleared.has(badge.id) ? 0.15 : 1 }}
-          />
+          >
+            <span style={COLOR_SYMBOL_STYLE}>{colorSymbol(badge.colorId)}</span>
+          </button>
         ))}
       </div>
     </QuestionShell>
