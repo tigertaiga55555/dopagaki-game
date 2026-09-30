@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { randInt } from '../engine/random'
 import { sfx } from '../utils/sound'
@@ -31,6 +31,10 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   const rafRef = useRef<number | undefined>(undefined)
   const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stopChargeRef = useRef<(() => void) | null>(null)
+  /** 保持中の指（pointerId）を1本だけ覚えておく。マルチタッチで別の指が同じボタンに
+   *  触れてもhandleDownを無視し、handleRelease側も自分の指以外のup/cancelは無視することで、
+   *  誤操作でholdStartRefが上書きされたり、他指の指離しで正しい保持が中断されたりしないようにする。 */
+  const pointerIdRef = useRef<number | null>(null)
 
   useEffect(() => {
     failTimerRef.current = setTimeout(finishAsFailureUnlessComplete, spec.targetTimeMs)
@@ -46,6 +50,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   function finish(correct: boolean) {
     if (doneRef.current) return
     doneRef.current = true
+    pointerIdRef.current = null
     if (failTimerRef.current) clearTimeout(failTimerRef.current)
     if (stopChargeRef.current) {
       stopChargeRef.current()
@@ -71,8 +76,10 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     finish(false)
   }
 
-  function handleDown() {
-    if (doneRef.current) return
+  function handleDown(e: ReactPointerEvent<HTMLButtonElement>) {
+    if (doneRef.current || holdStartRef.current !== null) return
+    pointerIdRef.current = e.pointerId
+    e.currentTarget.setPointerCapture(e.pointerId)
     setHolding(true)
     holdStartRef.current = performance.now()
     stopChargeRef.current = sfx.startHoldCharge(requiredMs)
@@ -95,18 +102,30 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     rafRef.current = requestAnimationFrame(tick)
   }
 
-  function handleRelease() {
+  function handleRelease(e: ReactPointerEvent<HTMLButtonElement>) {
+    if (e.pointerId !== pointerIdRef.current) return
     if (holdStartRef.current === null) return
     finishAsFailureUnlessComplete()
   }
 
   return (
     <QuestionShell sub="離すと失敗" instruction={'指を離さず\n長押し！'}>
+      {/*
+        Ver.6準備で修正: 正しく長押ししているのにMISSになる不具合の根本原因は、
+        iPhone Safari/Xアプリ内ブラウザ等で「指がわずかに動いた」だけでブラウザが
+        スクロール等のジェスチャーと誤認し、pointerup前にpointercancelを発火させて
+        いたこと（onPointerCancelはhandleReleaseへ繋がっており、requiredMs未達の
+        pointercancelは従来そのままMISS扱いになっていた）。touch-action:noneで
+        このボタン上のブラウザ側ジェスチャー認識自体を無効化し、誤ったpointercancelが
+        発生しないようにする（タイムアウト調整等の対症療法ではなく、原因そのものを断つ）。
+        setPointerCaptureとpointerId比較は、複数指が同じボタンに触れた場合に
+        holdStartRefが上書きされたり他指の指離しで中断されたりしないための保険。
+      */}
       <button
         onPointerDown={handleDown}
         onPointerUp={handleRelease}
         onPointerCancel={handleRelease}
-        className="relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-white/70 active:scale-95"
+        className="relative flex h-28 w-28 touch-none items-center justify-center overflow-hidden rounded-full bg-white/10 text-sm font-bold text-white/70 select-none active:scale-95"
       >
         <span
           className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-fuchsia-500 to-purple-500"

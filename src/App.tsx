@@ -52,6 +52,18 @@ export default function App() {
     setScreen('result')
   }, [])
 
+  /**
+   * Ver.6準備: 画面右上の「やめる」ボタン用。onFinishを一切経由せずscreenを'title'へ
+   * 戻すだけなので、結果計算（computeFinalResult等）もスコア保存（incrementPlayCount/
+   * updateBestPercent、いずれもresultEngineV4.ts内でonFinish経由でのみ呼ばれる）も
+   * 一切発生しない。PlayScreen（useRushGame）・FinalTrialScreen（useFinalTrial）は
+   * このタイミングでアンマウントされ、両hookが既に持つuseEffectクリーンアップ
+   * （RAFキャンセル・タイマー全クリア・BGM停止）がそのまま働くため、追加の後片付けは不要。
+   */
+  const quitToHome = useCallback(() => {
+    setScreen('title')
+  }, [])
+
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-[430px] overflow-hidden bg-[#0b0620]">
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
@@ -70,7 +82,7 @@ export default function App() {
       ) : (
         <>
           {screen === 'title' && <TitleScreen onStart={() => startPlay('title')} />}
-          {screen === 'playing' && <PlayScreen key={playKey} onFinish={handleFinish} />}
+          {screen === 'playing' && <PlayScreen key={playKey} onFinish={handleFinish} onQuit={quitToHome} />}
           {screen === 'result' && result && <ResultScreen result={result} onRetry={() => startPlay('retry')} />}
         </>
       )}
