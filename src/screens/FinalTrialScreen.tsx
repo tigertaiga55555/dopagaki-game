@@ -13,6 +13,7 @@ import {
   WorldShatterOverlay,
 } from '../components/FinalFx'
 import { Confetti120Overlay, GoldenClearOverlay, RainbowShockwaveOverlay, Sparkle120Overlay, WhiteFlashOverlay } from '../components/OverdriveFx'
+import { QuitButton } from '../components/QuitButton'
 import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
 import { computeFinalTrialResult } from '../engine/resultEngineV4'
 import { finalSuccessIntensityFor, useFinalTrial } from '../engine/useFinalTrial'
@@ -25,6 +26,7 @@ import type { FinalResultV4, PlayStats } from '../types'
 interface Props {
   initialStats: PlayStats
   onFinish: (result: FinalResultV4) => void
+  onQuit: () => void
   /** Ver.5.0: 通常は1（Q1から開始）。Previewの?preview=finalquestion/clear200だけ16を渡し、
    *  ULTIMATE QUESTIONから直接プレビューできるようにする。 */
   startAtQuestion?: number
@@ -94,6 +96,7 @@ type FanfareRevealStage = 'percent' | 'perfectClear' | 'title' | 'full'
 export function FinalTrialScreen({
   initialStats,
   onFinish,
+  onQuit,
   startAtQuestion = 1,
   showForceCorrect = false,
   autoForceCorrectDelayMs,
@@ -346,6 +349,7 @@ export function FinalTrialScreen({
   if (!entryDone) {
     return (
       <div className="relative flex min-h-dvh flex-col items-center justify-center gap-2 overflow-hidden bg-black px-6 text-center">
+        <QuitButton onQuit={onQuit} />
         <FinalWorldAmbience />
         <HudCrackOverlay show={showCrack} />
         <WorldShatterOverlay show={showShatter} />
@@ -358,9 +362,12 @@ export function FinalTrialScreen({
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
+      <QuitButton onQuit={onQuit} />
       {showUltimateWorld ? <UltimateWorldAmbience /> : <FinalWorldAmbience />}
 
-      <div className="relative z-30 flex items-start justify-between px-5 pt-3 pb-1">
+      {/* Ver.6準備: pt-3→pt-11。右上の「×」ボタン用の帯をヘッダーの上に確保し、
+          TRIAL/スコア表示と幾何学的に重ならないようにする（QuitButton.tsxのコメント参照）。 */}
+      <div className="relative z-30 flex items-start justify-between px-5 pt-11 pb-1">
         <button onClick={toggleMute} className="text-lg opacity-70" aria-label="ミュート切り替え">
           {muted ? '🔇' : '🔊'}
         </button>

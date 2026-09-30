@@ -83,6 +83,7 @@ export function FinalTrialPreviewScreen({ mode }: { mode: FinalPreviewMode }) {
         showForceCorrect
         autoForceCorrectDelayMs={mode === 'clear200' ? 900 : undefined}
         onFinish={setResult}
+        onQuit={() => setPlayKey((k) => k + 1)}
       />
     </div>
   )

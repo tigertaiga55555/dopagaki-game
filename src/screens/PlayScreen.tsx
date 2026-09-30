@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { getOverdriveFrameClass, getOverdriveTier, LimitErrorOverlay, OverdriveAmbience, OverdriveRevealOverlay } from '../components/OverdriveFx'
+import { QuitButton } from '../components/QuitButton'
 import { getVisualLevelDef } from '../config/visualConfig'
 import { MILESTONE_TEXT } from '../config/messagesV4'
 import { computeFinalResult } from '../engine/resultEngineV4'
@@ -11,6 +12,7 @@ import type { FinalResultV4, PlayStats } from '../types'
 
 interface Props {
   onFinish: (result: FinalResultV4) => void
+  onQuit: () => void
 }
 
 const JUDGEMENT_COLOR: Record<string, string> = {
@@ -22,7 +24,7 @@ const JUDGEMENT_COLOR: Record<string, string> = {
 
 const PARTICLE_POSITIONS = Array.from({ length: 8 }).map((_, i) => ({ x: (i * 12.5) % 100, delay: i * 0.2 }))
 
-export function PlayScreen({ onFinish }: Props) {
+export function PlayScreen({ onFinish, onQuit }: Props) {
   const [finalEntryStats, setFinalEntryStats] = useState<PlayStats | null>(null)
   const { snapshot, handleQuestionResult } = useRushGame(
     (payload) => onFinish(computeFinalResult(payload)),
@@ -67,7 +69,7 @@ export function PlayScreen({ onFinish }: Props) {
   // （PlayScreenを再マウントさせない＝Question subtreeのkey不変則には抵触しない。
   // 通常ゲームは既にcurrentSpecがnullで問題を表示していないため、切り替えの影響を受けない）。
   if (finalEntryStats) {
-    return <FinalTrialScreen initialStats={finalEntryStats} onFinish={onFinish} />
+    return <FinalTrialScreen initialStats={finalEntryStats} onFinish={onFinish} onQuit={onQuit} />
   }
 
   const overdriveTier = getOverdriveTier(snapshot.displayPercent)
@@ -86,6 +88,7 @@ export function PlayScreen({ onFinish }: Props) {
 
   return (
     <div className={`relative flex min-h-dvh flex-col overflow-hidden ${frameClass}`}>
+      <QuitButton onQuit={onQuit} />
       {visual.particles && (
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           {PARTICLE_POSITIONS.map((p, i) => (
@@ -123,7 +126,9 @@ export function PlayScreen({ onFinish }: Props) {
       )}
       {snapshot.showGoFlash && <div className="flash-green-overlay pointer-events-none fixed inset-0 z-20" />}
 
-      <div className="relative z-30 flex items-start justify-between px-5 pt-3 pb-1">
+      {/* Ver.6準備: pt-3→pt-11。右上の「×」ボタン用の帯をヘッダーの上に確保し、
+          TIME/スコア表示と幾何学的に重ならないようにする（QuitButton.tsxのコメント参照）。 */}
+      <div className="relative z-30 flex items-start justify-between px-5 pt-11 pb-1">
         <button onClick={toggleMute} className="text-lg opacity-70" aria-label="ミュート切り替え">
           {muted ? '🔇' : '🔊'}
         </button>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { randInt } from '../engine/random'
 import { sfx } from '../utils/sound'
@@ -36,6 +36,8 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   const rafRef = useRef<number | undefined>(undefined)
   const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stopChargeRef = useRef<(() => void) | null>(null)
+  /** HoldPressQuestionと同じ理由（マルチタッチでのholdStartRef上書き／他指の指離しでの誤中断を防ぐ）。 */
+  const pointerIdRef = useRef<number | null>(null)
 
   useEffect(() => {
     failTimerRef.current = setTimeout(() => finish(false), spec.targetTimeMs)
@@ -50,6 +52,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   function finish(correct: boolean, releaseOffsetMs?: number) {
     if (doneRef.current) return
     doneRef.current = true
+    pointerIdRef.current = null
     if (failTimerRef.current) clearTimeout(failTimerRef.current)
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
     if (stopChargeRef.current) {
@@ -69,8 +72,10 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     })
   }
 
-  function handleDown() {
-    if (doneRef.current) return
+  function handleDown(e: ReactPointerEvent<HTMLButtonElement>) {
+    if (doneRef.current || holdStartRef.current !== null) return
+    pointerIdRef.current = e.pointerId
+    e.currentTarget.setPointerCapture(e.pointerId)
     setHolding(true)
     holdStartRef.current = performance.now()
     stopChargeRef.current = sfx.startHoldCharge(cycleMs)
@@ -91,7 +96,8 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     rafRef.current = requestAnimationFrame(tick)
   }
 
-  function handleRelease() {
+  function handleRelease(e: ReactPointerEvent<HTMLButtonElement>) {
+    if (e.pointerId !== pointerIdRef.current) return
     if (doneRef.current || holdStartRef.current === null) return
     const held = performance.now() - holdStartRef.current
     const pct = (held / cycleMs) * 100
@@ -109,11 +115,14 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   return (
     <QuestionShell instruction="緑で離せ！">
       <div className="flex flex-col items-center gap-4">
+        {/* HoldPressQuestionと同じ根本原因（指のわずかな動きをブラウザがジェスチャーと
+            誤認しpointercancelを誤発火させる）に対する修正。touch-action:noneで
+            このボタン上のブラウザ側ジェスチャー認識自体を無効化する。 */}
         <button
           onPointerDown={handleDown}
           onPointerUp={handleRelease}
           onPointerCancel={handleRelease}
-          className="flex h-28 w-28 items-center justify-center rounded-full bg-white/10 text-sm font-bold text-white/70 active:scale-95"
+          className="flex h-28 w-28 touch-none items-center justify-center rounded-full bg-white/10 text-sm font-bold text-white/70 select-none active:scale-95"
         >
           {holding ? '' : 'HOLD'}
         </button>
