@@ -348,14 +348,25 @@ export function FinalTrialScreen({
 
   if (!entryDone) {
     return (
-      <div className="relative flex min-h-dvh flex-col items-center justify-center gap-2 overflow-hidden bg-black px-6 text-center">
+      <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
         <QuitButton onQuit={onQuit} />
-        <FinalWorldAmbience />
-        <HudCrackOverlay show={showCrack} />
-        <WorldShatterOverlay show={showShatter} />
-        <FinalEntryTextOverlay beat={entryTextBeat} />
-        <WhiteFlashOverlay show={showFlash} />
-        <RainbowShockwaveOverlay show={showShatter} />
+        {/*
+          演出本体（FinalWorldAmbience等）は全てabsolute inset-0で画面全体を覆う。
+          このラッパー自体にはpositionを指定しない（static のまま）ことで、
+          absolute inset-0の子要素は依然として一番外側のrelativeコンテナ
+          （min-h-dvhで画面全体をカバー）を基準に配置され続け、QuitButton分の
+          帯があってもフラッシュ/シャッター等の演出が画面全体を覆う見た目は変わらない。
+          以前のitems-center justify-centerのままだとQuitButton（唯一のフロー内要素）が
+          画面中央へ寄ってしまうため、中身のcenter寄せはこの内側のラッパーで別途行う。
+        */}
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+          <FinalWorldAmbience />
+          <HudCrackOverlay show={showCrack} />
+          <WorldShatterOverlay show={showShatter} />
+          <FinalEntryTextOverlay beat={entryTextBeat} />
+          <WhiteFlashOverlay show={showFlash} />
+          <RainbowShockwaveOverlay show={showShatter} />
+        </div>
       </div>
     )
   }
@@ -365,9 +376,7 @@ export function FinalTrialScreen({
       <QuitButton onQuit={onQuit} />
       {showUltimateWorld ? <UltimateWorldAmbience /> : <FinalWorldAmbience />}
 
-      {/* Ver.6準備: pt-3→pt-11。右上の「×」ボタン用の帯をヘッダーの上に確保し、
-          TRIAL/スコア表示と幾何学的に重ならないようにする（QuitButton.tsxのコメント参照）。 */}
-      <div className="relative z-30 flex items-start justify-between px-5 pt-11 pb-1">
+      <div className="relative z-30 flex items-start justify-between px-5 pt-3 pb-1">
         <button onClick={toggleMute} className="text-lg opacity-70" aria-label="ミュート切り替え">
           {muted ? '🔇' : '🔊'}
         </button>
