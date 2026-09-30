@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { pickExcluding, randInt } from '../engine/random'
-import { colorSymbol, COLOR_SYMBOL_STYLE } from './colorSymbols'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
@@ -44,11 +43,9 @@ function Component({ spec, onResult }: QuestionComponentProps) {
           <button
             key={i}
             onPointerDown={() => finish(i === oddIndex)}
-            className="flex h-20 w-20 items-center justify-center rounded-2xl text-2xl active:scale-90"
+            className="h-20 w-20 rounded-2xl active:scale-90"
             style={{ backgroundColor: c.hex }}
-          >
-            <span style={COLOR_SYMBOL_STYLE}>{colorSymbol(c.id)}</span>
-          </button>
+          />
         ))}
       </div>
     </QuestionShell>

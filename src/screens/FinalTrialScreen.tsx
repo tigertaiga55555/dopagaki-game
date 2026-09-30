@@ -365,7 +365,9 @@ export function FinalTrialScreen({
       <QuitButton onQuit={onQuit} />
       {showUltimateWorld ? <UltimateWorldAmbience /> : <FinalWorldAmbience />}
 
-      <div className="relative z-30 flex items-start justify-between px-5 pt-3 pb-1">
+      {/* Ver.6準備: pt-3→pt-11。右上の「×」ボタン用の帯をヘッダーの上に確保し、
+          TRIAL/スコア表示と幾何学的に重ならないようにする（QuitButton.tsxのコメント参照）。 */}
+      <div className="relative z-30 flex items-start justify-between px-5 pt-11 pb-1">
         <button onClick={toggleMute} className="text-lg opacity-70" aria-label="ミュート切り替え">
           {muted ? '🔇' : '🔊'}
         </button>

@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { randInt, shuffle } from '../../engine/random'
-import { colorSymbol, COLOR_SYMBOL_STYLE } from '../colorSymbols'
 import { QuestionShell } from '../QuestionShell'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
@@ -13,11 +12,9 @@ const NON_RED_COLORS = [
   { id: 'purple', hex: '#a855f7' },
 ] as const
 const RED_HEX = '#ef4444'
-const RED_ID = 'red'
 
 interface Circle {
   id: number
-  colorId: string
   hex: string
   size: number
 }
@@ -39,8 +36,8 @@ function generate() {
   const redSizes = [trapSize, ...sizeList.slice(4)]
 
   const circles: Circle[] = [
-    ...nonRed.map((c, i) => ({ id: i, colorId: c.id, hex: c.hex, size: nonRedSizes[i] })),
-    ...redSizes.map((s, i) => ({ id: 3 + i, colorId: RED_ID, hex: RED_HEX, size: s })),
+    ...nonRed.map((c, i) => ({ id: i, hex: c.hex, size: nonRedSizes[i] })),
+    ...redSizes.map((s, i) => ({ id: 3 + i, hex: RED_HEX, size: s })),
   ]
   const target = Math.max(...nonRedSizes)
   return { circles: shuffle(circles), target }
@@ -67,16 +64,11 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction={`赤（${colorSymbol(RED_ID)}）以外で\n一番大きい丸を押せ！`}>
+    <QuestionShell instruction={'赤以外で\n一番大きい丸を押せ！'}>
       <div className="grid grid-cols-3 gap-3">
         {circles.map((c) => (
           <button key={c.id} onPointerDown={() => finish(c.size === target && c.hex !== RED_HEX)} className="flex h-20 w-20 items-center justify-center active:scale-90">
-            <span
-              className="flex items-center justify-center rounded-full"
-              style={{ width: c.size, height: c.size, backgroundColor: c.hex }}
-            >
-              <span style={{ ...COLOR_SYMBOL_STYLE, fontSize: Math.max(12, c.size * 0.45) }}>{colorSymbol(c.colorId)}</span>
-            </span>
+            <span className="rounded-full" style={{ width: c.size, height: c.size, backgroundColor: c.hex }} />
           </button>
         ))}
       </div>

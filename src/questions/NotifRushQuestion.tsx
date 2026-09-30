@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { randInt } from '../engine/random'
 import { sfx } from '../utils/sound'
-import { colorSymbol, COLOR_SYMBOL_STYLE } from './colorSymbols'
 import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
@@ -23,17 +22,13 @@ const SLOTS = [
 ]
 
 const RED_HEX = '#ef4444'
-const OTHER_COLORS = [
-  { id: 'blue', hex: '#3b82f6' },
-  { id: 'green', hex: '#22c55e' },
-]
+const OTHER_HEX = ['#3b82f6', '#22c55e']
 
 interface Badge {
   id: number
   slotIndex: number
   isTarget: boolean
   hex: string
-  colorId: string
 }
 
 /**
@@ -168,10 +163,10 @@ function Component({ spec, onResult }: QuestionComponentProps) {
       }
       const slotIndex = freeSlots[randInt(0, freeSlots.length - 1)]
       const id = badgeIdRef.current++
-      const color = isTarget ? { id: 'red', hex: RED_HEX } : OTHER_COLORS[randInt(0, OTHER_COLORS.length - 1)]
+      const hex = isTarget ? RED_HEX : OTHER_HEX[randInt(0, OTHER_HEX.length - 1)]
       slotOccupantsRef.current.set(slotIndex, { id, isTarget })
       if (isTarget) sfx.notifSpawn()
-      setBadges((prev) => [...prev, { id, slotIndex, isTarget, hex: color.hex, colorId: color.id }])
+      setBadges((prev) => [...prev, { id, slotIndex, isTarget, hex }])
       // 必須の赤はlifespanで自動despawnしない（見失っただけで詰む事故を構造的に排除する）。
       if (!isTarget) {
         despawnTimersRef.current.set(
@@ -233,17 +228,15 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell sub={`赤 ${clearedRedRef.current}/${targetRedCount}`} instruction={`赤（${colorSymbol('red')}）だけ消せ！`}>
+    <QuestionShell sub={`赤 ${clearedRedRef.current}/${targetRedCount}`} instruction="赤だけ消せ！">
       <div className="relative h-64 w-full max-w-xs">
         {badges.map((badge) => (
           <button
             key={badge.id}
             onPointerDown={() => handleTap(badge)}
             style={{ left: `${SLOTS[badge.slotIndex].x}%`, top: `${SLOTS[badge.slotIndex].y}%`, backgroundColor: badge.hex }}
-            className="anim-pop absolute flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full text-xl active:scale-90"
-          >
-            <span style={COLOR_SYMBOL_STYLE}>{colorSymbol(badge.colorId)}</span>
-          </button>
+            className="anim-pop absolute h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full active:scale-90"
+          />
         ))}
       </div>
     </QuestionShell>
