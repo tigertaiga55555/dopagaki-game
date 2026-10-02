@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { AdSlot } from '../components/AdSlot'
 import { ResultCard } from '../components/ResultCard'
+import { AD_RESULT_SCREEN } from '../config/ads'
 import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
 import { getRetryLabel } from '../config/messagesV4'
 import { trackResultView, trackShareClick } from '../utils/analytics'
@@ -153,6 +155,8 @@ export function ResultScreen({ result, onRetry }: Props) {
       >
         {getRetryLabel(result.percent)}
       </button>
+
+      <AdSlot adTag={AD_RESULT_SCREEN.tag} width={AD_RESULT_SCREEN.width} height={AD_RESULT_SCREEN.height} label={AD_RESULT_SCREEN.slotName} />
     </div>
   )
 }

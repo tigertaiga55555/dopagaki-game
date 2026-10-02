@@ -1,3 +1,5 @@
+import { AdSlot } from '../components/AdSlot'
+import { AD_START_SCREEN } from '../config/ads'
 import { TITLE_TEXT } from '../config/messagesV4'
 import { getBestPercent } from '../utils/storage'
 
@@ -28,6 +30,8 @@ export function TitleScreen({ onStart }: Props) {
       </button>
 
       {best > 0 && <p className="text-xs text-white/40">自己ベスト：ドパガキ度 {best}％</p>}
+
+      <AdSlot adTag={AD_START_SCREEN.tag} width={AD_START_SCREEN.width} height={AD_START_SCREEN.height} label={AD_START_SCREEN.slotName} />
     </div>
   )
 }
