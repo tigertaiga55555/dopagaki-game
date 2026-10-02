@@ -14,14 +14,14 @@ interface Props {
  * （Reactアプリ本体には一切影響しない）。
  */
 export function AdSlot({ adTag, width, height, label }: Props) {
-  const srcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;overflow:hidden;background:transparent;}</style></head><body>${adTag}</body></html>`
+  const srcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;overflow:hidden;background:transparent !important;color-scheme:dark;}</style></head><body>${adTag}</body></html>`
 
   return (
-    <div className="mx-auto overflow-hidden" style={{ width, maxWidth: '100%', height }} aria-label={label}>
+    <div className="mx-auto overflow-hidden" style={{ width, maxWidth: '100%', height, backgroundColor: 'transparent' }} aria-label={label}>
       <iframe
         title={label}
         srcDoc={srcDoc}
-        style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+        style={{ width: '100%', height: '100%', border: 'none', display: 'block', backgroundColor: 'transparent' }}
         scrolling="no"
       />
     </div>
