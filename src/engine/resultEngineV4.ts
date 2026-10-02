@@ -263,14 +263,20 @@ export function computeFinalTrialResult(payload: FinalTrialFinishPayload, stats:
  * FinalResultV4（baseResult、finalTrial情報を含む）をベースに、percent/type/comment/
  * bestPercent等をチャレンジの最終状態で上書きする。犯行記録・最大COMBO・最速反応・
  * 正答率は200%到達までの実績（baseResultのもの）をそのまま引き継ぎ表示する。
+ *
+ * persist（既定true、本番の挙動は不変）をfalseにすると自己ベストの読み取りのみ行い、
+ * localStorageへの書き込み（updateBestPercent）を一切行わない。Preview専用のQA直接
+ * ジャンプ機能（本物の200%到達を経ていない）が結果画面を確認する際、正式な自己ベストが
+ * 書き換わってしまわないようにするためのフラグで、通常プレイの呼び出し元
+ * （FinalTrialScreen.tsxの本番経路）は常に省略してtrue（既存動作）のまま呼ぶ。
  */
-export function computeEndlessResult(state: EndlessState, baseResult: FinalResultV4): FinalResultV4 {
+export function computeEndlessResult(state: EndlessState, baseResult: FinalResultV4, persist = true): FinalResultV4 {
   const finalPercent = state.percent
   const type = getOverdriveTitle(finalPercent)
   const comment = buildEndlessComment(state)
 
   const bestBefore = getBestPercent()
-  const isNewBest = updateBestPercent(finalPercent)
+  const isNewBest = persist ? updateBestPercent(finalPercent) : false
 
   return {
     ...baseResult,

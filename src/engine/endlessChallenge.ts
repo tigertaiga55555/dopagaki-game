@@ -45,6 +45,21 @@ export function applyCorrect(state: EndlessState): EndlessState {
 }
 
 /**
+ * QA/Preview専用: 実際のapplyCorrect/applyMissの連打を経由せず、指定％に到達した
+ * 状態を直接構築する（本番の状態遷移ロジックそのものは一切変更しない、素通りの
+ * ヘルパー）。securedFloorを再利用するため、300/400チェックポイントが「一度確保したら
+ * 二度と下回らない」という本番と同じ規則がQAのジャンプ結果にもそのまま反映される。
+ * clearPercent（500）以上を指定した場合はちょうど500%で完全クリア状態にする。
+ */
+export function createEndlessStateAt(percent: number): EndlessState {
+  if (percent >= ENDLESS_CONFIG.clearPercent) {
+    return { percent: ENDLESS_CONFIG.clearPercent, floor: ENDLESS_CONFIG.clearPercent, ended: true, cleared: true }
+  }
+  const floor = securedFloor(ENDLESS_CONFIG.startPercent, percent)
+  return { percent, floor, ended: false, cleared: false }
+}
+
+/**
  * MISS1回：-missPenalty%。計算結果が現在の床以下になった場合は、その時点で
  * チャレンジ終了とし、％は床にクランプする（床を下回った状態では終わらせない）。
  * 床へ届かない通常のMISSであれば、％を減らしたまま続行する。

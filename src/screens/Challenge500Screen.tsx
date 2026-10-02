@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Challenge500QaPanel } from '../dev/Challenge500QaPanel'
 import { QuitButton } from '../components/QuitButton'
 import { ENDLESS_CONFIG } from '../config/endlessConfig'
 import type { EndlessState } from '../engine/endlessChallenge'
@@ -8,6 +9,15 @@ import { ENDLESS_QUESTION_MODULES } from '../questions/endless'
 interface Props {
   onFinish: (state: EndlessState) => void
   onQuit: () => void
+  /**
+   * Preview専用のQA補助モード（既定false）。__DOPAGAKI_PREVIEW_ENABLED__
+   * （Productionビルドでは常にリテラルfalseにインライン化される）と合わせて二重に
+   * ガードしており、本番のApp.tsx通常プレイ経路からは絶対にtrueを渡さない。
+   * trueの場合のみ画面左下にQA操作パネル（％ジャンプ・強制正解/MISS）を表示し、
+   * useEndlessChallengeのGA4送信（challenge_500_start/reach_300/400/500）を抑制する。
+   * 500〜200%本体のゲームロジック・難易度・問題内容には一切手を加えない。
+   */
+  qaMode?: boolean
 }
 
 const END_FLASH_MS = 900
@@ -17,11 +27,12 @@ const END_FLASH_MS = 900
  * Phase 1では演出の作り込みよりゲームロジックの正確さを優先し、終了時のフラッシュのみ
  * 最小限用意している（詳細な専用演出は今後のフェーズで拡張可能）。
  */
-export function Challenge500Screen({ onFinish, onQuit }: Props) {
+export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) {
   const [finalState, setFinalState] = useState<EndlessState | null>(null)
-  const { snapshot, start, handleResult } = useEndlessChallenge((state) => setFinalState(state))
+  const { snapshot, start, handleResult, jumpTo } = useEndlessChallenge((state) => setFinalState(state), { qaMode })
   const startedRef = useRef(false)
   const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const showQaPanel = qaMode && __DOPAGAKI_PREVIEW_ENABLED__
 
   useEffect(() => {
     if (startedRef.current) return
@@ -84,6 +95,14 @@ export function Challenge500Screen({ onFinish, onQuit }: Props) {
           </div>
         )}
       </div>
+
+      {showQaPanel && !finalState && (
+        <Challenge500QaPanel
+          onJump={jumpTo}
+          onForceCorrect={() => handleResult({ correct: true })}
+          onForceMiss={() => handleResult({ correct: false })}
+        />
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ENDLESS_CONFIG } from '../config/endlessConfig'
-import { applyCorrect, applyMiss, createEndlessState, type EndlessState } from './endlessChallenge'
+import { applyCorrect, applyMiss, createEndlessState, createEndlessStateAt, type EndlessState } from './endlessChallenge'
 
 function miss(state: EndlessState) {
   return applyMiss(state)
@@ -128,5 +128,47 @@ describe('endlessChallenge', () => {
       s = Math.random() < 0.5 ? correct(s) : miss(s)
       expect(s.percent).toBeGreaterThanOrEqual(s.floor)
     }
+  })
+
+  describe('createEndlessStateAt (QA/Preview jump helper)', () => {
+    it('200 -> start state, floor 200, not ended', () => {
+      const s = createEndlessStateAt(200)
+      expect(s).toEqual({ percent: 200, floor: 200, ended: false, cleared: false })
+    })
+
+    it('300 -> floor secures at 300 (the checkpoint itself)', () => {
+      const s = createEndlessStateAt(300)
+      expect(s).toEqual({ percent: 300, floor: 300, ended: false, cleared: false })
+    })
+
+    it('400 -> floor secures at 400', () => {
+      const s = createEndlessStateAt(400)
+      expect(s).toEqual({ percent: 400, floor: 400, ended: false, cleared: false })
+    })
+
+    it('490 -> floor stays at the most recently passed checkpoint (400), not 490', () => {
+      const s = createEndlessStateAt(490)
+      expect(s).toEqual({ percent: 490, floor: 400, ended: false, cleared: false })
+    })
+
+    it('250 (between checkpoints) -> floor stays at the implicit 200 checkpoint', () => {
+      const s = createEndlessStateAt(250)
+      expect(s).toEqual({ percent: 250, floor: 200, ended: false, cleared: false })
+    })
+
+    it('500 or above -> clamped to exactly 500%, ended and cleared', () => {
+      expect(createEndlessStateAt(500)).toEqual({ percent: 500, floor: 500, ended: true, cleared: true })
+      expect(createEndlessStateAt(9999)).toEqual({ percent: 500, floor: 500, ended: true, cleared: true })
+    })
+
+    it('a jumped-to state behaves identically to one reached by real play for applyMiss', () => {
+      // 390からMISSした場合の仕様例（340へ継続）と、jumpで390へ直接移動した場合の
+      // applyMiss結果が一致することを確認する（QAのジャンプが本物の状態と区別できないこと）。
+      let real = createEndlessState()
+      for (let i = 0; i < 19; i++) real = correct(real) // -> 390, floor 300
+      const jumped = createEndlessStateAt(390)
+      expect(jumped).toEqual(real)
+      expect(miss(jumped)).toEqual(miss(real))
+    })
   })
 })
