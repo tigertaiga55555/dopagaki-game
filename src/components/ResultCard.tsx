@@ -1,4 +1,5 @@
 import type { FinalResultV4 } from '../types'
+import { ENDLESS_CONFIG } from '../config/endlessConfig'
 import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
 
 interface Props {
@@ -47,14 +48,21 @@ const MAX_CARD_COINS = [
  */
 export function getResultCardVariant(result: FinalResultV4) {
   const isOverdrive = result.percent > 100
-  // Ver.5.0: 「PERFECT CLEAR」「完全攻略」は200%（FINAL QUESTION正解）だけの専用表現。
-  // 120%はもはやFINAL DOPA TRIALへの入口に過ぎないため、isMaxの基準をOVERDRIVE_CONFIG.maxPercent
-  // （=120、useRushGame.ts側のOVERDRIVE上限capには今も使われる別概念の定数）から
-  // FINAL_TRIAL_CONFIG.clearPercent（=200、真の完全攻略）へ切り替える。
-  const isMax = result.percent >= FINAL_TRIAL_CONFIG.clearPercent
+  // Ver.6 Phase 1: 200%到達後の「限界突破チャレンジ」追加に伴い、200%ちょうど（従来通りの
+  // PERFECT CLEAR）と、それを超えて挑戦した結果（300/400チェックポイント終了・500%完全クリア）を
+  // 区別する。旧実装は「percent >= 200」を一括してisMaxとしていたため、500%到達時も200%と
+  // 全く同じ「PERFECT CLEAR」表示になってしまう不具合があった（isMaxの基準値自体は
+  // 変更せず、200%ちょうどの場合だけに絞り込む形で解消する）。
+  const isEndlessClear = result.percent >= ENDLESS_CONFIG.clearPercent
+  const isEndlessProgress = result.percent > FINAL_TRIAL_CONFIG.clearPercent && !isEndlessClear
+  const isMax = result.percent >= FINAL_TRIAL_CONFIG.clearPercent && !isEndlessProgress && !isEndlessClear
   // FINAL DOPA TRIALへ突入した（=result.finalTrialが存在する）が、200%まで到達できなかった場合。
-  const isFinalTrial = !!result.finalTrial && !isMax
-  return { isOverdrive, isMax, isFinalTrial }
+  const isFinalTrial = !!result.finalTrial && !isMax && !isEndlessProgress && !isEndlessClear
+  // カードの背景・光彩・虹ボーダーなど「見た目の豪華さ」はisMax/isEndlessProgress/isEndlessClearの
+  // 3つで共通にする（Phase 1では演出の作り込みより文言の正確さを優先するため、チェックポイント
+  // 終了と500%完全クリアを視覚的にさらに作り分けることはしない。テキストでは明確に区別する）。
+  const isPremium = isMax || isEndlessProgress || isEndlessClear
+  return { isOverdrive, isMax, isFinalTrial, isEndlessProgress, isEndlessClear, isPremium }
 }
 
 /**
@@ -65,6 +73,8 @@ export function getResultCardVariant(result: FinalResultV4) {
  * どちらの分岐にも該当せず、進行と矛盾する固定文言「100％いける？」が表示される不具合があった。
  */
 export function getBottomStatusLine(percent: number): string {
+  if (percent >= ENDLESS_CONFIG.clearPercent) return '500％到達。もう人間じゃない。'
+  if (percent > FINAL_TRIAL_CONFIG.clearPercent) return '500％を目指せ。'
   if (percent >= FINAL_TRIAL_CONFIG.clearPercent) return '完全攻略。'
   if (percent === FINAL_TRIAL_CONFIG.clearPercent - FINAL_TRIAL_CONFIG.percentPerCorrect) return 'あと1問。200％いける？'
   if (percent >= FINAL_TRIAL_CONFIG.startPercent) return '200％まで行ける？'
@@ -73,22 +83,22 @@ export function getBottomStatusLine(percent: number): string {
 }
 
 export function ResultCard({ result }: Props) {
-  const { isOverdrive, isMax, isFinalTrial } = getResultCardVariant(result)
+  const { isOverdrive, isMax, isFinalTrial, isEndlessProgress, isEndlessClear, isPremium } = getResultCardVariant(result)
   const percentColor = isOverdrive ? 'text-amber-300' : result.percent >= 100 ? 'text-amber-200' : 'text-white'
 
   const card = (
     <div
       className={`relative isolate w-full overflow-hidden rounded-3xl bg-gradient-to-b p-5 ${
-        isMax ? 'from-[#2e2408] to-[#120a02]' : isOverdrive ? 'from-[#241606] to-[#0b0620]' : 'from-[#1c1033] to-[#0b0620]'
+        isPremium ? 'from-[#2e2408] to-[#120a02]' : isOverdrive ? 'from-[#241606] to-[#0b0620]' : 'from-[#1c1033] to-[#0b0620]'
       } ${
-        isMax
+        isPremium
           ? 'shadow-[0_0_0_3px_rgba(255,255,255,0.85),0_0_110px_rgba(250,204,21,0.75)]'
           : isOverdrive
             ? 'shadow-[0_0_0_1px_rgba(250,204,21,0.4),0_0_60px_rgba(250,204,21,0.35)]'
             : 'shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_20px_40px_rgba(0,0,0,0.5)]'
       }`}
     >
-      {isOverdrive && !isMax && (
+      {isOverdrive && !isPremium && (
         <div className="pointer-events-none absolute inset-0 -z-10">
           {GOLD_CARD_PARTICLES.map((p, i) => (
             <span key={i} className="absolute text-sm text-amber-300/80" style={{ left: `${p.x}%`, top: `${p.y}%` }}>
@@ -98,7 +108,7 @@ export function ResultCard({ result }: Props) {
         </div>
       )}
 
-      {isMax && (
+      {isPremium && (
         <>
           {/* 白ハイライト：カード上部から柔らかく白く発光させ、金一色にならないようにする */}
           <div className="pointer-events-none absolute -top-10 left-1/2 -z-10 h-32 w-56 -translate-x-1/2 rounded-full bg-white/25 blur-3xl" />
@@ -117,7 +127,15 @@ export function ResultCard({ result }: Props) {
         </>
       )}
 
-      {isMax ? (
+      {isEndlessClear ? (
+        <p className="relative text-center text-sm font-black tracking-widest text-white drop-shadow-[0_0_10px_rgba(250,204,21,0.9)]">
+          🏆 DOPA 500% ABSOLUTE CLEAR 🏆
+        </p>
+      ) : isEndlessProgress ? (
+        <p className="relative text-center text-sm font-black tracking-widest text-white drop-shadow-[0_0_10px_rgba(250,204,21,0.9)]">
+          ⚡ 限界突破チャレンジ ⚡
+        </p>
+      ) : isMax ? (
         <p className="relative text-center text-sm font-black tracking-widest text-white drop-shadow-[0_0_10px_rgba(250,204,21,0.9)]">
           🏆 PERFECT CLEAR!! 🏆
         </p>
@@ -132,7 +150,7 @@ export function ResultCard({ result }: Props) {
       <p className="relative mt-2 text-center text-xs font-bold text-white/40">ドパガキ度</p>
       <p
         className={`relative text-center text-7xl font-black tabular-nums leading-none drop-shadow-[0_0_30px_rgba(217,70,239,0.5)] ${percentColor} ${
-          isMax ? 'drop-shadow-[0_0_35px_rgba(250,204,21,0.9)]' : ''
+          isPremium ? 'drop-shadow-[0_0_35px_rgba(250,204,21,0.9)]' : ''
         }`}
       >
         {result.percent}
@@ -146,6 +164,11 @@ export function ResultCard({ result }: Props) {
       {result.finalTrial && (
         <p className="relative mt-1 text-center text-sm font-black tracking-widest text-white/70">
           FINAL DOPA TRIAL {result.finalTrial.trialsCleared} / 16
+        </p>
+      )}
+      {result.endless && (
+        <p className="relative mt-1 text-center text-sm font-black tracking-widest text-white/70">
+          {result.endless.cleared ? 'CHALLENGE COMPLETE' : `CHECKPOINT ${result.endless.floor}%`}
         </p>
       )}
 
@@ -185,7 +208,8 @@ export function ResultCard({ result }: Props) {
 
   // Ver.4.11: 120%（PERFECT CLEAR）だけ、カードの外側に虹色プレミアムボーダーを回す
   // （カード自身はoverflow-hiddenのため、ボーダーの疑似要素は別のラッパーに付ける）。
-  if (isMax) {
+  // Ver.6 Phase 1: 200%を超える限界突破チャレンジの結果（isPremium）にも同様に適用する。
+  if (isPremium) {
     return (
       <div className="rainbow-premium-border w-full max-w-xs rounded-3xl p-[3px]">
         {card}

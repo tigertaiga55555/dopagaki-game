@@ -1,6 +1,7 @@
 import { getNearMissComment } from '../config/messagesV4'
 import { NORMAL_TYPES, TYPE_THRESHOLDS, getOverdriveTitle } from '../config/resultTypesV4'
 import { getBestPercent, getPlayCount, incrementPlayCount, updateBestPercent } from '../utils/storage'
+import type { EndlessState } from './endlessChallenge'
 import type { RushFinishPayload } from './useRushGame'
 import type { FinalTrialFinishPayload } from './useFinalTrial'
 import type { DopagakiTypeDef, FinalResultV4, PlayStats, QuestionTypeId } from '../types'
@@ -186,6 +187,14 @@ function buildFinalTrialComment(trialsCleared: number, cleared200: boolean): str
   return `FINAL DOPA TRIAL\n${trialsCleared} / 16 まで到達し、\nそこで力尽きた。`
 }
 
+/** Ver.6 Phase 1: 限界突破チャレンジ（200〜500%）専用のコメント。 */
+function buildEndlessComment(state: EndlessState): string {
+  if (state.cleared) return '200％の先にある\nすべてを攻略した。\nもう戻れない。'
+  if (state.floor >= 400) return '400％の壁を越え、\nそこで限界を迎えた。'
+  if (state.floor >= 300) return '300％の壁を越え、\nそこで限界を迎えた。'
+  return '200％の先へ挑み、\nそこで限界を迎えた。'
+}
+
 export function computeFinalResult(payload: RushFinishPayload): FinalResultV4 {
   const { finalPercent, overdriveActive, stats } = payload
   const type = determineType(finalPercent, overdriveActive, stats)
@@ -246,5 +255,31 @@ export function computeFinalTrialResult(payload: FinalTrialFinishPayload, stats:
     bestPercent: isNewBest ? finalPercent : bestBefore,
     playCount: getPlayCount(),
     finalTrial: { trialsCleared, cleared200 },
+  }
+}
+
+/**
+ * Ver.6 Phase 1: 限界突破チャレンジ（200〜500%）の結果を計算する。200%到達時点の
+ * FinalResultV4（baseResult、finalTrial情報を含む）をベースに、percent/type/comment/
+ * bestPercent等をチャレンジの最終状態で上書きする。犯行記録・最大COMBO・最速反応・
+ * 正答率は200%到達までの実績（baseResultのもの）をそのまま引き継ぎ表示する。
+ */
+export function computeEndlessResult(state: EndlessState, baseResult: FinalResultV4): FinalResultV4 {
+  const finalPercent = state.percent
+  const type = getOverdriveTitle(finalPercent)
+  const comment = buildEndlessComment(state)
+
+  const bestBefore = getBestPercent()
+  const isNewBest = updateBestPercent(finalPercent)
+
+  return {
+    ...baseResult,
+    percent: finalPercent,
+    rawPercent: finalPercent,
+    type,
+    comment,
+    isNewBest,
+    bestPercent: isNewBest ? finalPercent : bestBefore,
+    endless: { floor: state.floor, cleared: state.cleared },
   }
 }

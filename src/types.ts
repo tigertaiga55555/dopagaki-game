@@ -189,6 +189,16 @@ export interface FinalResultV4 {
   playCount: number
   /** Ver.5.0: 120%へ到達しFINAL DOPA TRIALへ突入した場合のみ存在する進捗情報。 */
   finalTrial?: FinalTrialResultInfo
+  /** Ver.6 Phase 1: 200%到達後、限界突破チャレンジ（200〜500%）に挑戦した場合のみ存在する。 */
+  endless?: EndlessResultInfo
+}
+
+/** Ver.6 Phase 1: 結果画面用に持ち越す限界突破チャレンジ（200〜500%）の進捗情報。 */
+export interface EndlessResultInfo {
+  /** 確保済みの最高チェックポイント（200/300/400/500）。 */
+  floor: number
+  /** 500%まで完全クリアしたか。 */
+  cleared: boolean
 }
 
 /**

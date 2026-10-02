@@ -39,7 +39,18 @@ export const SHARE_HASHTAG = '#ドパガキゲーム'
  * ―画像付き共有／テキストのみ共有／クリップボードコピー／フォールバック―の
  * 唯一の生成元のため、ここで1箇所に集約すれば経路によって消えることがない）。
  */
-export function buildShareText(percent: number, typeName: string, finalTrial?: { trialsCleared: number; cleared200: boolean }): string {
+export function buildShareText(
+  percent: number,
+  typeName: string,
+  finalTrial?: { trialsCleared: number; cleared200: boolean },
+  endless?: { floor: number; cleared: boolean },
+): string {
+  if (endless) {
+    if (endless.cleared) {
+      return `ドパガキ度 ${percent}％\nABSOLUTE CLEAR\n${typeName}\nFINAL DOPA TRIAL 16/16\n\n500％まで攻略した。\n\n${SHARE_HASHTAG}`
+    }
+    return `ドパガキ度 ${percent}％\n${typeName}\nCHECKPOINT ${endless.floor}％\n\n200％の先がある。\n\n${SHARE_HASHTAG}`
+  }
   if (finalTrial) {
     if (finalTrial.cleared200) {
       return `ドパガキ度 ${percent}％\nPERFECT CLEAR\n${typeName}\nFINAL DOPA TRIAL ${finalTrial.trialsCleared}/16\n\n100％が上限だと思ってた？\n\n${SHARE_HASHTAG}`

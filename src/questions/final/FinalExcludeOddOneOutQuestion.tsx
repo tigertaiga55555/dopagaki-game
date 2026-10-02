@@ -1,36 +1,30 @@
 import { useEffect, useRef, useState } from 'react'
+import { ShapeIcon, SHAPE_IDS, type ShapeId } from '../../components/ShapeIcon'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { pickExcluding, randInt, shuffle } from '../../engine/random'
 import { QuestionShell } from '../QuestionShell'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
-const COLORS = [
-  { id: 'red', hex: '#ef4444' },
-  { id: 'blue', hex: '#3b82f6' },
-  { id: 'green', hex: '#22c55e' },
-  { id: 'yellow', hex: '#eab308' },
-] as const
-
-interface Circle {
+interface Item {
   id: number
-  hex: string
+  shape: ShapeId
 }
 
 /**
- * FINAL DOPA TRIAL Q1〜Q4（反転・一段難化プール）：「仲間外れ以外を全て押せ！」。
- * 通常の「周りと違う色を1つ押す」を反転し、「仲間（多数派の色）を全部押す」多重選択にする。
- * 仲間外れそのものを押すと即MISS。
+ * Ver.6 Phase 1: 旧「仲間外れ以外を全て押せ！」（色識別が正解条件だった問題）を、
+ * 図形による仲間外れ判定に再設計した。通常の「周りと違う図形を1つ押す」を反転し、
+ * 「仲間（多数派の図形）を全部押す」多重選択にする。仲間外れそのものを押すと即MISS。
  */
 function generate() {
-  const main = COLORS[randInt(0, COLORS.length - 1)]
-  const odd = pickExcluding(COLORS, main)
+  const main = SHAPE_IDS[randInt(0, SHAPE_IDS.length - 1)]
+  const odd = pickExcluding(SHAPE_IDS, main)
   const oddId = randInt(0, 4)
-  const circles: Circle[] = Array.from({ length: 5 }, (_, i) => ({
+  const items: Item[] = Array.from({ length: 5 }, (_, i) => ({
     id: i,
-    hex: i === oddId ? odd.hex : main.hex,
+    shape: i === oddId ? odd : main,
   }))
-  return { circles: shuffle(circles), oddId, requiredCount: 4 }
+  return { items: shuffle(items), oddId, requiredCount: 4 }
 }
 
 function computeTargetTimeMs() {
@@ -38,7 +32,7 @@ function computeTargetTimeMs() {
 }
 
 function Component({ spec, onResult }: FinalQuestionComponentProps) {
-  const { circles, oddId, requiredCount } = spec.data as { circles: Circle[]; oddId: number; requiredCount: number }
+  const { items, oddId, requiredCount } = spec.data as { items: Item[]; oddId: number; requiredCount: number }
   const [cleared, setCleared] = useState<Set<number>>(new Set())
   const startRef = useRef(performance.now())
   const guardRef = useRef<ReturnType<typeof createResolveOnce<FinalQuestionResult>> | null>(null)
@@ -58,14 +52,14 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
     guardRef.current!.resolve({ correct, reactionMs: performance.now() - startRef.current })
   }
 
-  function handleTap(circle: Circle) {
-    if (guardRef.current!.isResolved || cleared.has(circle.id)) return
-    if (circle.id === oddId) {
+  function handleTap(item: Item) {
+    if (guardRef.current!.isResolved || cleared.has(item.id)) return
+    if (item.id === oddId) {
       finish(false)
       return
     }
     const next = new Set(cleared)
-    next.add(circle.id)
+    next.add(item.id)
     setCleared(next)
     if (next.size >= requiredCount) {
       finish(true)
@@ -78,13 +72,15 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   return (
     <QuestionShell instruction={'仲間外れ以外を\n全て押せ！'}>
       <div className="grid grid-cols-3 gap-3">
-        {circles.map((c) => (
+        {items.map((it) => (
           <button
-            key={c.id}
-            onPointerDown={() => handleTap(c)}
-            className="h-16 w-16 rounded-full transition-opacity active:scale-90"
-            style={{ backgroundColor: c.hex, opacity: cleared.has(c.id) ? 0.15 : 1 }}
-          />
+            key={it.id}
+            onPointerDown={() => handleTap(it)}
+            className="flex h-16 w-16 items-center justify-center rounded-full bg-white/10 transition-opacity active:scale-90"
+            style={{ opacity: cleared.has(it.id) ? 0.15 : 1 }}
+          >
+            <ShapeIcon shape={it.shape} size={36} />
+          </button>
         ))}
       </div>
     </QuestionShell>
@@ -93,7 +89,7 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
 
 export const FinalExcludeOddOneOutModule: FinalQuestionModule = {
   id: 'finalExcludeOddOneOut',
-  tags: ['color', 'reverse', 'inhibition'],
+  tags: ['reverse', 'inhibition'],
   tier: 'reversal',
   generate,
   computeTargetTimeMs,
