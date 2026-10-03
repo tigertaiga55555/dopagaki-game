@@ -1,40 +1,38 @@
 import { useEffect, useRef, useState } from 'react'
+import { ShapeIcon, SHAPE_IDS, SHAPE_LABELS, type ShapeId } from '../components/ShapeIcon'
 import { TIMING_SAFETY } from '../config/timingConfig'
-import { pickExcluding, randInt } from '../engine/random'
+import { pick, pickExcluding, randInt } from '../engine/random'
 import { sfx } from '../utils/sound'
 import { QuestionShell } from './QuestionShell'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
 /**
- * Ver.4.6: 「緑で押せ！」（信号ゲーム）を全面再設計。
- * これまでは「灰色→緑」の一発切替だったため、見た瞬間すでに緑に見えてしまい
- * 「待つ・反応する」ゲームとして成立しないケースがあった。
- * 今回は非緑色（青/赤/黄）を2〜5回ランダムに高速切替してから、必ず緑で終わる
- * シーケンスに構造化することで、「初手緑」を型として発生し得ないようにした。
+ * Ver.6 Phase 1: 旧「緑で押せ！」（色識別が正解条件だった信号ゲーム）を、
+ * 色覚特性に依存しない形へ再設計。非対象図形を2〜5回ランダムに切替えてから、
+ * 必ず対象図形（例：○）で終わるシーケンスに構造化する。「初手から対象図形」が
+ * 型として発生し得ない点、押す/押さないの判定ロジックは旧実装を踏襲している。
  */
-const NON_GREEN_COLORS = [
-  { id: 'blue', hex: '#3b82f6' },
-  { id: 'red', hex: '#ef4444' },
-  { id: 'yellow', hex: '#eab308' },
-] as const
-const GREEN_HEX = '#22c55e'
-
 interface Step {
-  hex: string
+  shape: ShapeId
   durationMs: number
 }
 
 function generate() {
+  const target = pick(SHAPE_IDS)
   const stepCount = randInt(2, 5)
   const steps: Step[] = []
-  let prev: (typeof NON_GREEN_COLORS)[number] | undefined
+  let prev: ShapeId | undefined
   for (let i = 0; i < stepCount; i++) {
-    const color = pickExcluding(NON_GREEN_COLORS, prev)
-    prev = color
-    steps.push({ hex: color.hex, durationMs: randInt(260, 420) })
+    const shape = pickExcluding(
+      SHAPE_IDS.filter((s) => s !== target),
+      prev,
+    )
+    prev = shape
+    steps.push({ shape, durationMs: randInt(260, 420) })
   }
   const waitMs = steps.reduce((sum, s) => sum + s.durationMs, 0)
-  return { steps, waitMs }
+  return { target, steps, waitMs }
 }
 
 function computeMinTargetTimeMs(data: Record<string, unknown>) {
@@ -43,10 +41,10 @@ function computeMinTargetTimeMs(data: Record<string, unknown>) {
 }
 
 function Component({ spec, onResult }: QuestionComponentProps) {
-  const { steps, waitMs } = spec.data as { steps: Step[]; waitMs: number }
+  const { target, steps, waitMs } = spec.data as { target: ShapeId; steps: Step[]; waitMs: number }
   const [stepIndex, setStepIndex] = useState(0)
-  const [isGreen, setIsGreen] = useState(false)
-  const startRef = useRef(performance.now())
+  const [isGo, setIsGo] = useState(false)
+  const startRef = useQuestionStartRef()
   const goAtRef = useRef<number | null>(null)
   const doneRef = useRef(false)
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
@@ -62,7 +60,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     })
     const goTimer = setTimeout(() => {
       goAtRef.current = performance.now()
-      setIsGreen(true)
+      setIsGo(true)
       sfx.go()
     }, waitMs)
     timersRef.current.push(goTimer)
@@ -91,24 +89,25 @@ function Component({ spec, onResult }: QuestionComponentProps) {
 
   function handlePress() {
     if (doneRef.current) return
-    if (!isGreen) {
+    if (!isGo) {
       finish(false, true)
       return
     }
     finish(true)
   }
 
-  const currentHex = isGreen ? GREEN_HEX : steps[stepIndex].hex
+  const currentShape = isGo ? target : steps[stepIndex].shape
 
   return (
-    <QuestionShell instruction="緑で押せ！">
+    <QuestionShell instruction={`${SHAPE_LABELS[target]}が出たら押せ！`}>
       <button
         onPointerDown={handlePress}
-        className={`h-32 w-32 rounded-full border-4 transition-colors duration-75 active:scale-95 ${
-          isGreen ? 'signal-pulse signal-green-glow border-emerald-200' : 'border-white/20'
+        className={`flex h-32 w-32 items-center justify-center rounded-full border-4 bg-white/5 transition-colors duration-75 active:scale-95 ${
+          isGo ? 'signal-pulse signal-green-glow border-emerald-200' : 'border-white/20'
         }`}
-        style={{ backgroundColor: currentHex }}
-      />
+      >
+        <ShapeIcon shape={currentShape} size={64} />
+      </button>
     </QuestionShell>
   )
 }

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useInputGateReady } from './useInputGateReady'
 
 interface Props {
   instruction: string
@@ -13,8 +14,10 @@ interface Props {
 
 /** 全お題共通の外枠。お題文を大きく、選択肢は下に。 */
 export function QuestionShell({ instruction, sub, children }: Props) {
+  const ready = useInputGateReady()
+
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-8 px-6 py-4 text-center select-none">
+    <div className="relative flex h-full w-full flex-col items-center justify-center gap-8 px-6 py-4 text-center select-none">
       <div className="flex flex-col items-center gap-1">
         {sub && <p className="text-xs font-bold tracking-wide text-white/50">{sub}</p>}
         <p className="whitespace-pre-line text-3xl font-black leading-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
@@ -22,6 +25,14 @@ export function QuestionShell({ instruction, sub, children }: Props) {
         </p>
       </div>
       {children}
+      {!ready && (
+        <div
+          className="absolute inset-0 z-[60]"
+          aria-hidden="true"
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
+        />
+      )}
     </div>
   )
 }

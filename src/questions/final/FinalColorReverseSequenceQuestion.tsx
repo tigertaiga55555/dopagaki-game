@@ -1,37 +1,31 @@
 import { useEffect, useRef, useState } from 'react'
+import { ShapeIcon, SHAPE_IDS, type ShapeId } from '../../components/ShapeIcon'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { shuffle } from '../../engine/random'
 import { QuestionShell } from '../QuestionShell'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
-const COLORS = [
-  { id: 0, hex: '#ef4444' },
-  { id: 1, hex: '#3b82f6' },
-  { id: 2, hex: '#22c55e' },
-  { id: 3, hex: '#eab308' },
-] as const
-
 const LIGHT_STEP_MS = 550
 
 /**
- * FINAL DOPA TRIAL Q9〜Q12（記憶＋判断プール）：「光った色を逆順に全て押せ！」。
- * FinalReverseSequenceQuestionの色版。4色の位置は固定、光る順番だけがランダムに変わる。
+ * Ver.6 Phase 1: 旧「光った色を逆順に全て押せ！」（色識別が正解条件だった問題）を、
+ * 4種の図形（○△□×、位置は固定）が光る順番を覚える課題に再設計した。
  */
 function generate() {
-  const sequence = shuffle(COLORS).map((c) => c.id)
+  const sequence = shuffle(SHAPE_IDS)
   const answerOrder = [...sequence].reverse()
   return { sequence, answerOrder }
 }
 
-/** 回答フェーズだけの時間。記憶表示（4色×LIGHT_STEP_MS）は別途保証されtimeoutに含めない。 */
+/** 回答フェーズだけの時間。記憶表示（4図形×LIGHT_STEP_MS）は別途保証されtimeoutに含めない。 */
 function computeTargetTimeMs() {
   return TIMING_SAFETY.final.memoryAnswerMs
 }
 
 function Component({ spec, onResult }: FinalQuestionComponentProps) {
-  const { sequence, answerOrder } = spec.data as { sequence: number[]; answerOrder: number[] }
-  const [litIndex, setLitIndex] = useState(-1)
+  const { sequence, answerOrder } = spec.data as { sequence: ShapeId[]; answerOrder: ShapeId[] }
+  const [litShape, setLitShape] = useState<ShapeId | null>(null)
   const [revealDone, setRevealDone] = useState(false)
   const [answeredCount, setAnsweredCount] = useState(0)
   const startRef = useRef<number | null>(null)
@@ -41,13 +35,13 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
 
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = []
-    sequence.forEach((colorId, i) => {
-      timers.push(setTimeout(() => setLitIndex(colorId), i * LIGHT_STEP_MS))
+    sequence.forEach((shape, i) => {
+      timers.push(setTimeout(() => setLitShape(shape), i * LIGHT_STEP_MS))
     })
     timers.push(
       setTimeout(
         () => {
-          setLitIndex(-1)
+          setLitShape(null)
           setRevealDone(true)
           startRef.current = performance.now()
           failTimerRef.current = setTimeout(() => finish(false), spec.targetTimeMs)
@@ -67,10 +61,10 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
     guardRef.current!.resolve({ correct, reactionMs: startRef.current !== null ? performance.now() - startRef.current : 0 })
   }
 
-  function handleTap(colorId: number) {
+  function handleTap(shape: ShapeId) {
     if (!revealDone || guardRef.current!.isResolved) return
     const expected = answerOrder[answeredCount]
-    if (colorId !== expected) {
+    if (shape !== expected) {
       finish(false)
       return
     }
@@ -85,16 +79,18 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction={revealDone ? '光った色を\n逆順に全て押せ！' : '光る色の順番を覚えろ！'}>
+    <QuestionShell instruction={revealDone ? '光った図形を\n逆順に全て押せ！' : '光る図形の順番を覚えろ！'}>
       <div className="grid grid-cols-2 gap-4">
-        {COLORS.map((c) => (
+        {SHAPE_IDS.map((s) => (
           <button
-            key={c.id}
-            onPointerDown={() => handleTap(c.id)}
+            key={s}
+            onPointerDown={() => handleTap(s)}
             disabled={!revealDone}
-            className="h-20 w-20 rounded-2xl transition-opacity active:scale-90"
-            style={{ backgroundColor: c.hex, opacity: litIndex === c.id ? 1 : revealDone ? 1 : 0.25 }}
-          />
+            className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white/10 transition-opacity active:scale-90"
+            style={{ opacity: litShape === s ? 1 : revealDone ? 1 : 0.25 }}
+          >
+            <ShapeIcon shape={s} size={44} />
+          </button>
         ))}
       </div>
     </QuestionShell>
@@ -103,7 +99,7 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
 
 export const FinalColorReverseSequenceModule: FinalQuestionModule = {
   id: 'finalColorReverseSequence',
-  tags: ['memory', 'sequence', 'reverse', 'color'],
+  tags: ['memory', 'sequence', 'reverse'],
   tier: 'memory',
   generate,
   computeTargetTimeMs,

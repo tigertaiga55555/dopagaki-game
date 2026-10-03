@@ -733,3 +733,20 @@ body {
   animation: warning-text-flicker 0.9s steps(1) infinite;
 }
 
+/**
+ * Ver.6 Phase 1（再設計版）: prefers-reduced-motionへの最低限の配慮。
+ * すべてのCSSアニメーション/トランジションをほぼ即時完了させる（視覚的な動きだけを
+ * 止める）。ゲームの状態遷移タイミングはJS側のsetTimeout（CHECKPOINT_300_MS等）で
+ * 管理されておりCSSアニメーションの実際の長さには依存しないため、この上書きは
+ * 見た目だけに影響し、ゲームロジック・判定タイミングには一切影響しない。
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+

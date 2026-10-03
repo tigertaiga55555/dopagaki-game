@@ -1,7 +1,9 @@
 import { useCallback, useState } from 'react'
+import { Challenge500QaPreviewScreen } from './dev/Challenge500QaPreviewScreen'
 import { FinalTrialPreviewScreen } from './dev/FinalTrialPreviewScreen'
 import { OverdrivePreviewScreen } from './dev/OverdrivePreviewScreen'
 import {
+  isChallenge500QaPreviewRequested,
   isClear200PreviewRequested,
   isFinalQuestionPreviewRequested,
   isFinalTrialPreviewRequested,
@@ -29,6 +31,9 @@ export default function App() {
   const [showFinalTrialPreview] = useState(isFinalTrialPreviewRequested)
   const [showFinalQuestionPreview] = useState(isFinalQuestionPreviewRequested)
   const [showClear200Preview] = useState(isClear200PreviewRequested)
+  // Ver.6 Phase 1 QA補助: ?preview=challenge500 の場合のみ、120〜200%の実プレイ・突入演出を
+  // 一切経由せず「500%に挑戦」説明画面から直接始められるQA専用画面を表示する。
+  const [showChallenge500QaPreview] = useState(isChallenge500QaPreviewRequested)
 
   /**
    * Ver.5.0追加: GA4のgame_start（常に）とreplay_start（結果画面からのリトライ時のみ）を
@@ -79,6 +84,8 @@ export default function App() {
         <FinalTrialPreviewScreen mode="finalquestion" />
       ) : showClear200Preview ? (
         <FinalTrialPreviewScreen mode="clear200" />
+      ) : showChallenge500QaPreview ? (
+        <Challenge500QaPreviewScreen />
       ) : (
         <>
           {screen === 'title' && <TitleScreen onStart={() => startPlay('title')} />}
