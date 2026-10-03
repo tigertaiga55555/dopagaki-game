@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Challenge500QaPanel } from '../dev/Challenge500QaPanel'
+import { Challenge500CorrectFx, type Challenge500CorrectFxHandle } from '../components/Challenge500CorrectFx'
 import { Challenge500TimerBar } from '../components/Challenge500TimerBar'
 import { QuitButton } from '../components/QuitButton'
 import {
@@ -47,6 +48,43 @@ function hapticPulse(pattern: number | number[]) {
   if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') navigator.vibrate(pattern)
 }
 
+/**
+ * パフォーマンス最適化: index.cssの.anim-climax-shake / .anim-climax-shake-strongと
+ * 全く同じキーフレームだが、classList.remove→void el.offsetWidth（強制同期リフロー）→
+ * classList.addという旧方式をやめ、Web Animations APIで直接再生する。
+ * 旧方式は「同じクラスを連続で再適用してもブラウザがアニメーションの再発火に気づけない」
+ * 問題を強制リフローで回避していたが、このoffsetWidth読み出しはメインスレッドを
+ * 同期的にブロックするレイアウト計算を強制するため、正解判定ハンドラ内（スコア更新・
+ * 次問生成・SE再生と同じ呼び出しスタック）で毎回実行されるとiPhone実機で可視的な
+ * コマ落ちの原因になっていた。Animation.cancel()→新規animate()は強制リフローなしで
+ * 同じ「連打しても毎回最初から揺れ直す」挙動を実現できる。見た目（移動量・tangent・
+ * 時間）は旧CSSと完全に同一。
+ */
+const CLIMAX_SHAKE_KEYFRAMES: Keyframe[] = [
+  { transform: 'translate(0, 0)', offset: 0 },
+  { transform: 'translate(-6px, 2px)', offset: 0.2 },
+  { transform: 'translate(5px, -3px)', offset: 0.4 },
+  { transform: 'translate(-4px, 3px)', offset: 0.6 },
+  { transform: 'translate(3px, -2px)', offset: 0.8 },
+  { transform: 'translate(0, 0)', offset: 1 },
+]
+const CLIMAX_SHAKE_STRONG_KEYFRAMES: Keyframe[] = [
+  { transform: 'translate(0, 0)', offset: 0 },
+  { transform: 'translate(-12px, 5px)', offset: 0.15 },
+  { transform: 'translate(10px, -7px)', offset: 0.3 },
+  { transform: 'translate(-9px, 6px)', offset: 0.45 },
+  { transform: 'translate(8px, -5px)', offset: 0.6 },
+  { transform: 'translate(-5px, 3px)', offset: 0.75 },
+  { transform: 'translate(3px, -2px)', offset: 0.9 },
+  { transform: 'translate(0, 0)', offset: 1 },
+]
+/** index.cssの.anim-spike（spike-pop 0.5s ease-out）と同じキーフレーム。 */
+const SPIKE_KEYFRAMES: Keyframe[] = [
+  { transform: 'scale(1)', offset: 0 },
+  { transform: 'scale(1.18)', offset: 0.4 },
+  { transform: 'scale(1)', offset: 1 },
+]
+
 type CheckpointBeat = 'flash300' | 'flash400' | null
 type ClearBeat = 'first' | 'blackout' | 'second' | null
 
@@ -77,9 +115,9 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
   const checkpointTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [clearBeat, setClearBeat] = useState<ClearBeat>(null)
   const clearTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
-  const [correctBurstKey, setCorrectBurstKey] = useState(0)
-  const [showCorrectBurst, setShowCorrectBurst] = useState(false)
-  const correctBurstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const correctFxRef = useRef<Challenge500CorrectFxHandle>(null)
+  const dopaTextRef = useRef<HTMLParagraphElement>(null)
+  const shakeAnimRef = useRef<Animation | null>(null)
 
   const tier = tierForPercent(snapshot.state.percent)
   /** 100% OVERDRIVE用のtier（0〜4）に200〜400%を写像し、既存の常駐演出（サイレン・粒子・枠の発光）を
@@ -89,10 +127,11 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
   function triggerShake(strong = false) {
     const el = shakeWrapperRef.current
     if (!el) return
-    const cls = strong ? 'anim-climax-shake-strong' : 'anim-climax-shake'
-    el.classList.remove(cls)
-    void el.offsetWidth
-    el.classList.add(cls)
+    shakeAnimRef.current?.cancel()
+    shakeAnimRef.current = el.animate(strong ? CLIMAX_SHAKE_STRONG_KEYFRAMES : CLIMAX_SHAKE_KEYFRAMES, {
+      duration: strong ? 400 : 180,
+      easing: 'ease-in-out',
+    })
   }
 
   /**
@@ -116,11 +155,23 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
     if (result.correct) {
       sfx.challenge500Correct(tier)
       hapticPulse([10, 30, 10])
-      triggerShake(false)
-      setCorrectBurstKey((k) => k + 1)
-      setShowCorrectBurst(true)
-      if (correctBurstTimerRef.current) clearTimeout(correctBurstTimerRef.current)
-      correctBurstTimerRef.current = setTimeout(() => setShowCorrectBurst(false), 900)
+      /**
+       * パフォーマンス最適化: 見た目のシェイク・sparkleバースト・DOPA%の弾みは、
+       * スコア更新＋次問生成（下のhandleResult、Reactの再コミットで問題tree全体が
+       * 入れ替わる重い処理）と同じフレームで行わず、次のアニメーションフレームへ
+       * 1回分だけずらす。体感のテンポ（正解→次問の速さ）はrAF 1回分（約16ms）では
+       * 変わらないが、「問題の切り替え」と「演出の発火」という2つの重いDOM更新が
+       * 同一フレームに重なってiPhone実機でカクつく問題を避けられる。
+       */
+      requestAnimationFrame(() => {
+        triggerShake(false)
+        correctFxRef.current?.trigger()
+        const dopaEl = dopaTextRef.current
+        if (dopaEl) {
+          dopaEl.getAnimations().forEach((anim) => anim.cancel())
+          dopaEl.animate(SPIKE_KEYFRAMES, { duration: 500, easing: 'ease-out' })
+        }
+      })
     } else {
       sfx.challenge500Miss(tier)
       hapticPulse(40)
@@ -206,7 +257,7 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
         <p className="text-[10px] font-bold tracking-widest text-white/40">限界突破チャレンジ</p>
         <div className="text-right">
           <p className="text-[10px] font-bold tracking-widest text-white/50">DOPA</p>
-          <p key={correctBurstKey} className="anim-spike text-4xl font-black tabular-nums text-amber-300">
+          <p ref={dopaTextRef} className="text-4xl font-black tabular-nums text-amber-300">
             {snapshot.state.percent}
             <span className="text-xl">%</span>
           </p>
@@ -242,12 +293,7 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
         )}
       </div>
 
-      {showCorrectBurst && (
-        <>
-          <div className="flash-white-overlay pointer-events-none absolute inset-0 z-40 bg-white" />
-          <Sparkle120Overlay show />
-        </>
-      )}
+      <Challenge500CorrectFx ref={correctFxRef} />
 
       {showQaPanel && !finalState && !checkpointBeat && (
         <Challenge500QaPanel
