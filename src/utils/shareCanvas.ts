@@ -249,11 +249,11 @@ interface CardContent {
 
 function buildContent(ctx: CanvasRenderingContext2D, result: FinalResultV4): CardContent {
   const variant = getVariantId(result)
-  const { isFinalTrial, isMax, isOverdrive, isEndlessProgress, isEndlessClear, isPremium } = getResultCardVariant(result)
+  const { isFinalTrial, isMax, isOverdrive, isChallenge500Progress, isChallenge500Clear, isPremium } = getResultCardVariant(result)
 
-  const headerText = isEndlessClear
+  const headerText = isChallenge500Clear
     ? '🏆 DOPA 500% ABSOLUTE CLEAR 🏆'
-    : isEndlessProgress
+    : isChallenge500Progress
       ? '⚡ 限界突破チャレンジ ⚡'
       : isMax
         ? '🏆 PERFECT CLEAR!! 🏆'
@@ -356,12 +356,12 @@ function layoutCard(
   }
 
   // Ver.6 Phase 1: 限界突破チャレンジ（200〜500%）の進捗（チェックポイント or 完全クリア）
-  if (result.endless) {
+  if (result.challenge500) {
     cursor += 6 + 14
     if (draw) {
       drawCenteredText(
         ctx,
-        result.endless.cleared ? 'CHALLENGE COMPLETE' : `CHECKPOINT ${result.endless.floor}%`,
+        result.challenge500.cleared ? 'CHALLENGE COMPLETE' : `CHECKPOINT ${result.challenge500.floor}%`,
         centerX,
         cardTop + cursor,
         900,

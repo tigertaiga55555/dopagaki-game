@@ -64,7 +64,7 @@ export function ResultScreen({ result, onRetry }: Props) {
     setImageBusy(true)
     try {
       const blob = await captureResultCardPng(result)
-      const outcome = await shareResultWithImage(blob, result.percent, result.type.name, result.finalTrial, result.endless)
+      const outcome = await shareResultWithImage(blob, result.percent, result.type.name, result.finalTrial, result.challenge500)
       if (outcome === 'shared-with-image-ios') {
         showToast('投稿文をコピーしました。必要ならXで貼り付けてください')
       } else if (outcome === 'ios-share-failed-fallback') {
@@ -100,7 +100,7 @@ export function ResultScreen({ result, onRetry }: Props) {
 
   /** 「結果をコピー」は従来通り画像を含めず、共有文＋URLのテキストのみコピーする。 */
   const handleCopy = async () => {
-    const ok = await copyShareText(result.percent, result.type.name, result.finalTrial, result.endless)
+    const ok = await copyShareText(result.percent, result.type.name, result.finalTrial, result.challenge500)
     setCopied(ok)
     if (ok) setTimeout(() => setCopied(false), 2000)
   }

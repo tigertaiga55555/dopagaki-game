@@ -3,7 +3,7 @@
  * 自然な反対語として成立するものだけを登録する。
  *
  * 重要：このリストを無条件に全問題タイプへ機械適用しない。どの軸をどの問題タイプで
- * 使ってよいかは、各問題テンプレート側（src/questions/endless/*）が個別に
+ * 使ってよいかは、各問題テンプレート側（src/questions/challenge500/*）が個別に
  * ホワイトリスト管理する（このファイルは「存在する反転語」を定義するだけで、
  * 「どこで使えるか」には関与しない）。
  */
@@ -17,6 +17,7 @@ export type InversionAxis =
   | 'firstLast'
   | 'insideOutside'
   | 'sameDifferent'
+  | 'winLose'
 
 export const INVERSION_PAIRS: Record<InversionAxis, readonly [string, string]> = {
   leftRight: ['左', '右'],
@@ -28,6 +29,12 @@ export const INVERSION_PAIRS: Record<InversionAxis, readonly [string, string]> =
   firstLast: ['最初', '最後'],
   insideOutside: ['内側', '外側'],
   sameDifferent: ['同じ', '異なる'],
+  /**
+   * Ver.6 Phase 1再設計: じゃんけん複合判断問題（RpsCompoundQuestion）専用に追加した軸。
+   * 初期候補9軸には無いが、色に依存しない自然な対義語であり、FINAL/ULTIMATEのRPS系
+   * 問題（勝つ手/負ける手の判定）を500%向けに反転ギミックと組み合わせるために必要。
+   */
+  winLose: ['勝つ', '負ける'],
 }
 
 /** axisの反対語を返す。wordがそのaxisに属さない場合は例外にする（生成ミスを早期発見するため）。 */

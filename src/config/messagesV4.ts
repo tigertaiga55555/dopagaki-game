@@ -43,13 +43,13 @@ export function buildShareText(
   percent: number,
   typeName: string,
   finalTrial?: { trialsCleared: number; cleared200: boolean },
-  endless?: { floor: number; cleared: boolean },
+  challenge500?: { floor: number; cleared: boolean },
 ): string {
-  if (endless) {
-    if (endless.cleared) {
+  if (challenge500) {
+    if (challenge500.cleared) {
       return `ドパガキ度 ${percent}％\nABSOLUTE CLEAR\n${typeName}\nFINAL DOPA TRIAL 16/16\n\n500％まで攻略した。\n\n${SHARE_HASHTAG}`
     }
-    return `ドパガキ度 ${percent}％\n${typeName}\nCHECKPOINT ${endless.floor}％\n\n200％の先がある。\n\n${SHARE_HASHTAG}`
+    return `ドパガキ度 ${percent}％\n${typeName}\nCHECKPOINT ${challenge500.floor}％\n\n200％の先がある。\n\n${SHARE_HASHTAG}`
   }
   if (finalTrial) {
     if (finalTrial.cleared200) {

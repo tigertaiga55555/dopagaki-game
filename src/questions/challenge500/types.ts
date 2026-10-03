@@ -7,26 +7,26 @@ import type { ComponentType } from 'react'
  * 正しく理解し、下線部分だけ反転させて読む」ことが核であるため、既存の
  * targetTimeMs（厳しい反応時間制限）の概念を持ち込まない方が適切なため。
  */
-export type EndlessTier = 1 | 2 | 3
+export type Challenge500Tier = 1 | 2 | 3
 
-export interface EndlessQuestionResult {
+export interface Challenge500QuestionResult {
   correct: boolean
 }
 
-export interface EndlessQuestionSpec {
+export interface Challenge500QuestionSpec {
   instanceId: string
   type: string
   data: Record<string, unknown>
 }
 
-export interface EndlessQuestionComponentProps {
-  spec: EndlessQuestionSpec
-  onResult: (result: EndlessQuestionResult) => void
+export interface Challenge500QuestionComponentProps {
+  spec: Challenge500QuestionSpec
+  onResult: (result: Challenge500QuestionResult) => void
 }
 
-export interface EndlessQuestionModule {
+export interface Challenge500QuestionModule {
   id: string
   /** tierに応じて反転・条件数を変えたdataを生成する */
-  generate: (tier: EndlessTier) => Record<string, unknown>
-  Component: ComponentType<EndlessQuestionComponentProps>
+  generate: (tier: Challenge500Tier) => Record<string, unknown>
+  Component: ComponentType<Challenge500QuestionComponentProps>
 }

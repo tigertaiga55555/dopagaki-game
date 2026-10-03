@@ -3,26 +3,33 @@ import { InversionPrompt, type PromptSegment } from '../../components/InversionP
 import { type InversionAxis, opposite, pickAxisWord } from '../../engine/inversion/words'
 import { pick } from '../../engine/random'
 import { useInputGateReady } from '../useInputGateReady'
-import type { EndlessQuestionComponentProps, EndlessQuestionModule } from './types'
+import { pickInversionCount } from './inversionPicker'
+import type { Challenge500QuestionComponentProps, Challenge500QuestionModule } from './types'
 
 const SWIPE_THRESHOLD_PX = 50
 const AXES: InversionAxis[] = ['leftRight', 'upDown']
 const ARROW_FOR: Record<string, string> = { 左: '←', 右: '→', 上: '↑', 下: '↓' }
 
 /**
- * Ver.6 Phase 1: 下線反転ギミックのテンプレート3（スワイプ方向）。1回のジェスチャーで
- * 完結する性質上、tier1（200〜299%、1箇所反転）専用のバリエーションとして実装している
- * （NumberPick/ShapeCountPickの2テンプレートがtier1〜3をフルに担当する）。
+ * Ver.6 Phase 1（再設計版）: 下線反転ギミックのテンプレート3（スワイプ方向）。1回の
+ * ジェスチャーで完結する性質上、反転候補は常に1箇所のみ（maxSlots=1）であり、
+ * tier1（200〜299%）専用のバリエーションとして実装している（NumberPick/ShapeCountPick
+ * の2テンプレートがtier1〜3をフルに担当し、tier2/3向けの複合スワイプは別テンプレート
+ * （CompoundSwipeQuestion）として用意する）。
+ *
+ * 反転するかどうか（0/1）はpickInversionCountで毎回抽選し、反転しない場合は下線を付けず
+ * 文字どおりの方向にスワイプするのが正解になる（反転なし問題を必ず混在させる）。
  */
 function generate() {
   const axis = pick(AXES)
   const shownWord = pickAxisWord(axis)
-  const effectiveWord = opposite(axis, shownWord)
-  const segments: PromptSegment[] = [{ text: shownWord, inverted: true }, { text: 'にスワイプ！', inverted: false }]
+  const inverted = pickInversionCount(1, 1) === 1
+  const effectiveWord = inverted ? opposite(axis, shownWord) : shownWord
+  const segments: PromptSegment[] = [{ text: shownWord, inverted }, { text: 'にスワイプ！', inverted: false }]
   return { effectiveWord, segments }
 }
 
-function Component({ spec, onResult }: EndlessQuestionComponentProps) {
+function Component({ spec, onResult }: Challenge500QuestionComponentProps) {
   const { effectiveWord, segments } = spec.data as { effectiveWord: string; segments: PromptSegment[] }
   const doneRef = useRef(false)
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
@@ -64,8 +71,8 @@ function Component({ spec, onResult }: EndlessQuestionComponentProps) {
   )
 }
 
-export const SwipeDirectionEndlessModule: EndlessQuestionModule = {
-  id: 'endlessSwipeDirection',
+export const SwipeDirectionChallenge500Module: Challenge500QuestionModule = {
+  id: 'challenge500SwipeDirection',
   generate,
   Component,
 }

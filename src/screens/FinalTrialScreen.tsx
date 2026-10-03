@@ -15,12 +15,13 @@ import {
 import { Confetti120Overlay, GoldenClearOverlay, RainbowShockwaveOverlay, Sparkle120Overlay, WhiteFlashOverlay } from '../components/OverdriveFx'
 import { QuitButton } from '../components/QuitButton'
 import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
-import type { EndlessState } from '../engine/endlessChallenge'
-import { computeEndlessResult, computeFinalTrialResult } from '../engine/resultEngineV4'
+import type { Challenge500State } from '../engine/challenge500Engine'
+import { computeChallenge500Result, computeFinalTrialResult } from '../engine/resultEngineV4'
 import { finalSuccessIntensityFor, useFinalTrial } from '../engine/useFinalTrial'
 import { FINAL_QUESTION_MODULES, ULTIMATE_QUESTION_POOL } from '../questions/final'
 import { Challenge500IntroScreen } from './Challenge500IntroScreen'
 import { Challenge500Screen } from './Challenge500Screen'
+import { LimitBreakUnlockScreen } from './LimitBreakUnlockScreen'
 import { duckAudio, unlockAudio } from '../utils/audioContext'
 import { setFinalIntensity, setFinalMode, setUltimateMode, startBgm, stopBgm } from '../utils/bgm'
 import { isMuted, PERFECT_FANFARE_200_TIMING_MS, setMuted, sfx } from '../utils/sound'
@@ -96,6 +97,13 @@ const FIREWORK_WAVE_OFFSETS_MS = [
 type Clear200Beat = 'silence' | 'impact' | 'slam' | 'fanfare' | null
 type FanfareRevealStage = 'percent' | 'perfectClear' | 'title' | 'full'
 
+/**
+ * Ver.6 Phase 1（再設計版）: 200% PERFECT CLEARの祝福が完全に終わった後、LIMIT BREAK
+ * 説明画面へ入る前に必ず一度だけ挟む「まだ先がある」ムード転換演出の長さ。
+ * 数秒で見せきる短い演出にとどめ、ゲームのテンポを損なわない。
+ */
+const UNLOCK_TRANSITION_MS = 2600
+
 export function FinalTrialScreen({
   initialStats,
   onFinish,
@@ -113,16 +121,34 @@ export function FinalTrialScreen({
    * 通常のMISS終了（cleared200===false）は従来通り即座にonFinishを呼ぶため、
    * 既存の0〜200%の挙動に影響はない。
    */
-  const [challengePhase, setChallengePhase] = useState<'none' | 'intro' | 'active'>('none')
+  const [challengePhase, setChallengePhase] = useState<'none' | 'unlock' | 'intro' | 'active'>('none')
   const clear200ResultRef = useRef<FinalResultV4 | null>(null)
   const { snapshot, start, handleResult } = useFinalTrial((payload) => {
     if (payload.cleared200) {
       clear200ResultRef.current = computeFinalTrialResult(payload, initialStats)
-      setChallengePhase('intro')
+      setChallengePhase('unlock')
       return
     }
     onFinish(computeFinalTrialResult(payload, initialStats))
   }, startAtQuestion)
+
+  // Ver.6 Phase 1（再設計版）: 200% PERFECT CLEARの祝福が終わった直後、即座に説明画面へ
+  // 進ませず、「まだ先がある」というムード転換〜LIMIT BREAK解放の短い演出を必ず一度挟む
+  // （200%を「通過点」に見せないための明確な区切り）。既存の200% PERFECT CLEAR演出
+  // （useFinalTrial内のCLEAR200_TRANSITION_MS、ここでは一切変更しない）がフルに再生し
+  // 終わった後にこのunlockフェーズへ入るため、既存の祝福が弱まることはない。
+  const unlockBeatsFiredRef = useRef(false)
+  useEffect(() => {
+    if (challengePhase !== 'unlock') {
+      unlockBeatsFiredRef.current = false
+      return
+    }
+    if (unlockBeatsFiredRef.current) return
+    unlockBeatsFiredRef.current = true
+    sfx.limitBreakUnlock()
+    const t = setTimeout(() => setChallengePhase('intro'), UNLOCK_TRANSITION_MS)
+    return () => clearTimeout(t)
+  }, [challengePhase])
 
   // 突入演出の各ビート
   const [showCrack, setShowCrack] = useState(false)
@@ -363,6 +389,10 @@ export function FinalTrialScreen({
   // ULTIMATE QUESTION（突入演出中〜Q16回答中）だけは赤＋黒＋非常警告の専用世界観にする。
   const showUltimateWorld = snapshot.phase === 'ultimateIntro' || (snapshot.phase === 'playing' && isUltimateQuestion)
 
+  if (challengePhase === 'unlock') {
+    return <LimitBreakUnlockScreen onQuit={onQuit} />
+  }
+
   if (challengePhase === 'intro') {
     return <Challenge500IntroScreen onStart={() => setChallengePhase('active')} onQuit={onQuit} />
   }
@@ -371,10 +401,10 @@ export function FinalTrialScreen({
     return (
       <Challenge500Screen
         onQuit={onQuit}
-        onFinish={(state: EndlessState) => {
+        onFinish={(state: Challenge500State) => {
           const base = clear200ResultRef.current
           if (!base) return
-          onFinish(computeEndlessResult(state, base))
+          onFinish(computeChallenge500Result(state, base))
         }}
       />
     )

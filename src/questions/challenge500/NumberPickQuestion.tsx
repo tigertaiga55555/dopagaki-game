@@ -3,7 +3,8 @@ import { InversionPrompt, type PromptSegment } from '../../components/InversionP
 import { opposite, pickAxisWord } from '../../engine/inversion/words'
 import { randInt, shuffle } from '../../engine/random'
 import { useInputGateReady } from '../useInputGateReady'
-import type { EndlessQuestionComponentProps, EndlessQuestionModule, EndlessTier } from './types'
+import { pickInversionCount } from './inversionPicker'
+import type { Challenge500QuestionComponentProps, Challenge500QuestionModule, Challenge500Tier } from './types'
 
 interface Item {
   id: number
@@ -11,18 +12,26 @@ interface Item {
   side: 'left' | 'right'
 }
 
+type Slot = 'size' | 'side'
+
 /**
- * Ver.6 Phase 1: 下線反転ギミックのテンプレート1（数字選択）。
+ * Ver.6 Phase 1（再設計版）: 下線反転ギミックのテンプレート1（数字選択）。
  *
- * ・tier1（200〜299%）：「一番 [大きい/小さい] 数字を押せ」の1箇所反転のみ。
- * ・tier2（300〜399%）：位置条件「[左/右]にある」を追加し、2箇所反転にする。
- * ・tier3（400〜499%）：反転しない通常条件「偶数の中で」を先頭に追加し、
- *   通常条件＋2つの反転条件という複合判断にする。
+ * ・tier1（200〜299%）：反転候補は「大きい/小さい」の1箇所のみ（maxSlots=1）。
+ * ・tier2（300〜399%）：位置条件「左/右」を追加し、反転候補は最大2箇所（maxSlots=2）。
+ * ・tier3（400〜499%）：反転しない通常条件「偶数の中で」を先頭に常に追加し、
+ *   反転候補自体はtier2と同じ最大2箇所のまま（複合条件＋反転というtier3の性質は
+ *   「常に2箇所反転」ではなく「通常条件＋0〜2箇所の反転」という形で表現する）。
+ *
+ * どの箇所を反転するか（0/1/2個）はpickInversionCountでtier別の比率から毎回抽選し、
+ * 反転しなかった語は下線なし・文章どおりの意味として扱う（ユーザー指示の訂正：
+ * 「毎問必ず反転」は禁止、反転なし問題を必ず混在させる）。
  *
  * 正解の一意性は「反転後に絞り込まれる候補集合内で、値が互いに重複しない」ことを
- * 生成時に構造的に保証することで担保する（運に頼ったランダム生成の作り直しに頼らない）。
+ * 生成時に構造的に保証することで担保する（invertCountの値に関わらず、どちらの側／
+ * どちらの偶奇が選ばれても必ず一意のmax/minが存在する集合になるよう構築している）。
  */
-function buildItems(tier: EndlessTier): Item[] {
+function buildItems(tier: Challenge500Tier): Item[] {
   if (tier === 1) {
     const values = new Set<number>()
     while (values.size < 4) values.add(randInt(1, 50))
@@ -58,17 +67,26 @@ function buildItems(tier: EndlessTier): Item[] {
   ]
 }
 
-function generate(tier: EndlessTier) {
+function generate(tier: Challenge500Tier) {
   const items = buildItems(tier)
+  const slots: Slot[] = tier === 1 ? ['size'] : ['size', 'side']
+  const maxSlots = slots.length as 1 | 2
+  const invertCount = pickInversionCount(tier, maxSlots)
+  const invertedSlots = new Set(shuffle(slots).slice(0, invertCount))
+
   const sizeWordShown = pickAxisWord('bigSmall')
-  const sizeWordEffective = opposite('bigSmall', sizeWordShown)
+  const sizeInverted = invertedSlots.has('size')
+  const sizeWordEffective = sizeInverted ? opposite('bigSmall', sizeWordShown) : sizeWordShown
   const wantMax = sizeWordEffective === '大きい'
 
   let sideWordShown: string | null = null
   let effectiveSide: 'left' | 'right' | null = null
+  let sideInverted = false
   if (tier >= 2) {
     sideWordShown = pickAxisWord('leftRight')
-    effectiveSide = opposite('leftRight', sideWordShown) === '左' ? 'left' : 'right'
+    sideInverted = invertedSlots.has('side')
+    const sideWordEffective = sideInverted ? opposite('leftRight', sideWordShown) : sideWordShown
+    effectiveSide = sideWordEffective === '左' ? 'left' : 'right'
   }
 
   let pool = items
@@ -80,13 +98,13 @@ function generate(tier: EndlessTier) {
 
   const segments: PromptSegment[] = []
   if (tier === 3) segments.push({ text: '偶数の中で、', inverted: false })
-  if (sideWordShown) segments.push({ text: sideWordShown, inverted: true }, { text: 'にある', inverted: false })
-  segments.push({ text: `一番 ${sizeWordShown} `, inverted: true }, { text: '数字を押せ！', inverted: false })
+  if (sideWordShown) segments.push({ text: sideWordShown, inverted: sideInverted }, { text: 'にある', inverted: false })
+  segments.push({ text: `一番 ${sizeWordShown} `, inverted: sizeInverted }, { text: '数字を押せ！', inverted: false })
 
   return { items: shuffle(items), targetId, segments }
 }
 
-function Component({ spec, onResult }: EndlessQuestionComponentProps) {
+function Component({ spec, onResult }: Challenge500QuestionComponentProps) {
   const { items, targetId, segments } = spec.data as { items: Item[]; targetId: number; segments: PromptSegment[] }
   const doneRef = useRef(false)
   const ready = useInputGateReady()
@@ -127,8 +145,8 @@ function Component({ spec, onResult }: EndlessQuestionComponentProps) {
   )
 }
 
-export const NumberPickEndlessModule: EndlessQuestionModule = {
-  id: 'endlessNumberPick',
+export const NumberPickChallenge500Module: Challenge500QuestionModule = {
+  id: 'challenge500NumberPick',
   generate,
   Component,
 }

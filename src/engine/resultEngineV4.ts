@@ -1,7 +1,7 @@
 import { getNearMissComment } from '../config/messagesV4'
 import { NORMAL_TYPES, TYPE_THRESHOLDS, getOverdriveTitle } from '../config/resultTypesV4'
 import { getBestPercent, getPlayCount, incrementPlayCount, updateBestPercent } from '../utils/storage'
-import type { EndlessState } from './endlessChallenge'
+import type { Challenge500State } from './challenge500Engine'
 import type { RushFinishPayload } from './useRushGame'
 import type { FinalTrialFinishPayload } from './useFinalTrial'
 import type { DopagakiTypeDef, FinalResultV4, PlayStats, QuestionTypeId } from '../types'
@@ -188,7 +188,7 @@ function buildFinalTrialComment(trialsCleared: number, cleared200: boolean): str
 }
 
 /** Ver.6 Phase 1: 限界突破チャレンジ（200〜500%）専用のコメント。 */
-function buildEndlessComment(state: EndlessState): string {
+function buildChallenge500Comment(state: Challenge500State): string {
   if (state.cleared) return '200％の先にある\nすべてを攻略した。\nもう戻れない。'
   if (state.floor >= 400) return '400％の壁を越え、\nそこで限界を迎えた。'
   if (state.floor >= 300) return '300％の壁を越え、\nそこで限界を迎えた。'
@@ -270,10 +270,10 @@ export function computeFinalTrialResult(payload: FinalTrialFinishPayload, stats:
  * 書き換わってしまわないようにするためのフラグで、通常プレイの呼び出し元
  * （FinalTrialScreen.tsxの本番経路）は常に省略してtrue（既存動作）のまま呼ぶ。
  */
-export function computeEndlessResult(state: EndlessState, baseResult: FinalResultV4, persist = true): FinalResultV4 {
+export function computeChallenge500Result(state: Challenge500State, baseResult: FinalResultV4, persist = true): FinalResultV4 {
   const finalPercent = state.percent
   const type = getOverdriveTitle(finalPercent)
-  const comment = buildEndlessComment(state)
+  const comment = buildChallenge500Comment(state)
 
   const bestBefore = getBestPercent()
   const isNewBest = persist ? updateBestPercent(finalPercent) : false
@@ -286,6 +286,6 @@ export function computeEndlessResult(state: EndlessState, baseResult: FinalResul
     comment,
     isNewBest,
     bestPercent: isNewBest ? finalPercent : bestBefore,
-    endless: { floor: state.floor, cleared: state.cleared },
+    challenge500: { floor: state.floor, cleared: state.cleared },
   }
 }

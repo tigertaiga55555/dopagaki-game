@@ -1,5 +1,5 @@
 import type { FinalResultV4 } from '../types'
-import { ENDLESS_CONFIG } from '../config/endlessConfig'
+import { CHALLENGE500_CONFIG } from '../config/challenge500Config'
 import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
 
 interface Props {
@@ -53,16 +53,16 @@ export function getResultCardVariant(result: FinalResultV4) {
   // 区別する。旧実装は「percent >= 200」を一括してisMaxとしていたため、500%到達時も200%と
   // 全く同じ「PERFECT CLEAR」表示になってしまう不具合があった（isMaxの基準値自体は
   // 変更せず、200%ちょうどの場合だけに絞り込む形で解消する）。
-  const isEndlessClear = result.percent >= ENDLESS_CONFIG.clearPercent
-  const isEndlessProgress = result.percent > FINAL_TRIAL_CONFIG.clearPercent && !isEndlessClear
-  const isMax = result.percent >= FINAL_TRIAL_CONFIG.clearPercent && !isEndlessProgress && !isEndlessClear
+  const isChallenge500Clear = result.percent >= CHALLENGE500_CONFIG.clearPercent
+  const isChallenge500Progress = result.percent > FINAL_TRIAL_CONFIG.clearPercent && !isChallenge500Clear
+  const isMax = result.percent >= FINAL_TRIAL_CONFIG.clearPercent && !isChallenge500Progress && !isChallenge500Clear
   // FINAL DOPA TRIALへ突入した（=result.finalTrialが存在する）が、200%まで到達できなかった場合。
-  const isFinalTrial = !!result.finalTrial && !isMax && !isEndlessProgress && !isEndlessClear
-  // カードの背景・光彩・虹ボーダーなど「見た目の豪華さ」はisMax/isEndlessProgress/isEndlessClearの
+  const isFinalTrial = !!result.finalTrial && !isMax && !isChallenge500Progress && !isChallenge500Clear
+  // カードの背景・光彩・虹ボーダーなど「見た目の豪華さ」はisMax/isChallenge500Progress/isChallenge500Clearの
   // 3つで共通にする（Phase 1では演出の作り込みより文言の正確さを優先するため、チェックポイント
   // 終了と500%完全クリアを視覚的にさらに作り分けることはしない。テキストでは明確に区別する）。
-  const isPremium = isMax || isEndlessProgress || isEndlessClear
-  return { isOverdrive, isMax, isFinalTrial, isEndlessProgress, isEndlessClear, isPremium }
+  const isPremium = isMax || isChallenge500Progress || isChallenge500Clear
+  return { isOverdrive, isMax, isFinalTrial, isChallenge500Progress, isChallenge500Clear, isPremium }
 }
 
 /**
@@ -73,7 +73,7 @@ export function getResultCardVariant(result: FinalResultV4) {
  * どちらの分岐にも該当せず、進行と矛盾する固定文言「100％いける？」が表示される不具合があった。
  */
 export function getBottomStatusLine(percent: number): string {
-  if (percent >= ENDLESS_CONFIG.clearPercent) return '500％到達。もう人間じゃない。'
+  if (percent >= CHALLENGE500_CONFIG.clearPercent) return '500％到達。もう人間じゃない。'
   if (percent > FINAL_TRIAL_CONFIG.clearPercent) return '500％を目指せ。'
   if (percent >= FINAL_TRIAL_CONFIG.clearPercent) return '完全攻略。'
   if (percent === FINAL_TRIAL_CONFIG.clearPercent - FINAL_TRIAL_CONFIG.percentPerCorrect) return 'あと1問。200％いける？'
@@ -83,7 +83,7 @@ export function getBottomStatusLine(percent: number): string {
 }
 
 export function ResultCard({ result }: Props) {
-  const { isOverdrive, isMax, isFinalTrial, isEndlessProgress, isEndlessClear, isPremium } = getResultCardVariant(result)
+  const { isOverdrive, isMax, isFinalTrial, isChallenge500Progress, isChallenge500Clear, isPremium } = getResultCardVariant(result)
   const percentColor = isOverdrive ? 'text-amber-300' : result.percent >= 100 ? 'text-amber-200' : 'text-white'
 
   const card = (
@@ -127,11 +127,11 @@ export function ResultCard({ result }: Props) {
         </>
       )}
 
-      {isEndlessClear ? (
+      {isChallenge500Clear ? (
         <p className="relative text-center text-sm font-black tracking-widest text-white drop-shadow-[0_0_10px_rgba(250,204,21,0.9)]">
           🏆 DOPA 500% ABSOLUTE CLEAR 🏆
         </p>
-      ) : isEndlessProgress ? (
+      ) : isChallenge500Progress ? (
         <p className="relative text-center text-sm font-black tracking-widest text-white drop-shadow-[0_0_10px_rgba(250,204,21,0.9)]">
           ⚡ 限界突破チャレンジ ⚡
         </p>
@@ -166,9 +166,9 @@ export function ResultCard({ result }: Props) {
           FINAL DOPA TRIAL {result.finalTrial.trialsCleared} / 16
         </p>
       )}
-      {result.endless && (
+      {result.challenge500 && (
         <p className="relative mt-1 text-center text-sm font-black tracking-widest text-white/70">
-          {result.endless.cleared ? 'CHALLENGE COMPLETE' : `CHECKPOINT ${result.endless.floor}%`}
+          {result.challenge500.cleared ? 'CHALLENGE COMPLETE' : `CHECKPOINT ${result.challenge500.floor}%`}
         </p>
       )}
 

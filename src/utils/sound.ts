@@ -499,4 +499,87 @@ export const sfx = {
     setTimeout(() => beep(2000, 160, 'sine', 0.13), 70)
     setTimeout(() => beep(2500, 200, 'triangle', 0.1), 150)
   },
+
+  /**
+   * Ver.6 Phase 1（再設計版）: 200% PERFECT CLEAR後の「まだ先がある」ムード転換〜
+   * LIMIT BREAK解放の瞬間に鳴らす専用SE。祝福（perfectFanfare200）とは逆に、
+   * 一度沈み込んでから「扉が開く」ような低音スイープ＋金属的な解錠音を重ねる。
+   */
+  limitBreakUnlock: () => {
+    sweep(240, 40, 380, 'sine', 0.16)
+    setTimeout(() => {
+      noiseBurst(2600, 6, 220, 0.1)
+      sweep(80, 900, 260, 'sawtooth', 0.14)
+    }, 380)
+    setTimeout(() => beep(1400, 160, 'triangle', 0.12), 560)
+    setTimeout(() => beep(2100, 220, 'sine', 0.1), 650)
+  },
+  /**
+   * Ver.6 Phase 1（再設計版）: 500%チャレンジの正解音。tier（1〜3）が上がるほど音が
+   * 鋭く・高くなる（既存のfinalSuccessとは別系統——あちらは「連続正解の積み重ね」、
+   * こちらは「上級者向け領域の緊張感」を表現するため、同一SEの使い回しにしない）。
+   */
+  challenge500Correct: (tier: 1 | 2 | 3) => {
+    const base = 1100 + tier * 180
+    beep(base, 55, 'square', 0.09 + tier * 0.012)
+    setTimeout(() => beep(base * 1.4, 70, 'sine', 0.08 + tier * 0.012), 45)
+    if (tier >= 3) setTimeout(() => beep(base * 1.9, 90, 'triangle', 0.08), 110)
+  },
+  /**
+   * Ver.6 Phase 1（再設計版）: 500%チャレンジのMISS音。tier3（400〜499%）は
+   * 「即終了」の重みを出すため、通常のmissよりさらに低く・長く・一段重い質感にする。
+   */
+  challenge500Miss: (tier: 1 | 2 | 3) => {
+    if (tier < 3) {
+      beep(170 - tier * 10, 200, 'sawtooth', 0.13)
+      setTimeout(() => beep(110, 220, 'sawtooth', 0.11), 100)
+      return
+    }
+    beep(90, 340, 'sawtooth', 0.2)
+    noiseBurst(600, 3, 260, 0.13, 'lowpass')
+    setTimeout(() => beep(55, 420, 'sine', 0.22), 140)
+  },
+  /** Ver.6 Phase 1（再設計版）: 300% CHECKPOINT到達専用の節目SE（OVERDRIVE到達相当の「節目感」）。 */
+  challenge500Checkpoint300: () => {
+    beep(55, 240, 'sine', 0.18)
+    sweep(700, 1600, 220, 'triangle', 0.13)
+    setTimeout(() => beep(1900, 180, 'sine', 0.12), 220)
+    setTimeout(() => beep(2400, 200, 'triangle', 0.1), 320)
+  },
+  /**
+   * Ver.6 Phase 1（再設計版）: 400% CHECKPOINT（FINAL CHECKPOINT）到達専用SE。
+   * 300%到達よりも明確に重く・強く——「ラスボス突入」の感覚を出すため、
+   * ultimateSirenに近い緊張感のある低音とノイズ質感を使いつつ、
+   * 最後は300%到達より高い達成音で締める（恐怖だけでなく高揚感も残す）。
+   */
+  challenge500Checkpoint400: () => {
+    beep(42, 320, 'sine', 0.24)
+    noiseBurst(1800, 5, 200, 0.14)
+    sweep(500, 100, 300, 'sawtooth', 0.15)
+    setTimeout(() => {
+      sweep(600, 2000, 260, 'triangle', 0.14)
+      beep(45, 280, 'sine', 0.18)
+    }, 320)
+    setTimeout(() => beep(2600, 220, 'sine', 0.12), 560)
+  },
+  /**
+   * Ver.6 Phase 1（再設計版）: 500% ABSOLUTE CLEAR（ゲーム最高到達点）専用の最大級ファンファーレ。
+   * 既存のperfectFanfare200（200%達成）を上回る格を出すため、同じ構造の使い回しにはせず、
+   * より高い到達音域・長い余韻・2段階の上昇フレーズを持つ専用の多拍構成にする。
+   */
+  challenge500Clear500: () => {
+    beep(32, 500, 'sine', 0.3)
+    noiseBurst(3200, 8, 260, 0.14)
+    setTimeout(() => {
+      beep(1046.5, 160, 'triangle', 0.14)
+      setTimeout(() => beep(1318.5, 170, 'triangle', 0.14), 110)
+      setTimeout(() => beep(1568.0, 180, 'sine', 0.13), 220)
+    }, 260)
+    setTimeout(() => {
+      beep(2093.0, 240, 'sine', 0.12)
+      setTimeout(() => beep(2637.0, 260, 'sine', 0.1), 130)
+      setTimeout(() => beep(3135.9, 320, 'triangle', 0.09), 260)
+    }, 620)
+    setTimeout(() => beep(4186.0, 600, 'sine', 0.07), 1000)
+  },
 }

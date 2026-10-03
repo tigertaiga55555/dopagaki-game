@@ -3,7 +3,7 @@ import { isIOS } from './platform'
 import { pngBlobToFile, downloadPngBlob } from './shareImage'
 
 type FinalTrialShareInfo = { trialsCleared: number; cleared200: boolean } | undefined
-type EndlessShareInfo = { floor: number; cleared: boolean } | undefined
+type Challenge500ShareInfo = { floor: number; cleared: boolean } | undefined
 
 /**
  * Ver.5.0追加修正: 共有URLは常にV4_SHARE_URL（本番URL）固定。window.location.hrefを
@@ -14,8 +14,8 @@ export function getShareUrl(): string {
   return V4_SHARE_URL
 }
 
-export function getShareText(percent: number, typeName: string, finalTrial?: FinalTrialShareInfo, endless?: EndlessShareInfo): string {
-  return buildShareText(percent, typeName, finalTrial, endless)
+export function getShareText(percent: number, typeName: string, finalTrial?: FinalTrialShareInfo, challenge500?: Challenge500ShareInfo): string {
+  return buildShareText(percent, typeName, finalTrial, challenge500)
 }
 
 /**
@@ -24,8 +24,8 @@ export function getShareText(percent: number, typeName: string, finalTrial?: Fin
  * urlフィールドがfilesと同時だと無視されることがあるため、textへ確実に含めておく）の
  * 両方で使う。
  */
-export function getFullShareText(percent: number, typeName: string, finalTrial?: FinalTrialShareInfo, endless?: EndlessShareInfo): string {
-  return `${getShareText(percent, typeName, finalTrial, endless)}\n${getShareUrl()}`
+export function getFullShareText(percent: number, typeName: string, finalTrial?: FinalTrialShareInfo, challenge500?: Challenge500ShareInfo): string {
+  return `${getShareText(percent, typeName, finalTrial, challenge500)}\n${getShareUrl()}`
 }
 
 /**
@@ -84,10 +84,10 @@ export async function shareResultWithImage(
   percent: number,
   typeName: string,
   finalTrial?: FinalTrialShareInfo,
-  endless?: EndlessShareInfo,
+  challenge500?: Challenge500ShareInfo,
 ): Promise<ImageShareOutcome> {
   const file = pngBlobToFile(blob)
-  const fullText = getFullShareText(percent, typeName, finalTrial, endless)
+  const fullText = getFullShareText(percent, typeName, finalTrial, challenge500)
 
   const nav = typeof navigator !== 'undefined' ? navigator : undefined
   const canShareFiles = typeof nav?.canShare === 'function' && nav.canShare({ files: [file] })
@@ -99,7 +99,7 @@ export async function shareResultWithImage(
     return 'shared-with-image'
   }
   if (typeof nav?.share === 'function') {
-    await nav.share({ text: getShareText(percent, typeName, finalTrial, endless), url: getShareUrl() })
+    await nav.share({ text: getShareText(percent, typeName, finalTrial, challenge500), url: getShareUrl() })
     return 'shared-text-only'
   }
   await navigator.clipboard.writeText(fullText)
@@ -107,8 +107,8 @@ export async function shareResultWithImage(
   return 'fallback-copied'
 }
 
-export async function copyShareText(percent: number, typeName: string, finalTrial?: FinalTrialShareInfo, endless?: EndlessShareInfo): Promise<boolean> {
-  const text = getFullShareText(percent, typeName, finalTrial, endless)
+export async function copyShareText(percent: number, typeName: string, finalTrial?: FinalTrialShareInfo, challenge500?: Challenge500ShareInfo): Promise<boolean> {
+  const text = getFullShareText(percent, typeName, finalTrial, challenge500)
   try {
     await navigator.clipboard.writeText(text)
     return true
