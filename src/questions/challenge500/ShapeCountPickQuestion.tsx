@@ -1,5 +1,6 @@
 import { useRef } from 'react'
-import { ShapeIcon, SHAPE_IDS, SHAPE_LABELS, type ShapeId } from '../../components/ShapeIcon'
+import { SHAPE_IDS, SHAPE_LABELS, type ShapeId } from '../../components/ShapeIcon'
+import { ShapeGroupButton, ShapeOptionsGrid, ShapeOptionsTwoColumns } from '../../components/ShapeOptionsLayout'
 import { InversionPrompt, type PromptSegment } from '../../components/InversionPrompt'
 import { opposite, pickAxisWord } from '../../engine/inversion/words'
 import { pick, pickExcluding, randInt, shuffle } from '../../engine/random'
@@ -123,17 +124,7 @@ function Component({ spec, onResult }: Challenge500QuestionComponentProps) {
   }
 
   function renderGroup(g: Group) {
-    return (
-      <button
-        key={g.id}
-        onPointerDown={() => ready && finish(g.id === targetId)}
-        className="flex min-h-16 min-w-20 flex-wrap items-center justify-center gap-1 rounded-2xl bg-white/10 p-2 active:scale-90"
-      >
-        {g.icons.map((s, i) => (
-          <ShapeIcon key={i} shape={s} size={16} />
-        ))}
-      </button>
-    )
+    return <ShapeGroupButton key={g.id} icons={g.icons} onPointerDown={() => ready && finish(g.id === targetId)} />
   }
 
   const hasSides = rightGroups.length > 0
@@ -141,12 +132,9 @@ function Component({ spec, onResult }: Challenge500QuestionComponentProps) {
     <div className="flex h-full w-full flex-col items-center justify-center gap-6 px-6 py-4 text-center select-none">
       <InversionPrompt segments={segments} />
       {hasSides ? (
-        <div className="flex w-full max-w-xs items-start justify-between gap-6">
-          <div className="grid grid-cols-1 gap-2.5">{leftGroups.map(renderGroup)}</div>
-          <div className="grid grid-cols-1 gap-2.5">{rightGroups.map(renderGroup)}</div>
-        </div>
+        <ShapeOptionsTwoColumns left={leftGroups.map(renderGroup)} right={rightGroups.map(renderGroup)} />
       ) : (
-        <div className="grid grid-cols-2 gap-3">{leftGroups.map(renderGroup)}</div>
+        <ShapeOptionsGrid columns={2}>{leftGroups.map(renderGroup)}</ShapeOptionsGrid>
       )}
     </div>
   )

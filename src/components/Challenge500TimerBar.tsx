@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useInputGateReady } from '../questions/useInputGateReady'
 import { sfx } from '../utils/sound'
 
@@ -49,12 +49,14 @@ const URGENCY_PERIOD_MS: Record<0 | 1 | 2 | 3, number> = { 0: 650, 1: 380, 2: 22
  * 「どちらか先に解決した方だけを採用する」ガードを持つため、タイムアウトと正解判定の
  * 競合は発生しない。
  *
- * 色は使わず、バーの長さ（＝残り時間の比率）だけで残り時間を示す。
+ * 実機フィードバック(Ver.6 Phase 1演出強化の後)により、黄色い横タイマーバー自体が
+ * 問題文より目立ちすぎるため視覚表示を廃止した。4.5秒固定の計測・timeout判定・
+ * 焦り音(sfx.challenge500Urgency)のスケジューリングはすべてこのコンポーネントの
+ * 内部状態としてそのまま残し、見えるUIだけを持たない（残り時間は焦り音の
+ * テンポ変化だけで伝える）。
  */
 export function Challenge500TimerBar({ limitMs, tier, onTimeout }: Props) {
   const ready = useInputGateReady()
-  const [ratio, setRatio] = useState(1)
-  const [urgent, setUrgent] = useState(false)
   const firedRef = useRef(false)
   const rafRef = useRef<number | null>(null)
   const urgencyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -64,8 +66,6 @@ export function Challenge500TimerBar({ limitMs, tier, onTimeout }: Props) {
     const startedAt = performance.now()
     function tick() {
       const elapsed = performance.now() - startedAt
-      const nextRatio = Math.max(0, 1 - elapsed / limitMs)
-      setRatio(nextRatio)
       if (elapsed >= limitMs) {
         if (!firedRef.current) {
           firedRef.current = true
@@ -89,7 +89,6 @@ export function Challenge500TimerBar({ limitMs, tier, onTimeout }: Props) {
       const remaining = limitMs - (performance.now() - startedAt)
       if (remaining <= 0) return
       const stage = urgencyStageFor(remaining)
-      setUrgent(true)
       sfx.challenge500Urgency(stage, tier)
       urgencyTimerRef.current = setTimeout(urgencyTick, Math.min(URGENCY_PERIOD_MS[stage], remaining))
     }
@@ -101,15 +100,5 @@ export function Challenge500TimerBar({ limitMs, tier, onTimeout }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, tier])
 
-  return (
-    <div
-      className={`h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-white/10 ${urgent ? 'anim-shake-fast' : ''}`}
-      aria-hidden="true"
-    >
-      <div
-        className={`h-full rounded-full bg-amber-300 ${ratio > 0.01 ? 'transition-[width] duration-100 ease-linear' : ''}`}
-        style={{ width: `${ratio * 100}%` }}
-      />
-    </div>
-  )
+  return null
 }

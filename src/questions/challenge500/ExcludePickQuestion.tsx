@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { InversionPrompt, type PromptSegment } from '../../components/InversionPrompt'
 import { ShapeIcon, SHAPE_IDS, type ShapeId } from '../../components/ShapeIcon'
+import { ShapeOptionsGrid } from '../../components/ShapeOptionsLayout'
 import { opposite, pickAxisWord } from '../../engine/inversion/words'
 import { pick, pickExcluding, shuffle } from '../../engine/random'
 import { useInputGateReady } from '../useInputGateReady'
@@ -81,7 +82,7 @@ function Component({ spec, onResult }: Challenge500QuestionComponentProps) {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-8 px-6 py-4 text-center select-none">
       <InversionPrompt segments={segments} />
-      <div className="grid grid-cols-3 gap-3">
+      <ShapeOptionsGrid columns={3}>
         {items.map((it) => (
           <button
             key={it.id}
@@ -93,7 +94,7 @@ function Component({ spec, onResult }: Challenge500QuestionComponentProps) {
             <ShapeIcon shape={it.shape} size={32} />
           </button>
         ))}
-      </div>
+      </ShapeOptionsGrid>
     </div>
   )
 }

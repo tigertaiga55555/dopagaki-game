@@ -273,13 +273,11 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
       <div className="relative z-10 flex flex-1 flex-col items-center justify-center">
         {showingQuestion && (
           <div key={snapshot.currentSpec!.instanceId} className="flex h-full w-full flex-col">
-            <div className="flex justify-center px-8 pb-2">
-              <Challenge500TimerBar
-                limitMs={CHALLENGE500_CONFIG.questionTimeLimitMs}
-                tier={tier}
-                onTimeout={() => guardedHandleResult({ correct: false })}
-              />
-            </div>
+            <Challenge500TimerBar
+              limitMs={CHALLENGE500_CONFIG.questionTimeLimitMs}
+              tier={tier}
+              onTimeout={() => guardedHandleResult({ correct: false })}
+            />
             <div className="flex-1">
               <CurrentQuestion spec={snapshot.currentSpec!} onResult={guardedHandleResult} />
             </div>

@@ -1,5 +1,6 @@
 import { useRef } from 'react'
-import { ShapeIcon, SHAPE_IDS, SHAPE_LABELS, type ShapeId } from '../../components/ShapeIcon'
+import { SHAPE_IDS, SHAPE_LABELS, type ShapeId } from '../../components/ShapeIcon'
+import { ShapeGroupButton, ShapeOptionsGrid, ShapeOptionsTwoColumns } from '../../components/ShapeOptionsLayout'
 import { InversionPrompt, type PromptSegment } from '../../components/InversionPrompt'
 import { opposite, pickAxisWord } from '../../engine/inversion/words'
 import { pick, pickExcluding, randInt, shuffle } from '../../engine/random'
@@ -110,17 +111,7 @@ function Component({ spec, onResult }: Challenge500QuestionComponentProps) {
   }
 
   function renderGroup(g: Group) {
-    return (
-      <button
-        key={g.id}
-        onPointerDown={() => ready && finish(g.id === targetId)}
-        className="flex min-h-14 min-w-16 flex-wrap items-center justify-center gap-1 rounded-xl bg-white/10 p-1.5 active:scale-90"
-      >
-        {g.icons.map((s, i) => (
-          <ShapeIcon key={i} shape={s} size={15} />
-        ))}
-      </button>
-    )
+    return <ShapeGroupButton key={g.id} icons={g.icons} onPointerDown={() => ready && finish(g.id === targetId)} />
   }
 
   const hasZones = outsideGroups.length > 0
@@ -128,17 +119,16 @@ function Component({ spec, onResult }: Challenge500QuestionComponentProps) {
     <div className="flex h-full w-full flex-col items-center justify-center gap-6 px-4 py-4 text-center select-none">
       <InversionPrompt segments={segments} />
       {hasZones ? (
-        <div className="grid grid-cols-3 gap-2">
-          {outsideGroups.slice(0, 2).map(renderGroup)}
-          <div className="col-span-1 row-span-1" />
-          <div className="col-span-1 flex items-center justify-center rounded-2xl border-2 border-dashed border-white/40 p-2">
-            <div className="grid grid-cols-1 gap-1.5">{insideGroups.map(renderGroup)}</div>
-          </div>
-          {outsideGroups.slice(2, 3).map(renderGroup)}
-          <div className="col-span-1 row-span-1" />
-        </div>
+        <ShapeOptionsTwoColumns
+          left={outsideGroups.map(renderGroup)}
+          right={
+            <div className="flex flex-col items-center gap-2.5 rounded-2xl border-2 border-dashed border-white/40 p-2">
+              {insideGroups.map(renderGroup)}
+            </div>
+          }
+        />
       ) : (
-        <div className="grid grid-cols-2 gap-3">{insideGroups.map(renderGroup)}</div>
+        <ShapeOptionsGrid columns={2}>{insideGroups.map(renderGroup)}</ShapeOptionsGrid>
       )}
     </div>
   )
