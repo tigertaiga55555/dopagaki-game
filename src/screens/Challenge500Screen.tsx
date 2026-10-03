@@ -18,6 +18,8 @@ import type { Challenge500State } from '../engine/challenge500Engine'
 import { useChallenge500 } from '../engine/useChallenge500'
 import { CHALLENGE500_QUESTION_MODULES } from '../questions/challenge500'
 import type { Challenge500QuestionResult } from '../questions/challenge500/types'
+import { duckAudio, duckBgm } from '../utils/audioContext'
+import { setChallenge500Mode, setChallenge500Tier, startBgm, stopBgm } from '../utils/bgm'
 import { sfx } from '../utils/sound'
 
 interface Props {
@@ -43,6 +45,14 @@ const CLEAR_FLASH_MS = CLEAR_FIRST_BEAT_MS + CLEAR_BLACKOUT_MS + CLEAR_SECOND_BE
 /** 300%より明確に強く・長く見せる。 */
 const CHECKPOINT_300_MS = 2200
 const CHECKPOINT_400_MS = 2800
+/** チェックポイント到達時、常駐ハートビートだけを一旦止める長さ（SE自体は別バスで無傷）。 */
+const CHECKPOINT_DUCK_MS = 900
+/**
+ * Ver.6 Phase 2: 500%クリアの「静寂→爆発」のための無音区間。duckAudio()でSE/BGM両方を
+ * 一度沈黙させ、その沈黙が明けた瞬間にchallenge500Clear500()（爆発インパクト）を鳴らす
+ * ——200% CLEAR（FinalTrialScreen側のCLEAR200_SILENCE_MS=320と同じ考え方）を踏襲する。
+ */
+const CLEAR500_SILENCE_MS = 300
 
 function hapticPulse(pattern: number | number[]) {
   if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') navigator.vibrate(pattern)
@@ -187,6 +197,30 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
   }, [])
 
   /**
+   * Ver.6 Phase 2: 実機フィードバック「500%チャレンジが静かすぎる」への対応。
+   * 0〜100%通常モードのFINAL DOPA TRIAL専用BGM（finalMode、bgm.ts）と全く同じ
+   * ハートビート/ハイハット/金属パーカッション/不穏パッドのインストゥルメントを再利用した
+   * 常駐アンビエント（setChallenge500Mode）を、この画面が表示されている間ずっと鳴らす。
+   * 正解/MISS/チェックポイント/焦りビープといった単発SEは既存どおりsfxGain側のまま
+   * （この常駐アンビエントはbgmGain側の別バスのため、互いの音量を奪わない）。
+   * startBgm()は内部で各BGMモードを一旦リセットするため、必ず先に呼んでから
+   * setChallenge500Mode(true)する（bgm.ts側のコメントと同じ注意点）。
+   */
+  useEffect(() => {
+    startBgm()
+    setChallenge500Mode(true)
+    return () => {
+      setChallenge500Mode(false)
+      stopBgm()
+    }
+  }, [])
+
+  /** tierが変わるたび（チェックポイント到達・QAジャンプのいずれでも）即座にアンビエントの密度を更新する。 */
+  useEffect(() => {
+    setChallenge500Tier(tier)
+  }, [tier])
+
+  /**
    * 300%/400%チェックポイントに到達した瞬間、ゲームを一度止めて専用演出を挟む。
    * floorは実プレイでは単調増加のため、この依存配列ベースの発火は現実のプレイでは
    * 各チェックポイントにつき必ず一度だけ起こる（200→300→400と一方向にしか進まない）。
@@ -196,12 +230,17 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
    */
   useEffect(() => {
     if (snapshot.state.floor >= 400) {
+      // 常駐ハートビートだけを一旦止め（SEは別バスなので無傷）、「場面転換」を音でも作る。
+      // tierは下のuseEffect（[tier]）で既に次段へ切り替わっているため、ダッキングが
+      // 明けた頃には次tier用の、より濃いアンビエントが鳴っている。
+      duckBgm(CHECKPOINT_DUCK_MS, 1)
       setCheckpointBeat('flash400')
       sfx.challenge500Checkpoint400()
       hapticPulse([30, 40, 30, 40, 30, 120])
       triggerShake(true)
       checkpointTimerRef.current = setTimeout(() => setCheckpointBeat(null), CHECKPOINT_400_MS)
     } else if (snapshot.state.floor >= 300) {
+      duckBgm(CHECKPOINT_DUCK_MS, 1)
       setCheckpointBeat('flash300')
       sfx.challenge500Checkpoint300()
       hapticPulse([20, 30, 20, 60])
@@ -218,22 +257,36 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
     if (!finalState) return
     hapticPulse(finalState.cleared ? [40, 60, 40, 60, 40, 60, 150] : 50)
     if (!finalState.cleared) {
+      // チャレンジ終了（MISS）：常駐ハートビートはここで止め、結果画面まで持ち越さない。
+      setChallenge500Mode(false)
+      stopBgm()
       finishTimerRef.current = setTimeout(() => onFinish(finalState), END_FLASH_MS)
       return () => {
         if (finishTimerRef.current) clearTimeout(finishTimerRef.current)
       }
     }
-    // 500%完全クリア：OVERDRIVE級の爆発を2段重ねる（第1波→暗転→第2波）。
-    sfx.challenge500Clear500()
-    setClearBeat('first')
-    triggerShake(true)
+    // 500%完全クリア：100% OVERDRIVEより明確に格上の「静寂→爆発」にする。
+    // 常駐アンビエントを含む全バスを一度完全に沈黙させ（duckAudio）、沈黙が明けた瞬間に
+    // OVERDRIVE級の爆発（第1波→暗転→第2波）を鳴らす（FinalTrialScreen側の
+    // 200% CLEAR＝duckAudio→setTimeoutでmegaImpact、と同じ「静寂も演出として使う」考え方）。
+    duckAudio(CLEAR500_SILENCE_MS, 1)
+    setChallenge500Mode(false)
+    stopBgm()
     clearTimersRef.current.push(
-      setTimeout(() => setClearBeat('blackout'), CLEAR_FIRST_BEAT_MS),
       setTimeout(() => {
-        setClearBeat('second')
+        sfx.challenge500Clear500()
+        setClearBeat('first')
         triggerShake(true)
-      }, CLEAR_FIRST_BEAT_MS + CLEAR_BLACKOUT_MS),
-      setTimeout(() => onFinish(finalState), CLEAR_FLASH_MS),
+      }, CLEAR500_SILENCE_MS),
+      setTimeout(() => setClearBeat('blackout'), CLEAR500_SILENCE_MS + CLEAR_FIRST_BEAT_MS),
+      setTimeout(
+        () => {
+          setClearBeat('second')
+          triggerShake(true)
+        },
+        CLEAR500_SILENCE_MS + CLEAR_FIRST_BEAT_MS + CLEAR_BLACKOUT_MS,
+      ),
+      setTimeout(() => onFinish(finalState), CLEAR500_SILENCE_MS + CLEAR_FLASH_MS),
     )
     return () => {
       clearTimersRef.current.forEach(clearTimeout)

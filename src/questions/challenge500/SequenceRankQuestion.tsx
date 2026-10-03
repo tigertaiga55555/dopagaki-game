@@ -89,7 +89,7 @@ function generate(tier: Challenge500Tier) {
   const segments: PromptSegment[] = []
   if (tier === 3) segments.push({ text: '偶数の中で、', inverted: false })
   if (sideWordShown) segments.push({ text: sideWordShown, inverted: sideInverted }, { text: 'にある', inverted: false })
-  segments.push({ text: `${sizeWordShown}順に`, inverted: sizeInverted }, { text: '3つ押せ！', inverted: false })
+  segments.push({ text: sizeWordShown, inverted: sizeInverted }, { text: '順に3つ押せ！', inverted: false })
 
   return { items, order, segments }
 }

@@ -105,7 +105,11 @@ function generate(tier: Challenge500Tier) {
   const segments: PromptSegment[] = []
   if (tier === 3 && targetShape) segments.push({ text: `${SHAPE_LABELS[targetShape]}の図形だけを数えて、`, inverted: false })
   if (sideWordShown) segments.push({ text: sideWordShown, inverted: sideInverted }, { text: 'にある', inverted: false })
-  segments.push({ text: `一番 ${countWordShown} `, inverted: countInverted }, { text: 'グループを選べ！', inverted: false })
+  segments.push(
+    { text: '一番 ', inverted: false },
+    { text: countWordShown, inverted: countInverted },
+    { text: ' グループを選べ！', inverted: false },
+  )
 
   return { groups: shuffle(groups), targetId, segments }
 }

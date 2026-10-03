@@ -49,7 +49,11 @@ function generate(tier: Challenge500Tier) {
 
   const correctIds = new Set(wantSame ? items.filter((it) => !it.isOdd).map((it) => it.id) : items.filter((it) => it.isOdd).map((it) => it.id))
 
-  const segments: PromptSegment[] = [{ text: `形が ${sameWordShown} `, inverted }, { text: 'ものを全部押せ！', inverted: false }]
+  const segments: PromptSegment[] = [
+    { text: '形が ', inverted: false },
+    { text: sameWordShown, inverted },
+    { text: ' ものを全部押せ！', inverted: false },
+  ]
 
   return { items, correctIds: [...correctIds], segments }
 }

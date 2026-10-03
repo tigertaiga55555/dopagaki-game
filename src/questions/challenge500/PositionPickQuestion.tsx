@@ -97,7 +97,7 @@ function generate(tier: Challenge500Tier) {
   const segments: PromptSegment[] = []
   if (tier === 3) segments.push({ text: '偶数の数字だけを数えて、', inverted: false })
   if (sideWordShown) segments.push({ text: sideWordShown, inverted: sideInverted }, { text: 'の行の', inverted: false })
-  segments.push({ text: `${posWordShown} `, inverted: posInverted }, { text: 'にある数字を押せ！', inverted: false })
+  segments.push({ text: posWordShown, inverted: posInverted }, { text: ' にある数字を押せ！', inverted: false })
 
   return { items, targetId: target.id, segments }
 }

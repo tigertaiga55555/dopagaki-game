@@ -96,7 +96,11 @@ function generate(tier: Challenge500Tier) {
   const segments: PromptSegment[] = []
   if (tier === 3) segments.push({ text: '太い枠の棒だけを比べて、', inverted: false })
   if (sideWordShown) segments.push({ text: sideWordShown, inverted: sideInverted }, { text: 'にある', inverted: false })
-  segments.push({ text: `一番 ${lengthWordShown} `, inverted: lengthInverted }, { text: '棒を押せ！', inverted: false })
+  segments.push(
+    { text: '一番 ', inverted: false },
+    { text: lengthWordShown, inverted: lengthInverted },
+    { text: ' 棒を押せ！', inverted: false },
+  )
 
   return { items, targetId, segments, thickIds: [...thickIds] }
 }

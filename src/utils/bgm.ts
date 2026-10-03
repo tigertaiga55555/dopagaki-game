@@ -23,6 +23,9 @@ const FINAL_BPM = 150
 /** Ver.5.0追加修正: Q16 ULTIMATE QUESTION専用BGMのBPM。FINAL_BPMよりさらに遅く重くし、
  *  「速さ」ではなく緊急事態・ラスボス戦の圧のみで威圧する。 */
 const ULTIMATE_BPM = 132
+/** Ver.6 Phase 2: 200/300/400% tier別のアンビエントBPM。tier3（400%、1MISS終了）は
+ *  FINAL_BPMと同格の「ラスボス」テンポにする。 */
+const CHALLENGE500_BPM: Record<1 | 2 | 3, number> = { 1: 100, 2: 122, 3: 150 }
 
 let running = false
 let schedulerTimer: ReturnType<typeof setInterval> | null = null
@@ -43,6 +46,17 @@ let finalIntensityRef = 0
  *  通常のFINAL BGM（scheduleFinalStep）を完全に差し替え、ハートビート・低ドローン・
  *  警告ビープだけの「緊急事態」テーマにする。 */
 let ultimateMode = false
+/**
+ * Ver.6 Phase 2: 200〜500%「限界突破チャレンジ」専用の常駐アンビエントモード。
+ * 正解/MISSの単発SE（sound.ts、sfxGain経由）は元々あったが、それらが鳴っていない
+ * 問題間の時間が無音になり「静かすぎる」という実機フィードバックを受けて追加した。
+ * FINAL DOPA TRIAL専用BGM（finalMode）が使っているのと同じハートビートキック・
+ * ハイハット・金属パーカッション・不穏パッドのインストゥルメント関数をそのまま再利用し、
+ * 新しい音を作るのではなく「すでに気持ちいいと実証済みの音」を転用する。
+ */
+let challenge500Mode = false
+/** 200/300/400% tier（1〜3）。チェックポイントごとに段階的にレイヤーを増やす。 */
+let challenge500TierRef: 1 | 2 | 3 = 1
 let noiseBuffer: AudioBuffer | null = null
 
 function getNoiseBuffer(ctx: AudioContext): AudioBuffer {
@@ -57,6 +71,7 @@ function getNoiseBuffer(ctx: AudioContext): AudioBuffer {
 
 function currentBpm(): number {
   if (finalMode) return ultimateMode ? ULTIMATE_BPM : FINAL_BPM
+  if (challenge500Mode) return CHALLENGE500_BPM[challenge500TierRef]
   return overdriveMode ? OVERDRIVE_BPM : STAGE_BPM[Math.max(0, Math.min(STAGE_BPM.length - 1, stageRef))]
 }
 
@@ -599,6 +614,52 @@ function scheduleFinalStep(step: number, time: number) {
   }
 }
 
+/**
+ * Ver.6 Phase 2: 200〜500%「限界突破チャレンジ」専用の常駐アンビエント。
+ * FINAL DOPA TRIAL専用BGM（scheduleFinalStep）と全く同じインストゥルメント関数
+ * （ハートビートキック・サブベース・細かいハイハット・金属パーカッション・不穏パッド・
+ * ULTIMATE警告ビープ）をそのまま再利用し、tier（1〜3＝200/300/400%台）に応じて
+ * 段階的にレイヤーを積む。新しい音色を増やすのではなく、「0〜100%通常モードで
+ * 一番面白いと言われている焦らされる音」をそのまま転用する、という方針。
+ *
+ * tier1（200〜299%）：ハートビート＋常時ハイハットだけで、既に「普通ではない」緊張感を出す。
+ * tier2（300〜399%）：金属パーカッション（裏拍）＋高音sparkleレイヤーを追加し、
+ *   「次のステージに来た」密度に底上げする。
+ * tier3（400〜499%）：不穏パッド（小節頭）＋追加の警告ビープ的riserを重ね、
+ *   「ラスボス」の圧を常時かける。
+ *
+ * 各問題固有の「残り時間で加速する焦りビープ」（sfx.challenge500Urgency、sound.ts側）とは
+ * 完全に別バス（bgmGain vs sfxGain）のため、両者が重なっても片方が片方を潰すことはない
+ * （audioContext.tsのmaster compressorが両バス合算後の音割れだけを防ぐ）。
+ */
+function scheduleChallenge500Step(step: number, time: number) {
+  const beat = Math.floor(step / STEPS_PER_BEAT)
+  const sub = step % STEPS_PER_BEAT
+  const tier = challenge500TierRef
+
+  // ハートビート：1拍目・3拍目の頭に必ず（鼓動のように規則正しく、tierが上がるほど太く）。
+  if (sub === 0 && (beat === 0 || beat === 2)) {
+    playFinalHeartbeatKick(time)
+    playFinalSubBass(time, tier - 1)
+  }
+  // 細かいハイハット：常時刻み続け、「無音の瞬間を作らない」土台にする。
+  playFinalHat(time)
+  // tier2以上：裏拍に金属パーカッション＋高音sparkleレイヤーを足し、密度を上げる。
+  if (tier >= 2 && sub === 2 && (beat === 1 || beat === 3)) {
+    playFinalMetal(time)
+  }
+  if (tier >= 2 && step % 8 === 4) {
+    playShimmer(time, tier >= 3 ? 1 : 0.5)
+  }
+  // tier3：不穏パッド（小節頭）＋警告ビープ的riserを重ね、ラスボスの圧を常時かける。
+  if (tier >= 3 && step % STEPS_PER_BAR === 0) {
+    playFinalOminousPad(time)
+  }
+  if (tier >= 3 && sub === 2 && beat === 3) {
+    playUltimateWarningBeep(time)
+  }
+}
+
 function scheduleStep(step: number, time: number) {
   if (finalMode) {
     if (ultimateMode) {
@@ -606,6 +667,10 @@ function scheduleStep(step: number, time: number) {
     } else {
       scheduleFinalStep(step, time)
     }
+    return
+  }
+  if (challenge500Mode) {
+    scheduleChallenge500Step(step, time)
     return
   }
   const stage = stageRef
@@ -686,6 +751,8 @@ export function startBgm() {
   finalMode = false
   finalIntensityRef = 0
   ultimateMode = false
+  challenge500Mode = false
+  challenge500TierRef = 1
   stageRef = 0
   comboCountRef = 0
   stepIndex = 0
@@ -698,6 +765,7 @@ export function stopBgm() {
   overdriveMode = false
   finalMode = false
   ultimateMode = false
+  challenge500Mode = false
   if (schedulerTimer !== null) {
     clearInterval(schedulerTimer)
     schedulerTimer = null
@@ -730,6 +798,23 @@ export function setFinalIntensity(level: number) {
  *  finalMode=trueの間だけ意味を持つ（finalMode=falseの間はscheduleStep側で無視される）。 */
 export function setUltimateMode(active: boolean) {
   ultimateMode = active
+}
+
+/** Ver.6 Phase 2: 200〜500%チャレンジ専用アンビエントモードの切り替え。
+ *  startBgm()を先に呼んだ後でtrueにすること（startBgm()が内部で各モードを
+ *  一旦リセットするため、逆順だと直後にfalseへ戻されてしまう）。 */
+export function setChallenge500Mode(active: boolean) {
+  challenge500Mode = active
+  if (active) {
+    finalMode = false
+    overdriveMode = false
+  }
+}
+
+/** Ver.6 Phase 2: 200/300/400% tier（1〜3）を切り替える。チェックポイント到達や
+ *  QAジャンプでfloorが変わるたびに呼べば、次のステップから即座に新tierの密度になる。 */
+export function setChallenge500Tier(tier: 1 | 2 | 3) {
+  challenge500TierRef = tier
 }
 
 /**

@@ -14,8 +14,12 @@ type Data = { items: Item[]; correctIds: number[]; segments: PromptSegment[] }
 
 const RUNS = 600
 
+function findWordSegment(data: Data) {
+  return data.segments.find((s) => s.text.includes('同じ') || s.text.includes('異なる'))!
+}
+
 function deriveWantSame(data: Data) {
-  const seg = data.segments[0]
+  const seg = findWordSegment(data)
   const sameWordShown = seg.text.includes('同じ') ? '同じ' : '異なる'
   const sameWordEffective = seg.inverted ? opposite('sameDifferent', sameWordShown) : sameWordShown
   return sameWordEffective === '同じ'
@@ -27,7 +31,7 @@ describe('ExcludePickQuestion (sameDifferent-axis multi-tap exclude template)', 
     for (let i = 0; i < RUNS; i++) {
       const data = ExcludePickChallenge500Module.generate(1) as Data
       expect(data.items).toHaveLength(5)
-      seenInverted.add(data.segments[0].inverted)
+      seenInverted.add(findWordSegment(data).inverted)
 
       const wantSame = deriveWantSame(data)
       const mainIds = data.items.filter((it) => !it.isOdd).map((it) => it.id)
