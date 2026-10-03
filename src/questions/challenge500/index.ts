@@ -1,11 +1,13 @@
 import { tierForPercent } from '../../config/challenge500Config'
 import { ExcludePickChallenge500Module } from './ExcludePickQuestion'
 import { InsideOutsideCountPickChallenge500Module } from './InsideOutsideCountPickQuestion'
+import { InterferenceSwipeChallenge500Module } from './InterferenceSwipeQuestion'
 import { LengthPickChallenge500Module } from './LengthPickQuestion'
 import { NumberPickChallenge500Module } from './NumberPickQuestion'
 import { PositionPickChallenge500Module } from './PositionPickQuestion'
 import { RpsCompoundChallenge500Module } from './RpsCompoundQuestion'
 import { SecondRankPickChallenge500Module } from './SecondRankPickQuestion'
+import { SequenceRankChallenge500Module } from './SequenceRankQuestion'
 import { ShapeCountPickChallenge500Module } from './ShapeCountPickQuestion'
 import { SwipeDirectionChallenge500Module } from './SwipeDirectionQuestion'
 import type { Challenge500QuestionModule, Challenge500QuestionSpec, Challenge500Tier } from './types'
@@ -22,10 +24,12 @@ export const CHALLENGE500_QUESTION_MODULES: Challenge500QuestionModule[] = [
   ExcludePickChallenge500Module,
   SecondRankPickChallenge500Module,
   RpsCompoundChallenge500Module,
+  InterferenceSwipeChallenge500Module,
+  SequenceRankChallenge500Module,
 ]
 
 /** スワイプの性質上、1回のジェスチャーで完結するtier1専用（tier2/3の複合反転には使わない）。 */
-const TIER1_ONLY = new Set([SwipeDirectionChallenge500Module.id])
+const TIER1_ONLY = new Set([SwipeDirectionChallenge500Module.id, InterferenceSwipeChallenge500Module.id])
 
 export function eligibleModulesForTier(tier: Challenge500Tier): Challenge500QuestionModule[] {
   if (tier === 1) return CHALLENGE500_QUESTION_MODULES
