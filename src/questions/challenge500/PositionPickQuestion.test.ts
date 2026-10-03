@@ -6,7 +6,7 @@ import type { PromptSegment } from '../../components/InversionPrompt'
 interface Item {
   id: number
   value: number
-  side: 'left' | 'right'
+  row: 'top' | 'bottom'
   order: number
 }
 
@@ -20,14 +20,14 @@ function deriveEffective(data: Data) {
   const posWordEffective = posSeg.inverted ? opposite('firstLast', posWordShown) : posWordShown
   const wantFirst = posWordEffective === '最初'
 
-  const sideSeg = data.segments.find((s) => s.text === '左' || s.text === '右')
-  let effectiveSide: 'left' | 'right' | null = null
-  if (sideSeg) {
-    const sideWordShown = sideSeg.text as '左' | '右'
-    const sideWordEffective = sideSeg.inverted ? opposite('leftRight', sideWordShown) : sideWordShown
-    effectiveSide = sideWordEffective === '左' ? 'left' : 'right'
+  const rowSeg = data.segments.find((s) => s.text === '上' || s.text === '下')
+  let effectiveRow: 'top' | 'bottom' | null = null
+  if (rowSeg) {
+    const rowWordShown = rowSeg.text as '上' | '下'
+    const rowWordEffective = rowSeg.inverted ? opposite('upDown', rowWordShown) : rowWordShown
+    effectiveRow = rowWordEffective === '上' ? 'top' : 'bottom'
   }
-  return { wantFirst, effectiveSide }
+  return { wantFirst, effectiveRow }
 }
 
 describe('PositionPickQuestion (ordinal-position inversion template)', () => {
@@ -58,9 +58,9 @@ describe('PositionPickQuestion (ordinal-position inversion template)', () => {
       expect(invertedCount).toBeLessThanOrEqual(2)
       seenCounts.add(invertedCount)
 
-      const { wantFirst, effectiveSide } = deriveEffective(data)
-      expect(effectiveSide).not.toBeNull()
-      const row = data.items.filter((it) => it.side === effectiveSide).sort((a, b) => a.order - b.order)
+      const { wantFirst, effectiveRow } = deriveEffective(data)
+      expect(effectiveRow).not.toBeNull()
+      const row = data.items.filter((it) => it.row === effectiveRow).sort((a, b) => a.order - b.order)
       expect(row).toHaveLength(5)
       const expected = wantFirst ? row[0] : row[row.length - 1]
       expect(data.targetId).toBe(expected.id)
@@ -80,10 +80,10 @@ describe('PositionPickQuestion (ordinal-position inversion template)', () => {
       seenCounts.add(invertedCount)
       expect(data.segments.some((s) => !s.inverted && s.text.includes('偶数'))).toBe(true)
 
-      const { wantFirst, effectiveSide } = deriveEffective(data)
-      expect(effectiveSide).not.toBeNull()
+      const { wantFirst, effectiveRow } = deriveEffective(data)
+      expect(effectiveRow).not.toBeNull()
       const row = data.items
-        .filter((it) => it.side === effectiveSide && it.value % 2 === 0)
+        .filter((it) => it.row === effectiveRow && it.value % 2 === 0)
         .sort((a, b) => a.order - b.order)
       expect(row.length).toBeGreaterThanOrEqual(3)
       const expected = wantFirst ? row[0] : row[row.length - 1]

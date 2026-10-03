@@ -9,12 +9,12 @@ import type { Challenge500QuestionComponentProps, Challenge500QuestionModule, Ch
 interface Item {
   id: number
   value: number
-  side: 'left' | 'right'
+  row: 'top' | 'bottom'
   /** 行内での並び順（0始まり）。位置判定（最初/最後）は必ずこのorderで行う（表示もこの順を保つ）。 */
   order: number
 }
 
-type Slot = 'position' | 'side'
+type Slot = 'position' | 'row'
 
 /**
  * Ver.6 Phase 1（再設計版）: 下線反転ギミックのテンプレート4（並び位置選択）。
@@ -25,7 +25,10 @@ type Slot = 'position' | 'side'
  *
  * ・tier1（200〜299%）：反転候補は「最初/最後」の1箇所のみ（maxSlots=1）。各行の並び順
  *   （order）は固定で、シャッフルしない（位置の意味が崩れるため）。
- * ・tier2（300〜399%）：位置条件「左/右」（どの行を見るか）を追加し、反転候補は最大2箇所。
+ * ・tier2（300〜399%）：位置条件「上/下」（どの行を見るか）を追加し、反転候補は最大2箇所。
+ *   実機フィードバック修正: 本テンプレートの実際のレイアウトは上下2段に積んだ行であり、
+ *   左右に並ぶ列ではないため、軸はleftRightではなくupDownを使う（「右の行」のような、
+ *   画面構造と日本語が一致しない問題文を防ぐ）。
  * ・tier3（400〜499%）：反転しない通常条件「偶数の数字だけを数えて」を常に追加する
  *   （奇数を除いた残りの並び順で最初/最後を判定する）。
  *
@@ -52,23 +55,23 @@ function buildParityMixedRow(): number[] {
   return shuffle([...evens, ...odds])
 }
 
-function toRow(values: number[], idOffset: number, side: 'left' | 'right'): Item[] {
-  return values.map((value, order) => ({ id: idOffset + order, value, side, order }))
+function toRow(values: number[], idOffset: number, row: 'top' | 'bottom'): Item[] {
+  return values.map((value, order) => ({ id: idOffset + order, value, row, order }))
 }
 
 function buildItems(tier: Challenge500Tier): Item[] {
   if (tier === 1) {
-    return toRow(buildPlainRow(5), 0, 'left')
+    return toRow(buildPlainRow(5), 0, 'top')
   }
   const buildRowValues = tier === 3 ? buildParityMixedRow : () => buildPlainRow(5)
-  const leftRow = toRow(buildRowValues(), 0, 'left')
-  const rightRow = toRow(buildRowValues(), 100, 'right')
-  return [...leftRow, ...rightRow]
+  const topRow = toRow(buildRowValues(), 0, 'top')
+  const bottomRow = toRow(buildRowValues(), 100, 'bottom')
+  return [...topRow, ...bottomRow]
 }
 
 function generate(tier: Challenge500Tier) {
   const items = buildItems(tier)
-  const slots: Slot[] = tier === 1 ? ['position'] : ['position', 'side']
+  const slots: Slot[] = tier === 1 ? ['position'] : ['position', 'row']
   const maxSlots = slots.length as 1 | 2
   const invertCount = pickInversionCount(tier, maxSlots)
   const invertedSlots = new Set(shuffle(slots).slice(0, invertCount))
@@ -78,17 +81,17 @@ function generate(tier: Challenge500Tier) {
   const posWordEffective = posInverted ? opposite('firstLast', posWordShown) : posWordShown
   const wantFirst = posWordEffective === '最初'
 
-  let sideWordShown: string | null = null
-  let effectiveSide: 'left' | 'right' | null = null
-  let sideInverted = false
+  let rowWordShown: string | null = null
+  let effectiveRow: 'top' | 'bottom' | null = null
+  let rowInverted = false
   if (tier >= 2) {
-    sideWordShown = pickAxisWord('leftRight')
-    sideInverted = invertedSlots.has('side')
-    const sideWordEffective = sideInverted ? opposite('leftRight', sideWordShown) : sideWordShown
-    effectiveSide = sideWordEffective === '左' ? 'left' : 'right'
+    rowWordShown = pickAxisWord('upDown')
+    rowInverted = invertedSlots.has('row')
+    const rowWordEffective = rowInverted ? opposite('upDown', rowWordShown) : rowWordShown
+    effectiveRow = rowWordEffective === '上' ? 'top' : 'bottom'
   }
 
-  let row = effectiveSide ? items.filter((it) => it.side === effectiveSide) : items
+  let row = effectiveRow ? items.filter((it) => it.row === effectiveRow) : items
   row = [...row].sort((a, b) => a.order - b.order)
   if (tier === 3) row = row.filter((it) => it.value % 2 === 0)
 
@@ -96,7 +99,7 @@ function generate(tier: Challenge500Tier) {
 
   const segments: PromptSegment[] = []
   if (tier === 3) segments.push({ text: '偶数の数字だけを数えて、', inverted: false })
-  if (sideWordShown) segments.push({ text: sideWordShown, inverted: sideInverted }, { text: 'の行の', inverted: false })
+  if (rowWordShown) segments.push({ text: rowWordShown, inverted: rowInverted }, { text: 'の行の', inverted: false })
   segments.push({ text: posWordShown, inverted: posInverted }, { text: ' にある数字を押せ！', inverted: false })
 
   return { items, targetId: target.id, segments }
@@ -106,8 +109,8 @@ function Component({ spec, onResult }: Challenge500QuestionComponentProps) {
   const { items, targetId, segments } = spec.data as { items: Item[]; targetId: number; segments: PromptSegment[] }
   const doneRef = useRef(false)
   const ready = useInputGateReady()
-  const [leftRow] = useState(() => items.filter((it) => it.side === 'left').sort((a, b) => a.order - b.order))
-  const [rightRow] = useState(() => items.filter((it) => it.side === 'right').sort((a, b) => a.order - b.order))
+  const [topRow] = useState(() => items.filter((it) => it.row === 'top').sort((a, b) => a.order - b.order))
+  const [bottomRow] = useState(() => items.filter((it) => it.row === 'bottom').sort((a, b) => a.order - b.order))
 
   function finish(correct: boolean) {
     if (doneRef.current) return
@@ -127,17 +130,17 @@ function Component({ spec, onResult }: Challenge500QuestionComponentProps) {
     )
   }
 
-  const hasSides = rightRow.length > 0
+  const hasRows = bottomRow.length > 0
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-8 px-6 py-4 text-center select-none">
       <InversionPrompt segments={segments} />
-      {hasSides ? (
+      {hasRows ? (
         <div className="flex w-full flex-col gap-4">
-          <div className="flex justify-center gap-2">{leftRow.map(renderButton)}</div>
-          <div className="flex justify-center gap-2">{rightRow.map(renderButton)}</div>
+          <div className="flex justify-center gap-2">{topRow.map(renderButton)}</div>
+          <div className="flex justify-center gap-2">{bottomRow.map(renderButton)}</div>
         </div>
       ) : (
-        <div className="flex justify-center gap-2.5">{leftRow.map(renderButton)}</div>
+        <div className="flex justify-center gap-2.5">{topRow.map(renderButton)}</div>
       )}
     </div>
   )
