@@ -97,13 +97,6 @@ const FIREWORK_WAVE_OFFSETS_MS = [
 type Clear200Beat = 'silence' | 'impact' | 'slam' | 'fanfare' | null
 type FanfareRevealStage = 'percent' | 'perfectClear' | 'title' | 'full'
 
-/**
- * Ver.6 Phase 1（再設計版）: 200% PERFECT CLEARの祝福が完全に終わった後、LIMIT BREAK
- * 説明画面へ入る前に必ず一度だけ挟む「まだ先がある」ムード転換演出の長さ。
- * 数秒で見せきる短い演出にとどめ、ゲームのテンポを損なわない。
- */
-const UNLOCK_TRANSITION_MS = 2600
-
 export function FinalTrialScreen({
   initialStats,
   onFinish,
@@ -131,24 +124,6 @@ export function FinalTrialScreen({
     }
     onFinish(computeFinalTrialResult(payload, initialStats))
   }, startAtQuestion)
-
-  // Ver.6 Phase 1（再設計版）: 200% PERFECT CLEARの祝福が終わった直後、即座に説明画面へ
-  // 進ませず、「まだ先がある」というムード転換〜LIMIT BREAK解放の短い演出を必ず一度挟む
-  // （200%を「通過点」に見せないための明確な区切り）。既存の200% PERFECT CLEAR演出
-  // （useFinalTrial内のCLEAR200_TRANSITION_MS、ここでは一切変更しない）がフルに再生し
-  // 終わった後にこのunlockフェーズへ入るため、既存の祝福が弱まることはない。
-  const unlockBeatsFiredRef = useRef(false)
-  useEffect(() => {
-    if (challengePhase !== 'unlock') {
-      unlockBeatsFiredRef.current = false
-      return
-    }
-    if (unlockBeatsFiredRef.current) return
-    unlockBeatsFiredRef.current = true
-    sfx.limitBreakUnlock()
-    const t = setTimeout(() => setChallengePhase('intro'), UNLOCK_TRANSITION_MS)
-    return () => clearTimeout(t)
-  }, [challengePhase])
 
   // 突入演出の各ビート
   const [showCrack, setShowCrack] = useState(false)
@@ -390,7 +365,7 @@ export function FinalTrialScreen({
   const showUltimateWorld = snapshot.phase === 'ultimateIntro' || (snapshot.phase === 'playing' && isUltimateQuestion)
 
   if (challengePhase === 'unlock') {
-    return <LimitBreakUnlockScreen onQuit={onQuit} />
+    return <LimitBreakUnlockScreen onQuit={onQuit} onComplete={() => setChallengePhase('intro')} />
   }
 
   if (challengePhase === 'intro') {

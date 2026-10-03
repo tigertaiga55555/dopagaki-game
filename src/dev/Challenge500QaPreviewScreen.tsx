@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { getOverdriveTitle } from '../config/resultTypesV4'
 import type { Challenge500State } from '../engine/challenge500Engine'
 import { computeChallenge500Result } from '../engine/resultEngineV4'
@@ -7,13 +7,9 @@ import { Challenge500Screen } from '../screens/Challenge500Screen'
 import { LimitBreakUnlockScreen } from '../screens/LimitBreakUnlockScreen'
 import { ResultScreen } from '../screens/ResultScreen'
 import { getBestPercent, getPlayCount } from '../utils/storage'
-import { sfx } from '../utils/sound'
 import type { FinalResultV4 } from '../types'
 
 type Phase = 'unlock' | 'intro' | 'active' | 'result'
-
-/** FinalTrialScreen.tsxのUNLOCK_TRANSITION_MSと同じ長さ（Preview単独再生用に複製）。 */
-const UNLOCK_PREVIEW_MS = 2600
 
 /**
  * Ver.6 Phase 1 QA補助専用画面（Vercel Previewのみ到達）: ?preview=challenge500
@@ -39,16 +35,6 @@ export function Challenge500QaPreviewScreen() {
   const [phase, setPhase] = useState<Phase>('unlock')
   const [result, setResult] = useState<FinalResultV4 | null>(null)
   const [playKey, setPlayKey] = useState(0)
-  const unlockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    if (phase !== 'unlock') return
-    sfx.limitBreakUnlock()
-    unlockTimerRef.current = setTimeout(() => setPhase('intro'), UNLOCK_PREVIEW_MS)
-    return () => {
-      if (unlockTimerRef.current) clearTimeout(unlockTimerRef.current)
-    }
-  }, [phase, playKey])
 
   function buildFakeBase(): FinalResultV4 {
     return {
@@ -93,7 +79,9 @@ export function Challenge500QaPreviewScreen() {
       >
         🔧 500% CHALLENGE QA PREVIEW（本番には出ません）
       </div>
-      {phase === 'unlock' && <LimitBreakUnlockScreen key={playKey} onQuit={restart} />}
+      {phase === 'unlock' && (
+        <LimitBreakUnlockScreen key={playKey} onQuit={restart} onComplete={() => setPhase('intro')} />
+      )}
       {phase === 'intro' && <Challenge500IntroScreen key={playKey} onStart={() => setPhase('active')} onQuit={restart} />}
       {phase === 'active' && (
         <Challenge500Screen

@@ -2,6 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { Challenge500QaPanel } from '../dev/Challenge500QaPanel'
 import { Challenge500TimerBar } from '../components/Challenge500TimerBar'
 import { QuitButton } from '../components/QuitButton'
+import {
+  Confetti120Overlay,
+  getOverdriveFrameClass,
+  GoldenClearOverlay,
+  OverdriveAmbience,
+  RainbowShockwaveOverlay,
+  Sparkle120Overlay,
+  WhiteFlashOverlay,
+  type OverdriveTier,
+} from '../components/OverdriveFx'
 import { CHALLENGE500_CONFIG, tierForPercent } from '../config/challenge500Config'
 import type { Challenge500State } from '../engine/challenge500Engine'
 import { useChallenge500 } from '../engine/useChallenge500'
@@ -24,24 +34,36 @@ interface Props {
 }
 
 const END_FLASH_MS = 900
-/** 500%完全クリアは「数秒程度しっかり見せても構わない」という指示のため、通常終了より長く見せる。 */
-const CLEAR_FLASH_MS = 3400
-const CHECKPOINT_300_MS = 1700
-/** 400% CHECKPOINTは300%より明確に強く・長く見せる。 */
-const CHECKPOINT_400_MS = 2200
+/** 500%完全クリアは「数秒程度しっかり見せても構わない」という指示のため、2段構成で長めに見せる。 */
+const CLEAR_FIRST_BEAT_MS = 700
+const CLEAR_BLACKOUT_MS = 200
+const CLEAR_SECOND_BEAT_MS = 3500
+const CLEAR_FLASH_MS = CLEAR_FIRST_BEAT_MS + CLEAR_BLACKOUT_MS + CLEAR_SECOND_BEAT_MS
+/** 300%より明確に強く・長く見せる。 */
+const CHECKPOINT_300_MS = 2200
+const CHECKPOINT_400_MS = 2800
 
 function hapticPulse(pattern: number | number[]) {
   if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') navigator.vibrate(pattern)
 }
 
 type CheckpointBeat = 'flash300' | 'flash400' | null
+type ClearBeat = 'first' | 'blackout' | 'second' | null
 
 /**
- * Ver.6 Phase 1（再設計版）: 200〜500%「限界突破チャレンジ」の実プレイ画面。
- * 300%/400%チェックポイント到達時に一度ゲームを止めて専用の節目演出を挟み、
- * 正解のたびに短い報酬演出（ポップ・バウンス・SE・haptic）を出す。派手さは
- * CSSアニメーションの使い回し（anim-pop等、既存の軽量なクラス）で実現し、
- * 大量のDOM生成を伴うパーティクル乱発は行わない（パフォーマンス配慮）。
+ * Ver.6 Phase 1（演出強化版）: 200〜500%「限界突破チャレンジ」の実プレイ画面。
+ *
+ * 演出強化: 100% DOPA OVERDRIVE演出（PlayScreen/OverdriveFx.tsx）を正式な基準とし、
+ * そこで使われている視覚コンポーネント（GoldenClearOverlay/WhiteFlashOverlay/
+ * RainbowShockwaveOverlay/Confetti120Overlay/Sparkle120Overlay/OverdriveAmbience、
+ * いずれも120%/200%到達時にも使われる「OVERDRIVE以上」の実績ある演出）をそのまま
+ * 再利用し、300%/400%チェックポイント・500%クリアの演出密度を底上げする
+ * （新しい演出を弱く作るより、既に気持ちいいと実証済みの既存演出を再利用・発展させる
+ * というユーザー指示に基づく）。既存コンポーネント自体は一切変更しない
+ * （通常ゲーム・FINAL DOPA TRIALの演出に影響を与えないため）。
+ *
+ * ゲームロジック（11系統の問題・反転混在比率・固定4.5秒・tier別MISSペナルティ・
+ * チェックポイント・色覚アクセシビリティ・QAモード）は一切変更しない。
  */
 export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) {
   const [finalState, setFinalState] = useState<Challenge500State | null>(null)
@@ -49,10 +71,29 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
   const startedRef = useRef(false)
   const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const showQaPanel = qaMode && __DOPAGAKI_PREVIEW_ENABLED__
+  const shakeWrapperRef = useRef<HTMLDivElement>(null)
 
   const [checkpointBeat, setCheckpointBeat] = useState<CheckpointBeat>(null)
   const checkpointTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [correctPulseKey, setCorrectPulseKey] = useState(0)
+  const [clearBeat, setClearBeat] = useState<ClearBeat>(null)
+  const clearTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
+  const [correctBurstKey, setCorrectBurstKey] = useState(0)
+  const [showCorrectBurst, setShowCorrectBurst] = useState(false)
+  const correctBurstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const tier = tierForPercent(snapshot.state.percent)
+  /** 100% OVERDRIVE用のtier（0〜4）に200〜400%を写像し、既存の常駐演出（サイレン・粒子・枠の発光）を
+   *  tierが上がるほど強くする。200%でも控えめな発光は常に出す（「通常の焦り音」に対応する視覚）。 */
+  const ambienceTier: OverdriveTier = tier === 1 ? 2 : tier === 2 ? 3 : 4
+
+  function triggerShake(strong = false) {
+    const el = shakeWrapperRef.current
+    if (!el) return
+    const cls = strong ? 'anim-climax-shake-strong' : 'anim-climax-shake'
+    el.classList.remove(cls)
+    void el.offsetWidth
+    el.classList.add(cls)
+  }
 
   /**
    * タップでの正解/MISS判定（各問題コンポーネント自身のonPointerDown経由）と、
@@ -60,7 +101,9 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
    * 競合状態にある。resolvedRefで「この問題インスタンスについて、どちらか一方が
    * 既にhandleResultを呼んだか」を管理し、2回目以降の呼び出しは無視する
    * （例: 時間切れでMISS確定した直後に、表示上まだ残っていたタップが遅れて届いても
-   * 二重にhandleResultが呼ばれない）。
+   * 二重にhandleResultが呼ばれない）。この問題インスタンス用のTimerBar（焦り警告音の
+   * setTimeoutチェーンを含む）は、問題が解決すると同時に親要素ごとアンマウントされるため、
+   * 「正解した瞬間に焦り音を即停止する」が追加実装なしで成立する。
    */
   const resolvedRef = useRef(false)
   useEffect(() => {
@@ -70,11 +113,14 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
   function guardedHandleResult(result: Challenge500QuestionResult) {
     if (resolvedRef.current) return
     resolvedRef.current = true
-    const tier = tierForPercent(snapshot.state.percent)
     if (result.correct) {
       sfx.challenge500Correct(tier)
-      hapticPulse(15)
-      setCorrectPulseKey((k) => k + 1)
+      hapticPulse([10, 30, 10])
+      triggerShake(false)
+      setCorrectBurstKey((k) => k + 1)
+      setShowCorrectBurst(true)
+      if (correctBurstTimerRef.current) clearTimeout(correctBurstTimerRef.current)
+      correctBurstTimerRef.current = setTimeout(() => setShowCorrectBurst(false), 900)
     } else {
       sfx.challenge500Miss(tier)
       hapticPulse(40)
@@ -101,12 +147,14 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
     if (snapshot.state.floor >= 400) {
       setCheckpointBeat('flash400')
       sfx.challenge500Checkpoint400()
-      hapticPulse([30, 40, 30, 80])
+      hapticPulse([30, 40, 30, 40, 30, 120])
+      triggerShake(true)
       checkpointTimerRef.current = setTimeout(() => setCheckpointBeat(null), CHECKPOINT_400_MS)
     } else if (snapshot.state.floor >= 300) {
       setCheckpointBeat('flash300')
       sfx.challenge500Checkpoint300()
-      hapticPulse([20, 30, 20])
+      hapticPulse([20, 30, 20, 60])
+      triggerShake(false)
       checkpointTimerRef.current = setTimeout(() => setCheckpointBeat(null), CHECKPOINT_300_MS)
     }
     return () => {
@@ -117,12 +165,28 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
 
   useEffect(() => {
     if (!finalState) return
-    if (finalState.cleared) sfx.challenge500Clear500()
-    hapticPulse(finalState.cleared ? [40, 60, 40, 60, 120] : 50)
-    const delay = finalState.cleared ? CLEAR_FLASH_MS : END_FLASH_MS
-    finishTimerRef.current = setTimeout(() => onFinish(finalState), delay)
+    hapticPulse(finalState.cleared ? [40, 60, 40, 60, 40, 60, 150] : 50)
+    if (!finalState.cleared) {
+      finishTimerRef.current = setTimeout(() => onFinish(finalState), END_FLASH_MS)
+      return () => {
+        if (finishTimerRef.current) clearTimeout(finishTimerRef.current)
+      }
+    }
+    // 500%完全クリア：OVERDRIVE級の爆発を2段重ねる（第1波→暗転→第2波）。
+    sfx.challenge500Clear500()
+    setClearBeat('first')
+    triggerShake(true)
+    clearTimersRef.current.push(
+      setTimeout(() => setClearBeat('blackout'), CLEAR_FIRST_BEAT_MS),
+      setTimeout(() => {
+        setClearBeat('second')
+        triggerShake(true)
+      }, CLEAR_FIRST_BEAT_MS + CLEAR_BLACKOUT_MS),
+      setTimeout(() => onFinish(finalState), CLEAR_FLASH_MS),
+    )
     return () => {
-      if (finishTimerRef.current) clearTimeout(finishTimerRef.current)
+      clearTimersRef.current.forEach(clearTimeout)
+      clearTimersRef.current = []
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finalState])
@@ -131,14 +195,18 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
   const showingQuestion = !finalState && !checkpointBeat && CurrentQuestion && snapshot.currentSpec
 
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
+    <div
+      ref={shakeWrapperRef}
+      className={`relative flex min-h-dvh flex-col overflow-hidden bg-black ${getOverdriveFrameClass(ambienceTier)}`}
+    >
+      <OverdriveAmbience tier={ambienceTier} />
       <QuitButton onQuit={onQuit} />
 
-      <div className="relative z-10 flex items-start justify-between px-5 pt-3 pb-1">
+      <div className="relative z-30 flex items-start justify-between px-5 pt-3 pb-1">
         <p className="text-[10px] font-bold tracking-widest text-white/40">限界突破チャレンジ</p>
         <div className="text-right">
           <p className="text-[10px] font-bold tracking-widest text-white/50">DOPA</p>
-          <p key={correctPulseKey} className="anim-spike text-4xl font-black tabular-nums text-amber-300">
+          <p key={correctBurstKey} className="anim-spike text-4xl font-black tabular-nums text-amber-300">
             {snapshot.state.percent}
             <span className="text-xl">%</span>
           </p>
@@ -146,7 +214,7 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
       </div>
 
       {snapshot.state.floor > CHALLENGE500_CONFIG.startPercent && !checkpointBeat && (
-        <p className="relative z-10 text-center text-[11px] font-black text-emerald-300">
+        <p className="relative z-30 text-center text-[11px] font-black text-emerald-300">
           CHECKPOINT {snapshot.state.floor}% 確保済み
         </p>
       )}
@@ -157,6 +225,7 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
             <div className="flex justify-center px-8 pb-2">
               <Challenge500TimerBar
                 limitMs={CHALLENGE500_CONFIG.questionTimeLimitMs}
+                tier={tier}
                 onTimeout={() => guardedHandleResult({ correct: false })}
               />
             </div>
@@ -169,24 +238,16 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
         {checkpointBeat && <CheckpointOverlay beat={checkpointBeat} />}
 
         {finalState && (
-          <div className="anim-pop flex flex-col items-center gap-3 text-center">
-            {finalState.cleared ? (
-              <>
-                <p className="text-sm font-black tracking-widest text-amber-300">DOPA 500%</p>
-                <p className="anim-pop text-5xl font-black text-white">ABSOLUTE CLEAR</p>
-                <p className="anim-pop text-sm font-black tracking-widest text-white/60" style={{ animationDelay: '0.3s' }}>
-                  LIMIT BREAK COMPLETE
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-black tracking-widest text-white/50">CHALLENGE END</p>
-                <p className="text-5xl font-black tabular-nums text-amber-300">{finalState.percent}%</p>
-              </>
-            )}
-          </div>
+          <Clear500Overlay beat={clearBeat} finalState={finalState} />
         )}
       </div>
+
+      {showCorrectBurst && (
+        <>
+          <div className="flash-white-overlay pointer-events-none absolute inset-0 z-40 bg-white" />
+          <Sparkle120Overlay show />
+        </>
+      )}
 
       {showQaPanel && !finalState && !checkpointBeat && (
         <Challenge500QaPanel
@@ -200,21 +261,61 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
 }
 
 /**
- * 300%/400%チェックポイント演出。400%は300%より明確に強く
- * （より大きな文字・追加の警告テキスト・次段階ルールの一言）見せる。
- * 色だけに依存しないよう、文字そのもので情報を伝える（CHECKPOINT SECURED等）。
+ * 300%/400%チェックポイント演出。100% DOPA OVERDRIVE演出で使われている
+ * WhiteFlashOverlay/RainbowShockwaveOverlay/GoldenClearOverlay/Confetti120Overlay/
+ * Sparkle120Overlayをそのまま再利用し、400%は300%より保持時間が長く（呼び出し元の
+ * CHECKPOINT_400_MS > CHECKPOINT_300_MS）、かつ画面シェイクが強い（triggerShake(true)）
+ * ことで明確に格上に見せる。色だけに依存しないよう、情報は文字そのもので伝える
+ * （CHECKPOINT SECURED等）。
  */
 function CheckpointOverlay({ beat }: { beat: 'flash300' | 'flash400' }) {
   const is400 = beat === 'flash400'
+  const percent = is400 ? 400 : 300
+  const title = is400 ? 'FINAL CHECKPOINT' : 'CHECKPOINT SECURED'
+  const hint = is400 ? 'ここから1 MISSで終了。あと100%——' : '下線反転、最大2箇所——'
   return (
-    <div className="anim-pop flex flex-col items-center gap-3 text-center">
-      <p className={`text-sm font-black tracking-widest ${is400 ? 'text-red-300' : 'text-emerald-300'}`}>
-        {is400 ? 'FINAL CHECKPOINT' : 'CHECKPOINT SECURED'}
-      </p>
-      <p className="anim-pop text-6xl font-black text-white">{is400 ? '400%' : '300%'}</p>
-      <p className="text-xs font-bold text-white/50">
-        {is400 ? 'ここから1 MISSで終了。あと100%——' : '下線反転、最大2箇所——'}
-      </p>
-    </div>
+    <>
+      <WhiteFlashOverlay show />
+      <RainbowShockwaveOverlay show />
+      <GoldenClearOverlay show percent={percent} title={title} />
+      <Confetti120Overlay show />
+      <Sparkle120Overlay show />
+      <p className="pointer-events-none absolute inset-x-0 bottom-12 z-[53] px-6 text-center text-xs font-bold text-white/70">{hint}</p>
+    </>
+  )
+}
+
+/**
+ * 500% ABSOLUTE CLEAR演出。ゲーム最高到達点のため、100% OVERDRIVEより明確に強い
+ * 「OVERDRIVE級の爆発を2段重ねる」構成にする：第1波（DOPA 500%）→一瞬暗転→
+ * 第2波（ABSOLUTE CLEAR＋LIMIT BREAK COMPLETE）。既存の200%到達と同格以上の
+ * 演出コンポーネント一式を両波でフル稼働させる。
+ */
+function Clear500Overlay({ beat, finalState }: { beat: ClearBeat; finalState: Challenge500State }) {
+  if (!finalState.cleared) {
+    return (
+      <div className="anim-pop flex flex-col items-center gap-3 text-center">
+        <p className="text-sm font-black tracking-widest text-white/50">CHALLENGE END</p>
+        <p className="text-5xl font-black tabular-nums text-amber-300">{finalState.percent}%</p>
+      </div>
+    )
+  }
+  if (beat === 'blackout') {
+    return <div className="pointer-events-none absolute inset-0 z-50 bg-black" />
+  }
+  const isSecond = beat === 'second'
+  return (
+    <>
+      <WhiteFlashOverlay show />
+      <RainbowShockwaveOverlay show />
+      <GoldenClearOverlay show percent={500} title={isSecond ? 'ABSOLUTE CLEAR' : 'DOPA 500%'} />
+      <Confetti120Overlay show />
+      <Sparkle120Overlay show />
+      {isSecond && (
+        <p className="pointer-events-none absolute inset-x-0 bottom-12 z-[53] px-6 text-center text-sm font-black tracking-widest text-white/80">
+          LIMIT BREAK COMPLETE
+        </p>
+      )}
+    </>
   )
 }
