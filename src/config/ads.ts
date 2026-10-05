@@ -2,7 +2,7 @@ export const AD_START_SCREEN = {
   slotName: 'ドパガキ_スタート_320x100',
   width: 320,
   height: 100,
-  tag: '<!-- admax -->\n<script src="https://adm.shinobi.jp/s/940610503db258a80154a2ddaac7a4783"></script>\n<!-- admax -->',
+  tag: '<!-- admax -->\n<script src="https://adm.shinobi.jp/s/940610503db258a80154a2daac7a4783"></script>\n<!-- admax -->',
 } as const
 
 export const AD_RESULT_SCREEN = {
