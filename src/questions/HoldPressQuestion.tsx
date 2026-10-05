@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { randInt } from '../engine/random'
 import { sfx } from '../utils/sound'
@@ -25,7 +26,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   const { requiredMs } = spec.data as { requiredMs: number }
   const [holding, setHolding] = useState(false)
   const [fill, setFill] = useState(0)
-  const questionStartRef = useRef(performance.now())
+  const questionStartRef = useQuestionStartRef()
   const holdStartRef = useRef<number | null>(null)
   const doneRef = useRef(false)
   const rafRef = useRef<number | undefined>(undefined)

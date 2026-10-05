@@ -1,6 +1,8 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { pick } from '../engine/random'
+import { useInputGateReady } from './useInputGateReady'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
 const DIRECTIONS = [
@@ -18,9 +20,10 @@ const SWIPE_THRESHOLD_PX = 40
 
 function Component({ spec, onResult }: QuestionComponentProps) {
   const { direction } = spec.data as { direction: (typeof DIRECTIONS)[0] }
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const doneRef = useRef(false)
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
+  const ready = useInputGateReady()
 
   useEffect(() => {
     const timer = setTimeout(() => finish(false), spec.targetTimeMs)
@@ -35,10 +38,11 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   function handlePointerDown(e: ReactPointerEvent) {
+    if (!ready) return
     dragStartRef.current = { x: e.clientX, y: e.clientY }
   }
   function handlePointerUp(e: ReactPointerEvent) {
-    if (!dragStartRef.current) return
+    if (!ready || !dragStartRef.current) return
     const dx = e.clientX - dragStartRef.current.x
     const dy = e.clientY - dragStartRef.current.y
     dragStartRef.current = null

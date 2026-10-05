@@ -499,4 +499,147 @@ export const sfx = {
     setTimeout(() => beep(2000, 160, 'sine', 0.13), 70)
     setTimeout(() => beep(2500, 200, 'triangle', 0.1), 150)
   },
+
+  /**
+   * Ver.6 Phase 1（再設計版・演出強化）: 200% PERFECT CLEAR後の「まだ先がある」ムード転換〜
+   * LIMIT BREAK解放の瞬間に鳴らす専用SE。祝福（perfectFanfare200）とは逆に、
+   * 一度沈み込んでから「扉が開く」ような低音スイープ＋金属的な解錠音を重ねたあと、
+   * 既存のoverdriveMax（120%突入用の爆発音）級の二段インパクトで締めることで、
+   * 「100% OVERDRIVE同等以上」の手応えにする。
+   */
+  limitBreakUnlock: () => {
+    sweep(240, 40, 380, 'sine', 0.16)
+    setTimeout(() => {
+      noiseBurst(2600, 6, 220, 0.1)
+      sweep(80, 900, 260, 'sawtooth', 0.14)
+    }, 380)
+    setTimeout(() => beep(1400, 160, 'triangle', 0.12), 560)
+    setTimeout(() => beep(2100, 220, 'sine', 0.1), 650)
+    setTimeout(() => {
+      beep(70, 260, 'sine', 0.2)
+      beep(1800, 140, 'sine', 0.14)
+      setTimeout(() => beep(2200, 200, 'sine', 0.13), 100)
+      setTimeout(() => beep(2800, 220, 'triangle', 0.11), 200)
+      setTimeout(() => beep(3400, 280, 'sine', 0.09), 320)
+    }, 800)
+  },
+  /**
+   * Ver.6 Phase 1（再設計版・演出強化）: 500%チャレンジの正解音。tier（1〜3）が上がるほど
+   * 音が鋭く・高くなる（既存のfinalSuccessとは別系統——あちらは「連続正解の積み重ね」、
+   * こちらは「上級者向け領域の緊張感」を表現するため、同一SEの使い回しにしない）。
+   * 演出強化: 毎問はっきりとした報酬感を出すため、全tier共通で4音のきらめきに拡張
+   * （以前はtier3のみ3音目を追加していたが、「200%以降は毎問ドーパミンが出るくらいで
+   * 構わない」という指示により全tierへ適用する）。
+   */
+  challenge500Correct: (tier: 1 | 2 | 3) => {
+    const base = 1100 + tier * 180
+    beep(base, 55, 'square', 0.1 + tier * 0.014)
+    setTimeout(() => beep(base * 1.4, 70, 'sine', 0.09 + tier * 0.014), 45)
+    setTimeout(() => beep(base * 1.9, 90, 'triangle', 0.08), 110)
+    setTimeout(() => beep(base * 2.5, 110, 'sine', 0.06), 170)
+  },
+  /**
+   * Ver.6 Phase 1（演出強化）: 500%チャレンジの固定4.5秒タイマー内で、残り時間が
+   * 減るほど加速する焦りの警告音。既存0〜100%の終盤10秒で使われているfinalRushAlarm
+   * （「ウーッ、ウーッ」という上下スイープのサイレン）と同じ質感をベースに、呼び出し側
+   * （Challenge500TimerBar）が残り時間から算出したstage（0〜3、値が大きいほど切迫）を
+   * 音程に反映し、tier（1〜3、200/300/400%の区分）で低音レイヤーを追加して
+   * 「最終領域ほど重く・怖く」する。制限時間そのものの長さ・鳴らすタイミングの
+   * スケジュール自体には一切関与しない（全tier共通で同じ4.5秒進行の中で使われる）。
+   */
+  challenge500Urgency: (stage: 0 | 1 | 2 | 3, tier: 1 | 2 | 3) => {
+    const base = 480 + stage * 110
+    beep(base, 65, 'square', 0.07 + stage * 0.018)
+    setTimeout(() => beep(base + 180, 75, 'square', 0.07 + stage * 0.018), 85)
+    if (tier >= 2) noiseBurst(1600, 4, 70, 0.03 + (tier - 1) * 0.02)
+    if (tier >= 3) beep(base * 0.22, 90, 'sine', 0.05)
+  },
+  /**
+   * Ver.6 Phase 1（再設計版）: 500%チャレンジのMISS音。tier3（400〜499%）は
+   * 「即終了」の重みを出すため、通常のmissよりさらに低く・長く・一段重い質感にする。
+   */
+  challenge500Miss: (tier: 1 | 2 | 3) => {
+    if (tier < 3) {
+      beep(170 - tier * 10, 200, 'sawtooth', 0.13)
+      setTimeout(() => beep(110, 220, 'sawtooth', 0.11), 100)
+      return
+    }
+    beep(90, 340, 'sawtooth', 0.2)
+    noiseBurst(600, 3, 260, 0.13, 'lowpass')
+    setTimeout(() => beep(55, 420, 'sine', 0.22), 140)
+  },
+  /**
+   * Ver.6 Phase 1（再設計版・演出強化）: 300% CHECKPOINT到達専用の節目SE。
+   * 演出強化: 既存のslamImpact（200% SLAM演出の追加インパクト）を冒頭に重ね、
+   * 末尾にoverdrive()相当の鋭い一撃を足すことで「100% OVERDRIVE同格以上」の
+   * 手応えにする（新しい音を弱く作るより、既に気持ちいいと分かっている既存SEを
+   * 積極的に再利用・発展させるという指示に沿う）。
+   */
+  challenge500Checkpoint300: () => {
+    slamImpact()
+    beep(55, 240, 'sine', 0.18)
+    sweep(700, 1600, 220, 'triangle', 0.13)
+    setTimeout(() => beep(1900, 180, 'sine', 0.12), 220)
+    setTimeout(() => beep(2400, 200, 'triangle', 0.1), 320)
+    setTimeout(() => {
+      beep(2100, 100, 'sawtooth', 0.16)
+      setTimeout(() => beep(2600, 260, 'sawtooth', 0.16), 90)
+    }, 420)
+  },
+  /**
+   * Ver.6 Phase 1（再設計版・演出強化）: 400% CHECKPOINT（FINAL CHECKPOINT）到達専用SE。
+   * 300%到達よりも明確に重く・強く——「ラスボス突入」の感覚を出すため、
+   * 既存のmegaImpact（200% CLEAR演出で使う、ゲーム中最も重い単発衝撃音）を冒頭に重ね、
+   * 末尾はoverdriveMax（120%突入用の爆発音）相当の構成で締めることで、300%より
+   * さらに格上の一撃にする。
+   */
+  challenge500Checkpoint400: () => {
+    megaImpact()
+    setTimeout(() => {
+      beep(42, 320, 'sine', 0.24)
+      noiseBurst(1800, 5, 200, 0.14)
+      sweep(500, 100, 300, 'sawtooth', 0.15)
+    }, 60)
+    setTimeout(() => {
+      sweep(600, 2000, 260, 'triangle', 0.14)
+      beep(45, 280, 'sine', 0.18)
+    }, 380)
+    setTimeout(() => {
+      beep(70, 260, 'sine', 0.2)
+      beep(1800, 140, 'sine', 0.14)
+      setTimeout(() => beep(2200, 200, 'sine', 0.13), 100)
+      setTimeout(() => beep(2800, 220, 'triangle', 0.11), 200)
+    }, 620)
+  },
+  /**
+   * Ver.6 Phase 1（再設計版・演出強化）: 500% ABSOLUTE CLEAR（ゲーム最高到達点）専用の
+   * 最大級ファンファーレ。既存のperfectFanfare200（200%達成）を上回る格を出すため、
+   * 冒頭にmegaImpact→overdriveMax級の二段インパクトを重ねてから、本編の上昇フレーズへ
+   * つなげる多拍構成にする（「OVERDRIVE級演出→暗転→もう一度OVERDRIVE級の爆発」という
+   * 指示の構造をそのままSEに反映）。
+   */
+  challenge500Clear500: () => {
+    megaImpact()
+    setTimeout(() => {
+      beep(70, 260, 'sine', 0.22)
+      beep(1800, 140, 'sine', 0.16)
+      setTimeout(() => beep(2200, 200, 'sine', 0.14), 100)
+      setTimeout(() => beep(2800, 220, 'triangle', 0.12), 200)
+    }, 260)
+    setTimeout(() => {
+      beep(32, 500, 'sine', 0.3)
+      noiseBurst(3200, 8, 260, 0.14)
+    }, 620)
+    setTimeout(() => {
+      beep(1046.5, 160, 'triangle', 0.14)
+      setTimeout(() => beep(1318.5, 170, 'triangle', 0.14), 110)
+      setTimeout(() => beep(1568.0, 180, 'sine', 0.13), 220)
+    }, 880)
+    setTimeout(() => {
+      beep(2093.0, 240, 'sine', 0.12)
+      setTimeout(() => beep(2637.0, 260, 'sine', 0.1), 130)
+      setTimeout(() => beep(3135.9, 320, 'triangle', 0.09), 260)
+    }, 1240)
+    setTimeout(() => beep(4186.0, 600, 'sine', 0.07), 1620)
+  },
 }

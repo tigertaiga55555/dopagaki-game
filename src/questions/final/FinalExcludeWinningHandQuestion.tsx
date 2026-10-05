@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQuestionStartRef } from '../useQuestionStartRef'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { pick } from '../../engine/random'
@@ -34,7 +35,7 @@ function computeTargetTimeMs() {
 function Component({ spec, onResult }: FinalQuestionComponentProps) {
   const { opponent, winningHand } = spec.data as { opponent: HandId; winningHand: HandId }
   const [cleared, setCleared] = useState<Set<HandId>>(new Set())
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const guardRef = useRef<ReturnType<typeof createResolveOnce<FinalQuestionResult>> | null>(null)
   if (!guardRef.current) guardRef.current = createResolveOnce(onResult)
   const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)

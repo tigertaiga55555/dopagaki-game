@@ -1,32 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
+import { ShapeIcon, SHAPE_IDS, SHAPE_LABELS, type ShapeId } from '../../components/ShapeIcon'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { pick, randInt, shuffle } from '../../engine/random'
 import { QuestionShell } from '../QuestionShell'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
-const COLORS = [
-  { id: 'red', label: '赤', hex: '#ef4444' },
-  { id: 'blue', label: '青', hex: '#3b82f6' },
-  { id: 'green', label: '緑', hex: '#22c55e' },
-  { id: 'yellow', label: '黄', hex: '#eab308' },
-] as const
-type ColorId = (typeof COLORS)[number]['id']
-
 interface Item {
   id: number
   value: number
-  colorId: ColorId
-  hex: string
+  shape: ShapeId
 }
 
 /**
- * FINAL DOPA TRIAL Q13〜Q15（高難度ミックスプール）：「◯以外を小さい順に全て押せ！」。
- * 色による除外＋数字の昇順処理の複合判断。除外色を2個、非除外色（3〜4色から3個）を混ぜる。
+ * Ver.6 Phase 1: 旧「◯以外を小さい順に全て押せ！」（色による除外が正解条件の一部だった
+ * 問題）を、図形による除外に再設計した。除外図形を2個、非除外図形（3〜4図形から3個）を
+ * 混ぜる構成・数字の昇順処理という複合判断ロジックは旧実装を踏襲している。
  */
 function generate() {
-  const excludeColor = pick(COLORS)
-  const others = shuffle(COLORS.filter((c) => c.id !== excludeColor.id))
+  const excludeShape = pick(SHAPE_IDS)
+  const others = shuffle(SHAPE_IDS.filter((s) => s !== excludeShape))
   const values = new Set<number>()
   while (values.size < 5) values.add(randInt(1, 30))
   const valueList = shuffle([...values])
@@ -34,15 +27,15 @@ function generate() {
   const other3 = others[randInt(0, others.length - 1)]
   const other4 = others[randInt(0, others.length - 1)]
   const items: Item[] = [
-    { id: 0, value: valueList[0], colorId: excludeColor.id, hex: excludeColor.hex },
-    { id: 1, value: valueList[1], colorId: excludeColor.id, hex: excludeColor.hex },
-    { id: 2, value: valueList[2], colorId: others[0].id, hex: others[0].hex },
-    { id: 3, value: valueList[3], colorId: other3.id, hex: other3.hex },
-    { id: 4, value: valueList[4], colorId: other4.id, hex: other4.hex },
+    { id: 0, value: valueList[0], shape: excludeShape },
+    { id: 1, value: valueList[1], shape: excludeShape },
+    { id: 2, value: valueList[2], shape: others[0] },
+    { id: 3, value: valueList[3], shape: other3 },
+    { id: 4, value: valueList[4], shape: other4 },
   ]
-  const nonExcluded = items.filter((it) => it.colorId !== excludeColor.id)
+  const nonExcluded = items.filter((it) => it.shape !== excludeShape)
   const order = [...nonExcluded].sort((a, b) => a.value - b.value).map((it) => it.id)
-  return { items: shuffle(items), excludeColorId: excludeColor.id, excludeLabel: excludeColor.label, order }
+  return { items: shuffle(items), excludeShape, order }
 }
 
 function computeTargetTimeMs() {
@@ -50,12 +43,7 @@ function computeTargetTimeMs() {
 }
 
 function Component({ spec, onResult }: FinalQuestionComponentProps) {
-  const { items, excludeColorId, excludeLabel, order } = spec.data as {
-    items: Item[]
-    excludeColorId: ColorId
-    excludeLabel: string
-    order: number[]
-  }
+  const { items, excludeShape, order } = spec.data as { items: Item[]; excludeShape: ShapeId; order: number[] }
   const [clearedCount, setClearedCount] = useState(0)
   const startRef = useRef(performance.now())
   const guardRef = useRef<ReturnType<typeof createResolveOnce<FinalQuestionResult>> | null>(null)
@@ -77,7 +65,7 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
 
   function handleTap(item: Item) {
     if (guardRef.current!.isResolved) return
-    if (item.colorId === excludeColorId) {
+    if (item.shape === excludeShape) {
       finish(false)
       return
     }
@@ -97,15 +85,15 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction={`${excludeLabel}以外を\n小さい順に全て押せ！`}>
+    <QuestionShell instruction={`${SHAPE_LABELS[excludeShape]}以外を\n小さい順に全て押せ！`}>
       <div className="grid grid-cols-3 gap-3">
         {items.map((it) => (
           <button
             key={it.id}
             onPointerDown={() => handleTap(it)}
-            className="flex h-16 w-16 items-center justify-center rounded-2xl text-2xl font-black text-white active:scale-90"
-            style={{ backgroundColor: `${it.hex}33` }}
+            className="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-2xl bg-white/10 text-lg font-black text-white active:scale-90"
           >
+            <ShapeIcon shape={it.shape} size={18} />
             {it.value}
           </button>
         ))}
@@ -116,7 +104,7 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
 
 export const FinalExcludeColorSortedModule: FinalQuestionModule = {
   id: 'finalExcludeColorSorted',
-  tags: ['color', 'number', 'inhibition'],
+  tags: ['number', 'inhibition'],
   tier: 'mixed',
   generate,
   computeTargetTimeMs,

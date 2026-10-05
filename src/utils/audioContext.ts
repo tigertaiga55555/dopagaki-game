@@ -124,14 +124,12 @@ export function setMuted(value: boolean): void {
 }
 
 /**
- * BGM・SEの両方を一瞬だけ弱める（100%到達時の静寂演出、大きいCOMBO BREAK時の「怯み」に使う）。
- * durationMsかけて元の音量に戻る。depthは0〜1（1=ほぼ無音まで、0.5=半分まで）。
- *
- * ランプを「下げてすぐ戻す」形にすると、durationMsの大半がすでに音量回復中になってしまい、
- * 「静寂」に聞こえる時間がほぼ無くなる。そのため、下げた後は一定時間そのレベルを保持し、
- * durationMsの終わり際だけ素早く元の音量へ戻す（ホールド→リカバリー）形にしている。
+ * ducking共通処理。ランプを「下げてすぐ戻す」形にすると、durationMsの大半がすでに
+ * 音量回復中になってしまい、「静寂」に聞こえる時間がほぼ無くなる。そのため、下げた後は
+ * 一定時間そのレベルを保持し、durationMsの終わり際だけ素早く元の音量へ戻す
+ * （ホールド→リカバリー）形にしている。
  */
-export function duckAudio(durationMs: number, depth = 1): void {
+function duckNodes(targets: [GainNode | null, number][], durationMs: number, depth: number): void {
   const ctx = audioCtx
   if (!ctx) return
   const now = ctx.currentTime
@@ -139,10 +137,6 @@ export function duckAudio(durationMs: number, depth = 1): void {
   const recoverMs = Math.min(80, durationMs * 0.25)
   const holdUntil = now + Math.max(downMs, durationMs - recoverMs) / 1000
   const endAt = now + durationMs / 1000
-  const targets: [GainNode | null, number][] = [
-    [sfxGain, muted ? 0 : SFX_BASE_GAIN],
-    [bgmGain, muted ? 0 : BGM_BASE_GAIN],
-  ]
   for (const [node, base] of targets) {
     if (!node) continue
     const duckedTo = Math.max(0.0001, base * (1 - depth))
@@ -152,4 +146,29 @@ export function duckAudio(durationMs: number, depth = 1): void {
     node.gain.setValueAtTime(duckedTo, holdUntil)
     node.gain.linearRampToValueAtTime(base, endAt)
   }
+}
+
+/**
+ * BGM・SEの両方を一瞬だけ弱める（100%到達時の静寂演出、大きいCOMBO BREAK時の「怯み」に使う）。
+ * durationMsかけて元の音量に戻る。depthは0〜1（1=ほぼ無音まで、0.5=半分まで）。
+ */
+export function duckAudio(durationMs: number, depth = 1): void {
+  duckNodes(
+    [
+      [sfxGain, muted ? 0 : SFX_BASE_GAIN],
+      [bgmGain, muted ? 0 : BGM_BASE_GAIN],
+    ],
+    durationMs,
+    depth,
+  )
+}
+
+/**
+ * Ver.6 Phase 2: BGM（常駐アンビエント）だけを一瞬弱め、SE（sfxGain）は一切触らない版。
+ * 500%チャレンジのチェックポイント（300/400%到達）で「背景の鼓動だけを一旦止めて、
+ * チェックポイント専用SEはそのままの音量でしっかり聞かせる」ために使う
+ * （duckAudioだとSE側も一緒にダッキングされ、肝心のチェックポイント音が小さくなってしまう）。
+ */
+export function duckBgm(durationMs: number, depth = 1): void {
+  duckNodes([[bgmGain, muted ? 0 : BGM_BASE_GAIN]], durationMs, depth)
 }

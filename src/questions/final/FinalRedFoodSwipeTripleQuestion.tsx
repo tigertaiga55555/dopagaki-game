@@ -1,32 +1,33 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { ShapeIcon, SHAPE_IDS, SHAPE_LABELS, type ShapeId } from '../../components/ShapeIcon'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
-import { shuffle } from '../../engine/random'
+import { pickExcluding, shuffle } from '../../engine/random'
 import { sfx } from '../../utils/sound'
+import { useInputGateReady } from '../useInputGateReady'
+import { useQuestionStartRef } from '../useQuestionStartRef'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
 const SWIPE_THRESHOLD_PX = 50
 const FLY_MS = 170
 const REQUIRED = 3
 const PER_REMAINING_MS = TIMING_SAFETY.shortVideoSwipe.perSwipeMs + 400
+const BADGE_SHAPE: ShapeId = 'circle'
 
-const RED_FOOD = ['🍎', '🍓', '🌶️']
-const NON_RED_FOOD = ['🍌', '🍇', '🥦']
-const RED_NONFOOD = ['🚗', '❤️', '🎈']
-const NONRED_NONFOOD = ['⭐', '📱', '🎸']
-type Category = 'redFood' | 'nonRedFood' | 'redNonFood' | 'nonRedNonFood'
-const POOLS: Record<Category, string[]> = { redFood: RED_FOOD, nonRedFood: NON_RED_FOOD, redNonFood: RED_NONFOOD, nonRedNonFood: NONRED_NONFOOD }
-const CATEGORIES: Category[] = ['redFood', 'nonRedFood', 'redNonFood', 'nonRedNonFood']
+const FOOD_ICONS = ['🍎', '🍓', '🌶️', '🍌', '🍇', '🥦']
+const NONFOOD_ICONS = ['🚗', '❤️', '🎈', '⭐', '📱', '🎸']
 
 function randomItem() {
-  const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)]
-  const icon = POOLS[category][Math.floor(Math.random() * POOLS[category].length)]
-  return { icon, isRightAnswer: category === 'redFood' }
+  const isFood = Math.random() < 0.5
+  const icon = isFood ? FOOD_ICONS[Math.floor(Math.random() * FOOD_ICONS.length)] : NONFOOD_ICONS[Math.floor(Math.random() * NONFOOD_ICONS.length)]
+  const hasBadge = Math.random() < 0.5
+  const badgeShape = hasBadge ? BADGE_SHAPE : pickExcluding(SHAPE_IDS, BADGE_SHAPE)
+  return { icon, badgeShape, isRightAnswer: isFood && hasBadge }
 }
 
 /**
- * FINAL DOPA TRIAL Q13〜Q15（高難度ミックスプール）：「赤い食べ物は右、それ以外は左！」を
- * 3カード連続。FinalRedFoodSwipeQuestion（twoConditionプール）の高難度版で、3回連続で
+ * Ver.6 Phase 1: 旧FinalRedFoodSwipeTripleQuestion（色識別が正解条件の半分だった問題）の
+ * 図形バッジ版。FinalRedFoodSwipeQuestion（twoConditionプール）の高難度版で、3回連続で
  * 正しく仕分けきるまでSUCCESSにならない。1回でも方向を間違えると即MISS。
  */
 function generate() {
@@ -39,16 +40,17 @@ function computeTargetTimeMs() {
 }
 
 function Component({ spec, onResult }: FinalQuestionComponentProps) {
-  const { items } = spec.data as { items: { icon: string; isRightAnswer: boolean }[] }
+  const { items } = spec.data as { items: { icon: string; badgeShape: ShapeId; isRightAnswer: boolean }[] }
   const [cardIndex, setCardIndex] = useState(0)
   const [flying, setFlying] = useState(false)
   const cardIndexRef = useRef(0)
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
   const guardRef = useRef<ReturnType<typeof createResolveOnce<FinalQuestionResult>> | null>(null)
   if (!guardRef.current) guardRef.current = createResolveOnce(onResult)
   const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const flyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const ready = useInputGateReady()
 
   useEffect(() => {
     failTimerRef.current = setTimeout(() => finish(false), spec.targetTimeMs)
@@ -65,12 +67,12 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   }
 
   function handlePointerDown(e: ReactPointerEvent) {
-    if (guardRef.current!.isResolved || flying) return
+    if (!ready || guardRef.current!.isResolved || flying) return
     e.currentTarget.setPointerCapture(e.pointerId)
     dragStartRef.current = { x: e.clientX, y: e.clientY }
   }
   function handlePointerUp(e: ReactPointerEvent) {
-    if (guardRef.current!.isResolved || flying || !dragStartRef.current) return
+    if (!ready || guardRef.current!.isResolved || flying || !dragStartRef.current) return
     const dx = e.clientX - dragStartRef.current.x
     dragStartRef.current = null
     if (Math.abs(dx) < SWIPE_THRESHOLD_PX) return
@@ -112,19 +114,22 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
     >
       <div className="relative z-10 flex w-full max-w-xs items-center justify-between px-1 text-xs font-black">
         <span className="text-sky-300">← それ以外は左へ</span>
-        <span className="text-red-300">赤い食べ物は右へ →</span>
+        <span className="text-amber-300">{SHAPE_LABELS[BADGE_SHAPE]}の食べ物は右へ →</span>
       </div>
       <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-3">
-        <p
-          className="text-8xl"
+        <div
+          className="relative"
           style={{
             transform: flying ? 'scale(0.6)' : 'scale(1)',
             opacity: flying ? 0 : 1,
             transition: `transform ${FLY_MS}ms ease-in, opacity ${FLY_MS}ms ease-in`,
           }}
         >
-          {items[cardIndex].icon}
-        </p>
+          <p className="text-8xl">{items[cardIndex].icon}</p>
+          <div className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/15">
+            <ShapeIcon shape={items[cardIndex].badgeShape} size={20} />
+          </div>
+        </div>
         <p className="text-lg font-black text-amber-200/90">{remaining > 0 ? `あと${remaining}枚` : '完了！'}</p>
       </div>
     </div>
@@ -133,7 +138,7 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
 
 export const FinalRedFoodSwipeTripleModule: FinalQuestionModule = {
   id: 'finalRedFoodSwipeTriple',
-  tags: ['color', 'swipe', 'inhibition'],
+  tags: ['swipe', 'inhibition'],
   tier: 'mixed',
   generate,
   computeTargetTimeMs,
