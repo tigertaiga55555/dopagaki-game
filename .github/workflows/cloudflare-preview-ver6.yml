@@ -32,28 +32,49 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          npx wrangler preview --name ver6 --json > preview-output.json
-          cat preview-output.json
+          set +e
+          npx wrangler preview --name ver6 --json > preview-output.json 2> preview-stderr.log
+          WRANGLER_EXIT_CODE=$?
+          set -e
+
+          echo "----- wrangler preview stdout (preview-output.json) -----"
+          cat preview-output.json || true
+          echo "----- wrangler preview stderr -----"
+          cat preview-stderr.log || true
+          echo "----- wrangler exit code: $WRANGLER_EXIT_CODE -----"
 
           PREVIEW_URL=$(jq -r '.preview_urls[0] // .deployment_urls[0] // empty' preview-output.json 2>/dev/null || true)
           if [ -z "$PREVIEW_URL" ]; then
-            PREVIEW_URL=$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev[^"[:space:]]*' preview-output.json | head -1 || true)
+            PREVIEW_URL=$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev[^"[:space:]]*' preview-output.json preview-stderr.log 2>/dev/null | head -1 || true)
           fi
 
           {
             echo "## Cloudflare Worker Preview (ver6)"
             echo ""
+            echo "- wrangler exit code: $WRANGLER_EXIT_CODE"
             if [ -n "$PREVIEW_URL" ]; then
               echo "- Preview URL: $PREVIEW_URL"
               echo "- QA URL (\`?preview=challenge500\`): ${PREVIEW_URL}?preview=challenge500"
             else
-              echo "- Preview URLを自動抽出できませんでした。下記の生JSON出力を確認してください。"
+              echo "- Preview URLを自動抽出できませんでした。下記の生出力を確認してください。"
             fi
             echo ""
-            echo "<details><summary>wrangler preview --json raw output</summary>"
+            echo "<details><summary>wrangler preview stdout</summary>"
             echo ""
             echo '```json'
             cat preview-output.json
             echo '```'
             echo "</details>"
+            echo ""
+            echo "<details><summary>wrangler preview stderr</summary>"
+            echo ""
+            echo '```'
+            cat preview-stderr.log
+            echo '```'
+            echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$WRANGLER_EXIT_CODE" -ne 0 ]; then
+            echo "::error::wrangler preview failed with exit code $WRANGLER_EXIT_CODE"
+            exit 1
+          fi
