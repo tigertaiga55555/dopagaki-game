@@ -48,6 +48,13 @@ const CHECKPOINT_400_MS = 2800
 /** チェックポイント到達時、常駐ハートビートだけを一旦止める長さ（SE自体は別バスで無傷）。 */
 const CHECKPOINT_DUCK_MS = 900
 /**
+ * Ver.6 Phase 2: 490%（あと1問で500%）専用の「最終問題への予告」演出。
+ * 300/400チェックポイントより短く終わらせる（「派手さより緊張感」「テンポを壊さない」
+ * という指示のため、保持時間そのものはチェックポイントより短い）。
+ */
+const FINAL_QUESTION_490_MS = 1300
+const FINAL_QUESTION_DUCK_MS = 500
+/**
  * Ver.6 Phase 2: 500%クリアの「静寂→爆発」のための無音区間。duckAudio()でSE/BGM両方を
  * 一度沈黙させ、その沈黙が明けた瞬間にchallenge500Clear500()（爆発インパクト）を鳴らす
  * ——200% CLEAR（FinalTrialScreen側のCLEAR200_SILENCE_MS=320と同じ考え方）を踏襲する。
@@ -123,6 +130,8 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
 
   const [checkpointBeat, setCheckpointBeat] = useState<CheckpointBeat>(null)
   const checkpointTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [showFinalQuestionBeat, setShowFinalQuestionBeat] = useState(false)
+  const finalQuestionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [clearBeat, setClearBeat] = useState<ClearBeat>(null)
   const clearTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
   const correctFxRef = useRef<Challenge500CorrectFxHandle>(null)
@@ -227,8 +236,16 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
    * QAのジャンプ機能でfloorを行き来させた場合は、floorが実際に変化するたびに
    * 再度この演出が発火する——「300/400の演出を毎回ゲームを進めずに見返したい」という
    * QA要件を、ジャンプボタン自体の自然な挙動として満たすための意図的な設計。
+   *
+   * ただしpercentが490の場合（QAで200%から直接「490」へジャンプすると、floorも
+   * 300/400を経由せず一気に400へ確保されるため、この効果とFINAL QUESTION490%効果が
+   * 同一レンダーで同時に発火し得る）はチェックポイント演出を出さない。490%の瞬間は
+   * 下のFINAL QUESTION演出がより具体的・優先度の高いメッセージのため、二重表示を
+   * 避けてそちらに譲る（実プレイでは400%確保と490%到達は必ず別タイミングで起こるため、
+   * この分岐が通常プレイの演出に影響することはない）。
    */
   useEffect(() => {
+    if (snapshot.state.percent === 490) return
     if (snapshot.state.floor >= 400) {
       // 常駐ハートビートだけを一旦止め（SEは別バスなので無傷）、「場面転換」を音でも作る。
       // tierは下のuseEffect（[tier]）で既に次段へ切り替わっているため、ダッキングが
@@ -252,6 +269,30 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot.state.floor])
+
+  /**
+   * Ver.6 Phase 2: 490%（あと1問正解すれば500%）到達時の「最終問題への予告」演出。
+   * floorではなくpercentを見る理由: 300/400はfloor（確保済みチェックポイント）だが、
+   * 490はチェックポイントではなく「現在の到達％」そのものが対象のため（tier3は
+   * 1 MISSで即終了・床へ戻るため、490はフロアとしては確保されない一時的な通過点）。
+   * 実プレイでは490→500 CLEARへ直行する構造上、percentが490になるのは一度きり。
+   * QAジャンプで490へ繰り返し移動した場合は、チェックポイント演出と同じ方針で
+   * その都度再発火する（意図的な挙動）。
+   */
+  useEffect(() => {
+    if (snapshot.state.percent === 490) {
+      duckBgm(FINAL_QUESTION_DUCK_MS, 1)
+      setShowFinalQuestionBeat(true)
+      sfx.challenge500FinalQuestion490()
+      hapticPulse([15, 50, 15, 50, 15, 120])
+      triggerShake(true)
+      finalQuestionTimerRef.current = setTimeout(() => setShowFinalQuestionBeat(false), FINAL_QUESTION_490_MS)
+    }
+    return () => {
+      if (finalQuestionTimerRef.current) clearTimeout(finalQuestionTimerRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot.state.percent])
 
   useEffect(() => {
     if (!finalState) return
@@ -296,7 +337,7 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
   }, [finalState])
 
   const CurrentQuestion = snapshot.currentSpec ? CHALLENGE500_QUESTION_MODULES.find((m) => m.id === snapshot.currentSpec!.type)?.Component : null
-  const showingQuestion = !finalState && !checkpointBeat && CurrentQuestion && snapshot.currentSpec
+  const showingQuestion = !finalState && !checkpointBeat && !showFinalQuestionBeat && CurrentQuestion && snapshot.currentSpec
 
   return (
     <div
@@ -339,6 +380,8 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
 
         {checkpointBeat && <CheckpointOverlay beat={checkpointBeat} />}
 
+        {showFinalQuestionBeat && <FinalQuestion490Overlay />}
+
         {finalState && (
           <Clear500Overlay beat={clearBeat} finalState={finalState} />
         )}
@@ -346,7 +389,7 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
 
       <Challenge500CorrectFx ref={correctFxRef} />
 
-      {showQaPanel && !finalState && !checkpointBeat && (
+      {showQaPanel && !finalState && !checkpointBeat && !showFinalQuestionBeat && (
         <Challenge500QaPanel
           onJump={jumpTo}
           onForceCorrect={() => guardedHandleResult({ correct: true })}
@@ -379,6 +422,25 @@ function CheckpointOverlay({ beat }: { beat: 'flash300' | 'flash400' }) {
       <Sparkle120Overlay show />
       <p className="pointer-events-none absolute inset-x-0 bottom-12 z-[53] px-6 text-center text-xs font-bold text-white/70">{hint}</p>
     </>
+  )
+}
+
+/**
+ * Ver.6 Phase 2: 490%（あと1問正解すれば500%）専用の「最終問題への予告」演出。
+ * 300/400チェックポイントや500 CLEARの黄金爆発・虹・紙吹雪・sparkleは一切使わない
+ * （祝祭的な派手さではなく、警告・緊張感を前面に出すため）。代わりに、101%突破の
+ * LimitErrorOverlay（components/OverdriveFx.tsx）と同じ「黒背景＋amber glitch＋
+ * 警告色の文字」という既存の緊張感トーンを再利用する。長い説明文は出さない。
+ */
+function FinalQuestion490Overlay() {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center gap-2 bg-black/85">
+      <div className="anim-glitch absolute inset-0 bg-amber-400" />
+      <p className="anim-pop relative text-3xl font-black tracking-[0.15em] text-red-400 drop-shadow-[0_0_20px_rgba(248,113,113,0.8)]">
+        FINAL QUESTION
+      </p>
+      <p className="anim-pop relative text-xl font-black tracking-widest text-white/90">あと1問</p>
+    </div>
   )
 }
 

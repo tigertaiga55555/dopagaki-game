@@ -15,10 +15,10 @@ type Data = { items: Item[]; targetId: number; segments: PromptSegment[] }
 const RUNS = 600
 
 function deriveEffective(data: Data) {
-  const posSeg = data.segments.find((s) => s.text.includes('最初') || s.text.includes('最後'))!
-  const posWordShown = posSeg.text.includes('最初') ? '最初' : '最後'
-  const posWordEffective = posSeg.inverted ? opposite('firstLast', posWordShown) : posWordShown
-  const wantFirst = posWordEffective === '最初'
+  const posSeg = data.segments.find((s) => s.text.includes('一番左') || s.text.includes('一番右'))!
+  const posWordShown = posSeg.text.includes('一番左') ? '一番左' : '一番右'
+  const posWordEffective = posSeg.inverted ? opposite('leftmostRightmost', posWordShown) : posWordShown
+  const wantFirst = posWordEffective === '一番左'
 
   const rowSeg = data.segments.find((s) => s.text === '上' || s.text === '下')
   let effectiveRow: 'top' | 'bottom' | null = null

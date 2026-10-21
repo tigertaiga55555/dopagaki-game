@@ -15,6 +15,7 @@ export type InversionAxis =
   | 'longShort'
   | 'nearFar'
   | 'firstLast'
+  | 'leftmostRightmost'
   | 'insideOutside'
   | 'sameDifferent'
   | 'winLose'
@@ -27,6 +28,13 @@ export const INVERSION_PAIRS: Record<InversionAxis, readonly [string, string]> =
   longShort: ['長い', '短い'],
   nearFar: ['近い', '遠い'],
   firstLast: ['最初', '最後'],
+  /**
+   * Ver.6 Phase 1実機QA修正: 横一列に並ぶUI（PositionPickQuestion）で「最初/最後」を
+   * 使うと、読む方向（左→右）を前提にしないと意味が決まらず曖昧だったため追加。
+   * 視覚上の位置が一意に決まる「一番左/一番右」で横並びUI専用に表現する。
+   * firstLast自体は廃止しない（将来の時間順・記憶型問題での再利用を想定）。
+   */
+  leftmostRightmost: ['一番左', '一番右'],
   insideOutside: ['内側', '外側'],
   sameDifferent: ['同じ', '異なる'],
   /**

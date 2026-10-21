@@ -10,7 +10,7 @@ interface Item {
   id: number
   value: number
   row: 'top' | 'bottom'
-  /** 行内での並び順（0始まり）。位置判定（最初/最後）は必ずこのorderで行う（表示もこの順を保つ）。 */
+  /** 行内での並び順（0始まり）。位置判定（一番左/一番右）は必ずこのorderで行う（表示もこの順を保つ）。 */
   order: number
 }
 
@@ -19,20 +19,25 @@ type Slot = 'position' | 'row'
 /**
  * Ver.6 Phase 1（再設計版）: 下線反転ギミックのテンプレート4（並び位置選択）。
  * NumberPickQuestionが「数の大小」で正解を決めるのに対し、本テンプレートは
- * 「並び順の中での位置（最初/最後）」で正解を決める——軸が異なるため、同じ画面に
+ * 「並び順の中での位置（一番左/一番右）」で正解を決める——軸が異なるため、同じ画面に
  * 数字が並んでいても要求される判断の種類が変わる（ユーザー指示: 問題タイプの複雑さで
  * 難易度を作る）。
  *
- * ・tier1（200〜299%）：反転候補は「最初/最後」の1箇所のみ（maxSlots=1）。各行の並び順
- *   （order）は固定で、シャッフルしない（位置の意味が崩れるため）。
+ * 実機QA修正: 各行は横一列（flexの横並び）で表示されるUIのため、当初使っていた
+ * 「最初/最後」は読む方向を前提にしないと意味が決まらず曖昧だった。本テンプレートの
+ * orderは表示順＝左から右の視覚位置と一致するため、「一番左/一番右」という、見た目の
+ * 位置だけで一意に判定できる表現（leftmostRightmost軸）に変更した。
+ *
+ * ・tier1（200〜299%）：反転候補は「一番左/一番右」の1箇所のみ（maxSlots=1）。各行の
+ *   並び順（order）は固定で、シャッフルしない（位置の意味が崩れるため）。
  * ・tier2（300〜399%）：位置条件「上/下」（どの行を見るか）を追加し、反転候補は最大2箇所。
  *   実機フィードバック修正: 本テンプレートの実際のレイアウトは上下2段に積んだ行であり、
  *   左右に並ぶ列ではないため、軸はleftRightではなくupDownを使う（「右の行」のような、
  *   画面構造と日本語が一致しない問題文を防ぐ）。
  * ・tier3（400〜499%）：反転しない通常条件「偶数の数字だけを数えて」を常に追加する
- *   （奇数を除いた残りの並び順で最初/最後を判定する）。
+ *   （奇数を除いた残りの並び順で一番左/一番右を判定する）。
  *
- * 正解の一意性は「対象となる行（＝必ず1行）の中で最初/最後の要素は常に1つに決まる」
+ * 正解の一意性は「対象となる行（＝必ず1行）の中で一番左/一番右の要素は常に1つに決まる」
  * という構造（配列のインデックス自体が正解を決める）で保証する。
  */
 /** 通常の行：distinct値だけ保証（値の偶奇は問わない）。 */
@@ -76,10 +81,10 @@ function generate(tier: Challenge500Tier) {
   const invertCount = pickInversionCount(tier, maxSlots)
   const invertedSlots = new Set(shuffle(slots).slice(0, invertCount))
 
-  const posWordShown = pickAxisWord('firstLast')
+  const posWordShown = pickAxisWord('leftmostRightmost')
   const posInverted = invertedSlots.has('position')
-  const posWordEffective = posInverted ? opposite('firstLast', posWordShown) : posWordShown
-  const wantFirst = posWordEffective === '最初'
+  const posWordEffective = posInverted ? opposite('leftmostRightmost', posWordShown) : posWordShown
+  const wantFirst = posWordEffective === '一番左'
 
   let rowWordShown: string | null = null
   let effectiveRow: 'top' | 'bottom' | null = null
@@ -100,7 +105,7 @@ function generate(tier: Challenge500Tier) {
   const segments: PromptSegment[] = []
   if (tier === 3) segments.push({ text: '偶数の数字だけを数えて、', inverted: false })
   if (rowWordShown) segments.push({ text: rowWordShown, inverted: rowInverted }, { text: 'の行の', inverted: false })
-  segments.push({ text: posWordShown, inverted: posInverted }, { text: ' にある数字を押せ！', inverted: false })
+  segments.push({ text: posWordShown, inverted: posInverted }, { text: 'の数字を押せ！', inverted: false })
 
   return { items, targetId: target.id, segments }
 }
