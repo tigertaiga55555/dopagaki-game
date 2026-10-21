@@ -1,0 +1,59 @@
+name: Cloudflare Worker Preview (Ver.6 / claude/dopagaki-game-v1-pewz92)
+
+on:
+  push:
+    branches:
+      - claude/dopagaki-game-v1-pewz92
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        env:
+          WORKERS_CI_BRANCH: ${{ github.ref_name }}
+        run: npm run build
+
+      - name: Create Cloudflare Worker Preview (ver6)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler preview --name ver6 --json > preview-output.json
+          cat preview-output.json
+
+          PREVIEW_URL=$(jq -r '.preview_urls[0] // .deployment_urls[0] // empty' preview-output.json 2>/dev/null || true)
+          if [ -z "$PREVIEW_URL" ]; then
+            PREVIEW_URL=$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev[^"[:space:]]*' preview-output.json | head -1 || true)
+          fi
+
+          {
+            echo "## Cloudflare Worker Preview (ver6)"
+            echo ""
+            if [ -n "$PREVIEW_URL" ]; then
+              echo "- Preview URL: $PREVIEW_URL"
+              echo "- QA URL (\`?preview=challenge500\`): ${PREVIEW_URL}?preview=challenge500"
+            else
+              echo "- Preview URLを自動抽出できませんでした。下記の生JSON出力を確認してください。"
+            fi
+            echo ""
+            echo "<details><summary>wrangler preview --json raw output</summary>"
+            echo ""
+            echo '```json'
+            cat preview-output.json
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
