@@ -66,3 +66,37 @@ export function trackShareClick(): void {
 export function trackReplayStart(): void {
   trackEvent('replay_start')
 }
+
+/**
+ * Ver.6 Phase 1追加: 各マイルストーン到達を、既存のoverdrive_reached/final_reached/
+ * perfect_clearとは別名の指標としても送信する（既存イベントの置き換えではなく追加）。
+ * 呼び出し元は既存イベントと同じガード条件（1プレイにつき1回だけ）を利用する。
+ */
+export function trackReach100(): void {
+  trackEvent('reach_100')
+}
+
+export function trackReach120(): void {
+  trackEvent('reach_120')
+}
+
+export function trackReach200(): void {
+  trackEvent('reach_200')
+}
+
+/** 500％チャレンジ開始（説明画面の「500％に挑戦する」ボタン押下）。 */
+export function trackChallenge500Start(): void {
+  trackEvent('challenge_500_start')
+}
+
+export function trackReach300(): void {
+  trackEvent('reach_300')
+}
+
+export function trackReach400(): void {
+  trackEvent('reach_400')
+}
+
+export function trackReach500(): void {
+  trackEvent('reach_500')
+}

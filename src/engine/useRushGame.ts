@@ -15,7 +15,7 @@ import {
   nextMomentum,
 } from '../config/scoreConfigV4'
 import { TIMING_SAFETY } from '../config/timingConfig'
-import { trackFinalReached, trackOverdriveReached } from '../utils/analytics'
+import { trackFinalReached, trackOverdriveReached, trackReach100, trackReach120 } from '../utils/analytics'
 import { setCurrentStageIndex } from './difficultyStage'
 import { generateNextQuestion } from './questionPicker'
 import { randFloat } from './random'
@@ -332,6 +332,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEn
       overdriveActiveRef.current = true
       overdriveBonusSecRef.current = OVERDRIVE_TIME_BONUS_SEC
       trackOverdriveReached()
+      trackReach100()
     }
     // 非OVERDRIVEは常に100が上限、OVERDRIVE突入後は119（一度でもMISSしている場合）
     // または120（ゲーム開始から完全ノーミスの場合のみ）。
@@ -347,6 +348,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEn
     if (crossingFinalEntry) {
       finalEntryTriggeredRef.current = true
       trackFinalReached()
+      trackReach120()
       // 「120%へ到達した瞬間、ゲーム一時停止」：エンジン自体をここで即座に停止する
       // （以後のtick・出題を一切行わない）。演出・FINAL DOPA TRIALへの引き継ぎは
       // 呼び出し元（PlayScreen）がonEnterFinalを受けて行う。

@@ -3,6 +3,8 @@ import { TIMING_SAFETY } from '../config/timingConfig'
 import { getCurrentStageIndex } from '../engine/difficultyStage'
 import { randInt } from '../engine/random'
 import { sfx } from '../utils/sound'
+import { useInputGateReady } from './useInputGateReady'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
 /**
@@ -56,8 +58,9 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   const [phaseIndex, setPhaseIndex] = useState(0)
   const [tapCount, setTapCount] = useState(0)
   const phaseIndexRef = useRef(0)
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const doneRef = useRef(false)
+  const ready = useInputGateReady()
   const greenTapTimestampsRef = useRef<number[][]>(phases.map(() => []))
   const totalGreenTapsRef = useRef(0)
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
@@ -121,7 +124,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   function handleTap() {
-    if (doneRef.current) return
+    if (!ready || doneRef.current) return
     const phase = phases[phaseIndexRef.current]
     if (phase.color === 'red') {
       finish(false, undefined, true)

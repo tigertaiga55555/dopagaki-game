@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { randFloat, randInt } from '../engine/random'
 import { sfx } from '../utils/sound'
@@ -40,7 +41,7 @@ function judgeStop(value: number): { tier: 'PERFECT' | 'GREAT' | 'GOOD' | 'MISS'
 function Component({ spec, onResult }: QuestionComponentProps) {
   const { startValue, rate } = spec.data as { startValue: number; rate: number }
   const [display, setDisplay] = useState(startValue)
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const doneRef = useRef(false)
   const rafRef = useRef<number | undefined>(undefined)
 
