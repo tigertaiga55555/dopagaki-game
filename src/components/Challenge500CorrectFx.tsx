@@ -1,8 +1,12 @@
 import { forwardRef, useImperativeHandle, useRef } from 'react'
 
 export interface Challenge500CorrectFxHandle {
-  /** 正解演出を即座に（再生中でも中断して）最初から再生し直す。 */
-  trigger: () => void
+  /**
+   * 正解演出を即座に（再生中でも中断して）最初から再生し直す。
+   * Ver.6 Phase 3: tintRgb（"R, G, B"形式）で正解フラッシュの色をtierごとに変えられる。
+   * 省略時は従来どおり白フラッシュ（見た目を変えない後方互換のデフォルト）。
+   */
+  trigger: (tintRgb?: string) => void
 }
 
 /**
@@ -59,12 +63,15 @@ export const Challenge500CorrectFx = forwardRef<Challenge500CorrectFxHandle>(fun
   const activeAnimsRef = useRef<Animation[]>([])
 
   useImperativeHandle(ref, () => ({
-    trigger() {
+    trigger(tintRgb = '255, 255, 255') {
       activeAnimsRef.current.forEach((anim) => anim.cancel())
       activeAnimsRef.current = []
 
       const flashEl = flashRef.current
       if (flashEl) {
+        // tierごとの色（limitBreak=白寄り/overload=水色/danger=赤）をinline styleで直接
+        // 上書きする。React stateを経由しないため、ここでもReactの再レンダーは発生しない。
+        flashEl.style.backgroundColor = `rgb(${tintRgb})`
         activeAnimsRef.current.push(flashEl.animate(FLASH_KEYFRAMES, { duration: 300, easing: 'ease-out' }))
       }
       sparkleRefs.current.forEach((el, i) => {
@@ -78,7 +85,7 @@ export const Challenge500CorrectFx = forwardRef<Challenge500CorrectFxHandle>(fun
 
   return (
     <div className="pointer-events-none absolute inset-0 z-40 overflow-hidden" aria-hidden="true">
-      <div ref={flashRef} className="absolute inset-0 bg-white opacity-0" />
+      <div ref={flashRef} className="absolute inset-0 opacity-0" style={{ backgroundColor: '#fff' }} />
       <div className="absolute inset-0 z-[52]">
         {SPARKLE_SLOTS.map((s, i) => (
           <span

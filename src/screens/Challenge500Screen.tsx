@@ -1,19 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { Challenge500QaPanel } from '../dev/Challenge500QaPanel'
+import { Challenge500AmbientFX } from '../components/Challenge500AmbientFX'
 import { Challenge500CorrectFx, type Challenge500CorrectFxHandle } from '../components/Challenge500CorrectFx'
 import { Challenge500TimerBar } from '../components/Challenge500TimerBar'
 import { QuitButton } from '../components/QuitButton'
 import {
   Confetti120Overlay,
-  getOverdriveFrameClass,
   GoldenClearOverlay,
-  OverdriveAmbience,
   RainbowShockwaveOverlay,
   Sparkle120Overlay,
   WhiteFlashOverlay,
-  type OverdriveTier,
 } from '../components/OverdriveFx'
 import { CHALLENGE500_CONFIG, tierForPercent } from '../config/challenge500Config'
+import { getChallenge500Theme } from '../config/challenge500Theme'
 import type { Challenge500State } from '../engine/challenge500Engine'
 import { useChallenge500 } from '../engine/useChallenge500'
 import { CHALLENGE500_QUESTION_MODULES } from '../questions/challenge500'
@@ -106,19 +105,24 @@ type CheckpointBeat = 'flash300' | 'flash400' | null
 type ClearBeat = 'first' | 'blackout' | 'second' | null
 
 /**
- * Ver.6 Phase 1（演出強化版）: 200〜500%「限界突破チャレンジ」の実プレイ画面。
+ * Ver.6 Phase 3（演出全面再構築版）: 200〜500%「限界突破チャレンジ」の実プレイ画面。
  *
- * 演出強化: 100% DOPA OVERDRIVE演出（PlayScreen/OverdriveFx.tsx）を正式な基準とし、
- * そこで使われている視覚コンポーネント（GoldenClearOverlay/WhiteFlashOverlay/
- * RainbowShockwaveOverlay/Confetti120Overlay/Sparkle120Overlay/OverdriveAmbience、
- * いずれも120%/200%到達時にも使われる「OVERDRIVE以上」の実績ある演出）をそのまま
- * 再利用し、300%/400%チェックポイント・500%クリアの演出密度を底上げする
- * （新しい演出を弱く作るより、既に気持ちいいと実証済みの既存演出を再利用・発展させる
- * というユーザー指示に基づく）。既存コンポーネント自体は一切変更しない
- * （通常ゲーム・FINAL DOPA TRIALの演出に影響を与えないため）。
+ * 実機QA指示: 200/300/400%台を「同じ演出部品の強弱」だけで作らず、帯域ごとに
+ * 別の「人格」を持たせる——200台=LIMIT BREAK（金）/300台=OVERLOAD（電気的な水色）/
+ * 400台=DANGER ZONE（赤の警告）/490%=FINAL QUESTION（静寂）。常駐アンビエントは
+ * config/challenge500Theme.ts（純粋な計算）が算出したパラメータを
+ * components/Challenge500AmbientFX.tsxへ渡すだけの構成にし、場当たり的な
+ * useEffect追加でこのファイルが肥大化しないよう責務を分離した。
  *
- * ゲームロジック（11系統の問題・反転混在比率・固定4.5秒・tier別MISSペナルティ・
- * チェックポイント・色覚アクセシビリティ・QAモード）は一切変更しない。
+ * confetti/rainbow/golden burst（Confetti120Overlay/RainbowShockwaveOverlay/
+ * GoldenClearOverlay）は500% ABSOLUTE CLEAR専用に予約し、300/400チェックポイントでは
+ * 使わない（途中の演出と500%の演出を「同じ種類のエフェクトの量違い」にしないため）。
+ * これらのコンポーネント自体は一切変更しない（通常ゲーム・FINAL DOPA TRIALの演出に
+ * 影響を与えないため）。
+ *
+ * ゲームロジック（11系統の問題・反転混在比率・tier別MISSペナルティ・チェックポイント・
+ * 色覚アクセシビリティ・QAモード）は一切変更しない。制限時間はCHALLENGE500_CONFIG側で
+ * 4.5秒→3.8秒へ調整済み（このファイルは値を参照するだけ）。
  */
 export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) {
   const [finalState, setFinalState] = useState<Challenge500State | null>(null)
@@ -139,9 +143,14 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
   const shakeAnimRef = useRef<Animation | null>(null)
 
   const tier = tierForPercent(snapshot.state.percent)
-  /** 100% OVERDRIVE用のtier（0〜4）に200〜400%を写像し、既存の常駐演出（サイレン・粒子・枠の発光）を
-   *  tierが上がるほど強くする。200%でも控えめな発光は常に出す（「通常の焦り音」に対応する視覚）。 */
-  const ambienceTier: OverdriveTier = tier === 1 ? 2 : tier === 2 ? 3 : 4
+  /**
+   * 490%（あと1問で500%）の間はずっと「静寂」テーマにする。showFinalQuestionBeat
+   * （490到達直後の短い演出ビートだけ）とは別に、percent===490である間は常にtrueになる
+   * ため、ビート終了後に最後の問題を表示している間もアンビエントは静かなまま維持される
+   * （400%台の騒がしさを「足す」のではなく「引く」という指示のため）。
+   */
+  const isFinalQuestionPhase = snapshot.state.percent === 490
+  const theme = getChallenge500Theme(tier, snapshot.state.percent, isFinalQuestionPhase)
 
   function triggerShake(strong = false) {
     const el = shakeWrapperRef.current
@@ -184,7 +193,7 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
        */
       requestAnimationFrame(() => {
         triggerShake(false)
-        correctFxRef.current?.trigger()
+        correctFxRef.current?.trigger(theme.colorRgb)
         const dopaEl = dopaTextRef.current
         if (dopaEl) {
           dopaEl.getAnimations().forEach((anim) => anim.cancel())
@@ -339,22 +348,40 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
   const CurrentQuestion = snapshot.currentSpec ? CHALLENGE500_QUESTION_MODULES.find((m) => m.id === snapshot.currentSpec!.type)?.Component : null
   const showingQuestion = !finalState && !checkpointBeat && !showFinalQuestionBeat && CurrentQuestion && snapshot.currentSpec
 
+  /**
+   * DOPA%表示そのものも帯域ごとに「人格」を変える（色は演出の補助であり、問題の
+   * 正誤判定には一切関係しないため色覚アクセシビリティ方針に反しない）。
+   * dangerテーマ（400〜480%）だけ、常時「1 MISS = END」を小さく表示する
+   * （色を見分けられなくても危険領域であることが文字で伝わるようにする）。
+   * ゲーム終了後（finalState確定後、500%クリア含む）はtierの危険表示を引きずらない
+   * よう、常にニュートラルな色へ戻す（クリア後に赤い「1 MISS = END」が残ると
+   * 紛らわしいため）。
+   */
+  const isGameOver = finalState !== null
+  const dopaColorClass = isGameOver
+    ? 'text-amber-300'
+    : theme.id === 'overload'
+      ? 'text-cyan-300'
+      : theme.id === 'danger'
+        ? 'text-red-400'
+        : theme.id === 'finalQuestion'
+          ? 'text-white/80'
+          : 'text-amber-300'
+
   return (
-    <div
-      ref={shakeWrapperRef}
-      className={`relative flex min-h-dvh flex-col overflow-hidden bg-black ${getOverdriveFrameClass(ambienceTier)}`}
-    >
-      <OverdriveAmbience tier={ambienceTier} />
+    <div ref={shakeWrapperRef} className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
+      {!isGameOver && <Challenge500AmbientFX theme={theme} />}
       <QuitButton onQuit={onQuit} />
 
       <div className="relative z-30 flex items-start justify-between px-5 pt-3 pb-1">
         <p className="text-[10px] font-bold tracking-widest text-white/40">限界突破チャレンジ</p>
         <div className="text-right">
           <p className="text-[10px] font-bold tracking-widest text-white/50">DOPA</p>
-          <p ref={dopaTextRef} className="text-4xl font-black tabular-nums text-amber-300">
+          <p ref={dopaTextRef} className={`text-4xl font-black tabular-nums ${dopaColorClass}`}>
             {snapshot.state.percent}
             <span className="text-xl">%</span>
           </p>
+          {!isGameOver && theme.id === 'danger' && <p className="text-[9px] font-black tracking-widest text-red-400/90">1 MISS = END</p>}
         </div>
       </div>
 
@@ -401,25 +428,46 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
 }
 
 /**
- * 300%/400%チェックポイント演出。100% DOPA OVERDRIVE演出で使われている
- * WhiteFlashOverlay/RainbowShockwaveOverlay/GoldenClearOverlay/Confetti120Overlay/
- * Sparkle120Overlayをそのまま再利用し、400%は300%より保持時間が長く（呼び出し元の
- * CHECKPOINT_400_MS > CHECKPOINT_300_MS）、かつ画面シェイクが強い（triggerShake(true)）
- * ことで明確に格上に見せる。色だけに依存しないよう、情報は文字そのもので伝える
- * （CHECKPOINT SECURED等）。
+ * Ver.6 Phase 3（演出全面再構築）: 300%/400%チェックポイント演出。
+ *
+ * 以前はWhiteFlashOverlay＋RainbowShockwaveOverlay＋GoldenClearOverlay＋
+ * Confetti120Overlay＋Sparkle120Overlayという「500% CLEARと同じ部品の量違い」で
+ * 作っていたが、今回それをやめた。confetti/rainbow/golden burstは500% ABSOLUTE CLEAR
+ * 専用に予約し、ここでは使わない——途中の到達点と最終到達点を同じ種類のエフェクトの
+ * 量違いにしないため。
+ *
+ * 代わりに、WhiteFlashOverlay（中立な一瞬の白閃光、どのテーマでも使って良い汎用の
+ * 「切り替わり」演出として再利用）＋テーマカラー（300=OVERLOAD/電気的な水色、
+ * 400=DANGER ZONE/警告の赤）で染めた一撃ビネット＋プレーンな文字表示だけで構成する。
+ * 400は300よりビネットの色が赤く強く、保持時間も長く（呼び出し元の
+ * CHECKPOINT_400_MS > CHECKPOINT_300_MS）、画面シェイクも強い（triggerShake(true)）。
+ * 色だけに依存しないよう、情報は文字そのものでも伝える。
  */
 function CheckpointOverlay({ beat }: { beat: 'flash300' | 'flash400' }) {
   const is400 = beat === 'flash400'
   const percent = is400 ? 400 : 300
-  const title = is400 ? 'FINAL CHECKPOINT' : 'CHECKPOINT SECURED'
+  const title = is400 ? 'DANGER ZONE' : 'OVERLOAD'
   const hint = is400 ? 'ここから1 MISSで終了。あと100%——' : '下線反転、最大2箇所——'
+  const colorRgb = is400 ? '239, 68, 68' : '56, 214, 255'
   return (
     <>
       <WhiteFlashOverlay show />
-      <RainbowShockwaveOverlay show />
-      <GoldenClearOverlay show percent={percent} title={title} />
-      <Confetti120Overlay show />
-      <Sparkle120Overlay show />
+      <div
+        className="anim-challenge500-vignette pointer-events-none absolute inset-0 z-50"
+        style={{ background: `radial-gradient(ellipse at center, rgba(${colorRgb}, 0) 40%, rgba(${colorRgb}, 0.6) 100%)` }}
+      />
+      <div className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center gap-1 bg-black/70">
+        <p
+          className="anim-pop relative text-5xl font-black tabular-nums leading-none"
+          style={{ color: `rgb(${colorRgb})`, textShadow: `0 0 30px rgba(${colorRgb}, 0.9)` }}
+        >
+          {percent}
+          <span className="text-2xl">%</span>
+        </p>
+        <p className="anim-pop relative mt-2 text-xl font-black tracking-widest" style={{ color: `rgb(${colorRgb})` }}>
+          {title}
+        </p>
+      </div>
       <p className="pointer-events-none absolute inset-x-0 bottom-12 z-[53] px-6 text-center text-xs font-bold text-white/70">{hint}</p>
     </>
   )

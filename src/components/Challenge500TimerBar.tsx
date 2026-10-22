@@ -8,9 +8,6 @@ interface Props {
   onTimeout: () => void
 }
 
-/** 残り時間がこの値（ms）を下回ったら最初の焦り警告音を鳴らし始める。制限時間自体はlimitMsのまま変わらない。 */
-const URGENCY_START_REMAINING_MS = 3000
-
 /** 残り時間（ms）から、焦り警告音の「段階」（0〜3、値が大きいほど切迫）を決める。 */
 function urgencyStageFor(remainingMs: number): 0 | 1 | 2 | 3 {
   if (remainingMs > 2000) return 0
@@ -30,12 +27,19 @@ const URGENCY_PERIOD_MS: Record<0 | 1 | 2 | 3, number> = { 0: 650, 1: 380, 2: 22
  *
  * 演出強化: 既存0〜100%通常ゲームの「残り時間が減るほど音が加速する」終盤10秒の
  * finalRushAlarm（ウーッ、ウーッという上下スイープ、2秒間隔→1秒間隔の2段階加速）と
- * 同じ考え方を、このバーの4.5秒固定ウィンドウに縮小再現する。残り3秒を切った時点から
- * sfx.challenge500Urgencyを自己再スケジュールのsetTimeoutチェーンで鳴らし、残り時間に
- * 応じて650ms→380ms→220ms→110msと間隔を短くする（＝テンポが加速する）。
- * 制限時間そのものの長さ・4.5秒という進行は一切変更しない——鳴らす「間隔」だけを
- * 残り時間から動的に計算しているだけであり、全tier共通で同じタイミングになる
- * （tierはSEの音色レイヤーにのみ影響し、鳴らすタイミングには一切影響しない）。
+ * 同じ考え方を、このバーの3.8秒固定ウィンドウに縮小再現する。
+ *
+ * Ver.6 Phase 3実機QA修正: 以前は残り3秒を切ってから初めて焦り音が鳴り始めていたため、
+ * 問題表示直後の「まだ余裕がある」時間がほぼ無音になっていた。「問題が表示された瞬間
+ * から時間に追われている感覚を出す」という指示により、sfx.challenge500Urgencyの
+ * 自己再スケジュールのsetTimeoutチェーンを問題表示直後（elapsed=0、initialDelay=0）
+ * から開始する。残り時間に応じて650ms→380ms→220ms→110msと間隔を短くする（＝テンポが
+ * 加速する）仕組み自体は変更していないため、結果として「開始直後はゆっくり（デッ……
+ * デッ……）→中盤は一定間隔（デッ、デッ、デッ）→終盤は連打（デデデデデデ）」という
+ * 自然な加速カーブになる。制限時間そのものの長さ・進行は一切変更しない——鳴らす
+ * 「間隔」だけを残り時間から動的に計算しているだけであり、全tier共通で同じ
+ * タイミングになる（tierはSEの音色レイヤーにのみ影響し、鳴らすタイミングには
+ * 一切影響しない）。
  *
  * このコンポーネントは問題インスタンスごとにkey={instanceId}で再マウントされる
  * （Challenge500Screen側）ため、正解/MISS/タイムアウトのいずれで問題が解決しても
@@ -50,7 +54,7 @@ const URGENCY_PERIOD_MS: Record<0 | 1 | 2 | 3, number> = { 0: 650, 1: 380, 2: 22
  * 競合は発生しない。
  *
  * 実機フィードバック(Ver.6 Phase 1演出強化の後)により、黄色い横タイマーバー自体が
- * 問題文より目立ちすぎるため視覚表示を廃止した。4.5秒固定の計測・timeout判定・
+ * 問題文より目立ちすぎるため視覚表示を廃止した。固定時間の計測・timeout判定・
  * 焦り音(sfx.challenge500Urgency)のスケジューリングはすべてこのコンポーネントの
  * 内部状態としてそのまま残し、見えるUIだけを持たない（残り時間は焦り音の
  * テンポ変化だけで伝える）。
@@ -92,8 +96,7 @@ export function Challenge500TimerBar({ limitMs, tier, onTimeout }: Props) {
       sfx.challenge500Urgency(stage, tier)
       urgencyTimerRef.current = setTimeout(urgencyTick, Math.min(URGENCY_PERIOD_MS[stage], remaining))
     }
-    const initialDelay = Math.max(0, limitMs - URGENCY_START_REMAINING_MS)
-    urgencyTimerRef.current = setTimeout(urgencyTick, initialDelay)
+    urgencyTimerRef.current = setTimeout(urgencyTick, 0)
     return () => {
       if (urgencyTimerRef.current) clearTimeout(urgencyTimerRef.current)
     }
