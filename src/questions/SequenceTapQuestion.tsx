@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { shuffle } from '../engine/random'
 import { sfx } from '../utils/sound'
@@ -43,7 +44,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   const { numbers } = spec.data as { numbers: NumberSlot[] }
   const [nextExpected, setNextExpected] = useState(1)
   const nextExpectedRef = useRef(1)
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const doneRef = useRef(false)
   const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 

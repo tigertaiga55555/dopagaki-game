@@ -1,6 +1,25 @@
 import type { ComponentType } from 'react'
 
-export type ScreenName = 'title' | 'playing' | 'result'
+export type ScreenName = 'title' | 'playing' | 'result' | 'endlessSelect' | 'endlessPlaying' | 'endlessResult'
+
+/**
+ * Ver.6 Phase 4: Endlessモードの難易度。既存通常ゲームの問題難易度システム
+ * （config/difficultyConfig.tsのDIFFICULTY_PHASES）を再利用するための3段階のラベルで、
+ * Endless専用の新しい難易度分類ではない（config/endlessConfig.ts参照）。
+ */
+export type EndlessDifficulty = 'beginner' | 'intermediate' | 'advanced'
+
+/**
+ * Ver.6 Phase 4: 将来のオンラインランキング（Endless 初級/中級/上級の3種類）との互換性のため、
+ * 1プレイぶんの記録をこの形に揃えておく。現段階ではlocalStorageの自己ベストにしか
+ * 使わないが、difficulty/score/playedAtというフィールド構成自体は、将来DBへ送る
+ * レコードとしてもそのまま使える形にしてある（DB/Supabase等は今回導入しない）。
+ */
+export interface EndlessRecord {
+  difficulty: EndlessDifficulty
+  score: number
+  playedAt: number
+}
 
 export type Judgement = 'PERFECT' | 'GREAT' | 'GOOD' | 'MISS'
 
@@ -189,6 +208,16 @@ export interface FinalResultV4 {
   playCount: number
   /** Ver.5.0: 120%へ到達しFINAL DOPA TRIALへ突入した場合のみ存在する進捗情報。 */
   finalTrial?: FinalTrialResultInfo
+  /** Ver.6 Phase 1: 200%到達後、限界突破チャレンジ（200〜500%）に挑戦した場合のみ存在する。 */
+  challenge500?: Challenge500ResultInfo
+}
+
+/** Ver.6 Phase 1: 結果画面用に持ち越す限界突破チャレンジ（200〜500%）の進捗情報。 */
+export interface Challenge500ResultInfo {
+  /** 確保済みの最高チェックポイント（200/300/400/500）。 */
+  floor: number
+  /** 500%まで完全クリアしたか。 */
+  cleared: boolean
 }
 
 /**

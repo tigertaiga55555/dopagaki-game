@@ -3,7 +3,7 @@ import { FINAL_TRIAL_CONFIG, tierForQuestionNumber } from '../config/finalTrialC
 import { pickFinalQuestion } from './finalQuestionPicker'
 import { ULTIMATE_QUESTION_POOL } from '../questions/final'
 import { pick } from './random'
-import { trackPerfectClear, trackUltimateReached } from '../utils/analytics'
+import { trackPerfectClear, trackReach200, trackUltimateReached } from '../utils/analytics'
 import type { FinalQuestionResult, FinalQuestionSpec, FinalQuestionTag } from '../types'
 
 /**
@@ -223,6 +223,7 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
     if (clearedNumber >= FINAL_TRIAL_CONFIG.totalQuestions) {
       endedRef.current = true
       trackPerfectClear()
+      trackReach200()
       setSnapshot((s) => ({
         ...s,
         phase: 'clear200',

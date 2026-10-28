@@ -66,3 +66,52 @@ export function trackShareClick(): void {
 export function trackReplayStart(): void {
   trackEvent('replay_start')
 }
+
+/**
+ * Ver.6 Phase 1追加: 各マイルストーン到達を、既存のoverdrive_reached/final_reached/
+ * perfect_clearとは別名の指標としても送信する（既存イベントの置き換えではなく追加）。
+ * 呼び出し元は既存イベントと同じガード条件（1プレイにつき1回だけ）を利用する。
+ */
+export function trackReach100(): void {
+  trackEvent('reach_100')
+}
+
+export function trackReach120(): void {
+  trackEvent('reach_120')
+}
+
+export function trackReach200(): void {
+  trackEvent('reach_200')
+}
+
+/** 500％チャレンジ開始（説明画面の「500％に挑戦する」ボタン押下）。 */
+export function trackChallenge500Start(): void {
+  trackEvent('challenge_500_start')
+}
+
+export function trackReach300(): void {
+  trackEvent('reach_300')
+}
+
+export function trackReach400(): void {
+  trackEvent('reach_400')
+}
+
+export function trackReach500(): void {
+  trackEvent('reach_500')
+}
+
+/**
+ * Ver.6 Phase 4: Endlessモード開始（難易度選択画面でのボタン押下）。
+ * QA/Previewモードでは送信しない既存方針（engine/useChallenge500.tsのqaModeガードと同様）を
+ * 呼び出し元（engine/useEndlessGame.ts）側で維持する——この関数自体は常に送信する薄いラッパー
+ * のままにし、送信抑制の判断はhook側に一本化する既存設計を踏襲する。
+ */
+export function trackEndlessStart(difficulty: string): void {
+  trackEvent('endless_start', { difficulty })
+}
+
+/** Endlessモード終了（1 MISS・時間切れのいずれでも1回だけ）。 */
+export function trackEndlessEnd(difficulty: string, score: number, isNewBest: boolean): void {
+  trackEvent('endless_end', { difficulty, score, is_new_best: isNewBest })
+}

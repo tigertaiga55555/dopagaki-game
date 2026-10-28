@@ -42,3 +42,24 @@ export function isFinalQuestionPreviewRequested(): boolean {
 export function isClear200PreviewRequested(): boolean {
   return previewParam() === 'clear200'
 }
+
+/**
+ * Ver.6 Phase 1 QA補助: ?preview=challenge500 — 120〜200%の突入演出・200% PERFECT CLEAR
+ * ファンファーレを一切再生せず、「500%に挑戦」説明画面へ直接移動する。200〜500%の
+ * 各チェックポイント（200/300/400/490）への直接ジャンプ・強制正解/MISSができるQA操作
+ * パネル付きで、実機での段階別確認を高速化するためだけのモード。GA4の正式な到達イベント
+ * は一切送信せず、自己ベスト等の正式記録にも保存しない（Challenge500QaPreviewScreen参照）。
+ */
+export function isChallenge500QaPreviewRequested(): boolean {
+  return previewParam() === 'challenge500'
+}
+
+/**
+ * Ver.6 Phase 4 QA補助: ?preview=endless — Endlessモードの難易度選択画面から直接
+ * 始められる確認モード。本番の入口（TitleScreenのENDLESSボタン→通常のscreen遷移）とは
+ * 別の、QA専用の近道（dev/EndlessPreviewScreen.tsx参照）。GA4のendless_start/endless_end
+ * は送信せず、自己ベストも更新しない（EndlessPlayScreenへqaMode=trueで渡す）。
+ */
+export function isEndlessPreviewRequested(): boolean {
+  return previewParam() === 'endless'
+}

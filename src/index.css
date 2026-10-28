@@ -733,3 +733,123 @@ body {
   animation: warning-text-flicker 0.9s steps(1) infinite;
 }
 
+/* ==== Ver.6 Phase 3: 500%チャレンジ 200/300/400%台の常駐アンビエント演出 ====
+   各帯域に「別の人格」を持たせるため、ここでは汎用のキーフレームだけを定義し、
+   実際の色・速度・強度はReact側（Challenge500AmbientFX.tsx）がCSS変数
+   （--c500-*）として要素に渡す。これにより帯域ごとにCSSを複製せず、
+   tierProgressから連続的に強度を変化させられる（保守しやすい構造にするための
+   ユーザー指示に基づく）。tier3（DANGER ZONE）の警告枠は、Q16 ULTIMATE QUESTION
+   専用に既にあるanim-warning-pulse-weak/strong（赤のinset box-shadow、中央の
+   問題表示領域には一切かからない）をそのまま再利用する（新規追加しない）。 */
+
+@keyframes challenge500-breathe {
+  0%,
+  100% {
+    opacity: var(--c500-glow-min, 0.3);
+    transform: scale(1);
+  }
+  50% {
+    opacity: var(--c500-glow-max, 0.55);
+    transform: scale(1.015);
+  }
+}
+
+.challenge500-breathe {
+  animation: challenge500-breathe var(--c500-pulse-ms, 2200ms) ease-in-out infinite;
+}
+
+@keyframes challenge500-particle-rise {
+  0% {
+    transform: translateY(10px) scale(0.8);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateY(-54px) scale(1.1);
+    opacity: 0;
+  }
+}
+
+.challenge500-particle {
+  animation: challenge500-particle-rise var(--c500-particle-ms, 2400ms) ease-out infinite;
+}
+
+@keyframes challenge500-streak-sweep {
+  0% {
+    transform: translateX(-130%);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.6;
+  }
+  88% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateX(130%);
+    opacity: 0;
+  }
+}
+
+.challenge500-streak {
+  animation: challenge500-streak-sweep var(--c500-streak-ms, 2000ms) linear infinite;
+}
+
+@keyframes challenge500-wave-distort {
+  0%,
+  100% {
+    transform: skewY(0deg) scaleY(1);
+  }
+  50% {
+    transform: skewY(0.6deg) scaleY(1.012);
+  }
+}
+
+.challenge500-wave {
+  animation: challenge500-wave-distort var(--c500-wave-ms, 2600ms) ease-in-out infinite;
+}
+
+/* tier3(DANGER ZONE)専用: 低頻度の微細グリッチ。既存のwarning-text-flickerキーフレームを
+   そのまま再利用し、「層」として薄く重ねられるよう周期だけ長くした別クラス。 */
+.anim-warning-flicker-layer {
+  animation: warning-text-flicker 2.6s steps(1) infinite;
+}
+
+/* チェックポイント到達の瞬間だけの一撃ビネットフラッシュ（opacityのみをアニメーションし、
+   背景色自体はReact側がinline styleでテーマカラーを渡す。.anim-golden-vignetteと同じ
+   形だが特定の色に紐づかない汎用版）。 */
+@keyframes challenge500-vignette-flash {
+  0% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.anim-challenge500-vignette {
+  animation: challenge500-vignette-flash 0.5s ease-out forwards;
+}
+
+/**
+ * Ver.6 Phase 1（再設計版）: prefers-reduced-motionへの最低限の配慮。
+ * すべてのCSSアニメーション/トランジションをほぼ即時完了させる（視覚的な動きだけを
+ * 止める）。ゲームの状態遷移タイミングはJS側のsetTimeout（CHECKPOINT_300_MS等）で
+ * 管理されておりCSSアニメーションの実際の長さには依存しないため、この上書きは
+ * 見た目だけに影響し、ゲームロジック・判定タイミングには一切影響しない。
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+

@@ -3,6 +3,8 @@ import { TIMING_SAFETY } from '../../config/timingConfig'
 import { randInt, pick } from '../../engine/random'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { sfx } from '../../utils/sound'
+import { useInputGateReady } from '../useInputGateReady'
+import { useQuestionStartRef } from '../useQuestionStartRef'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
 const DIRECTIONS = [
@@ -54,12 +56,13 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   const [swipedCount, setSwipedCount] = useState(0)
   const [flying, setFlying] = useState(false)
   const swipedCountRef = useRef(0)
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
   const guardRef = useRef<ReturnType<typeof createResolveOnce<FinalQuestionResult>> | null>(null)
   if (!guardRef.current) guardRef.current = createResolveOnce(onResult)
   const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const flyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const ready = useInputGateReady()
 
   useEffect(() => {
     failTimerRef.current = setTimeout(() => finish(false), spec.targetTimeMs)
@@ -76,12 +79,12 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   }
 
   function handlePointerDown(e: ReactPointerEvent) {
-    if (guardRef.current!.isResolved || flying) return
+    if (!ready || guardRef.current!.isResolved || flying) return
     e.currentTarget.setPointerCapture(e.pointerId)
     dragStartRef.current = { x: e.clientX, y: e.clientY }
   }
   function handlePointerUp(e: ReactPointerEvent) {
-    if (guardRef.current!.isResolved || flying || !dragStartRef.current) return
+    if (!ready || guardRef.current!.isResolved || flying || !dragStartRef.current) return
     const dx = e.clientX - dragStartRef.current.x
     const dy = e.clientY - dragStartRef.current.y
     dragStartRef.current = null

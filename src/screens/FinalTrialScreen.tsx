@@ -15,9 +15,13 @@ import {
 import { Confetti120Overlay, GoldenClearOverlay, RainbowShockwaveOverlay, Sparkle120Overlay, WhiteFlashOverlay } from '../components/OverdriveFx'
 import { QuitButton } from '../components/QuitButton'
 import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
-import { computeFinalTrialResult } from '../engine/resultEngineV4'
+import type { Challenge500State } from '../engine/challenge500Engine'
+import { computeChallenge500Result, computeFinalTrialResult } from '../engine/resultEngineV4'
 import { finalSuccessIntensityFor, useFinalTrial } from '../engine/useFinalTrial'
 import { FINAL_QUESTION_MODULES, ULTIMATE_QUESTION_POOL } from '../questions/final'
+import { Challenge500IntroScreen } from './Challenge500IntroScreen'
+import { Challenge500Screen } from './Challenge500Screen'
+import { LimitBreakUnlockScreen } from './LimitBreakUnlockScreen'
 import { duckAudio, unlockAudio } from '../utils/audioContext'
 import { setFinalIntensity, setFinalMode, setUltimateMode, startBgm, stopBgm } from '../utils/bgm'
 import { isMuted, PERFECT_FANFARE_200_TIMING_MS, setMuted, sfx } from '../utils/sound'
@@ -103,7 +107,21 @@ export function FinalTrialScreen({
 }: Props) {
   const [entryDone, setEntryDone] = useState(startAtQuestion >= FINAL_TRIAL_CONFIG.totalQuestions)
   const [muted, setMutedState] = useState(isMuted())
+  /**
+   * Ver.6 Phase 1: 200% PERFECT CLEAR後、即座に結果画面へ進ませず、必ず「500%に挑戦」
+   * 説明画面を経由させるための分岐。useFinalTrial自体（120〜200%の既存ロジック・演出タイミング）
+   * は一切変更せず、200%到達後のonFinishコールバックの手前でだけ横取りする。
+   * 通常のMISS終了（cleared200===false）は従来通り即座にonFinishを呼ぶため、
+   * 既存の0〜200%の挙動に影響はない。
+   */
+  const [challengePhase, setChallengePhase] = useState<'none' | 'unlock' | 'intro' | 'active'>('none')
+  const clear200ResultRef = useRef<FinalResultV4 | null>(null)
   const { snapshot, start, handleResult } = useFinalTrial((payload) => {
+    if (payload.cleared200) {
+      clear200ResultRef.current = computeFinalTrialResult(payload, initialStats)
+      setChallengePhase('unlock')
+      return
+    }
     onFinish(computeFinalTrialResult(payload, initialStats))
   }, startAtQuestion)
 
@@ -345,6 +363,27 @@ export function FinalTrialScreen({
   // Ver.5.0追加修正: 通常=紫、OVERDRIVE=黄金、FINAL DOPA TRIAL(Q1-15)=黒＋白＋プリズムに対し、
   // ULTIMATE QUESTION（突入演出中〜Q16回答中）だけは赤＋黒＋非常警告の専用世界観にする。
   const showUltimateWorld = snapshot.phase === 'ultimateIntro' || (snapshot.phase === 'playing' && isUltimateQuestion)
+
+  if (challengePhase === 'unlock') {
+    return <LimitBreakUnlockScreen onQuit={onQuit} onComplete={() => setChallengePhase('intro')} />
+  }
+
+  if (challengePhase === 'intro') {
+    return <Challenge500IntroScreen onStart={() => setChallengePhase('active')} onQuit={onQuit} />
+  }
+
+  if (challengePhase === 'active') {
+    return (
+      <Challenge500Screen
+        onQuit={onQuit}
+        onFinish={(state: Challenge500State) => {
+          const base = clear200ResultRef.current
+          if (!base) return
+          onFinish(computeChallenge500Result(state, base))
+        }}
+      />
+    )
+  }
 
   if (!entryDone) {
     return (

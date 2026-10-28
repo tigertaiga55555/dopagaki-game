@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
+import { ShapeIcon, SHAPE_IDS, SHAPE_LABELS, type ShapeId } from '../components/ShapeIcon'
 import { TIMING_SAFETY } from '../config/timingConfig'
-import { randInt } from '../engine/random'
+import { pickExcluding, randInt } from '../engine/random'
 import { sfx } from '../utils/sound'
 import { QuestionShell } from './QuestionShell'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
 /**
- * バッジの出現枠（固定8箇所）。以前は6箇所だったが、Ver.5.0の重大バグ修正で「必須の赤は
- * 自動despawnさせない」方式に変更したため、必須赤（最大5個）が同時に未タップのまま残っても
+ * バッジの出現枠（固定8箇所）。以前は6箇所だったが、Ver.5.0の重大バグ修正で「必須の対象は
+ * 自動despawnさせない」方式に変更したため、必須対象（最大5個）が同時に未タップのまま残っても
  * ノイズ用の空き枠を確保できるよう2枠増やした。DOM無限生成を防ぐ上限の役割も兼ねる。
  */
 const SLOTS = [
@@ -21,52 +23,25 @@ const SLOTS = [
   { x: 85, y: 62 },
 ]
 
-const RED_HEX = '#ef4444'
-const OTHER_HEX = ['#3b82f6', '#22c55e']
-
 interface Badge {
   id: number
   slotIndex: number
   isTarget: boolean
-  hex: string
+  shape: ShapeId
 }
 
 /**
- * 「赤だけ消せ！」：通知バッジが次々出現する。赤だけタップして規定数消せば成功、赤以外は即MISS。
- *
- * Ver.5.0追加修正（重大バグ修正）：実機プレイで「必要数（4〜5個）の赤が全部出現する前に
- * 問題のtimeoutが先に発火してMISSになる」という、プレイヤーの操作ミスに一切起因しない
- * 不可能問題が発生していた。
- *
- * 原因は2つの構造的欠陥の組み合わせだった。
- * 1. 旧実装は「200〜350msごとに55%の確率で赤を1個出現させる」という純粋な確率的スポーンで、
- *    出現数・出現タイミングに一切の保証がなかった。運が悪いと必要数の赤が集まるまでに
- *    大きく時間がかかり得るにもかかわらず、外側のtimeoutは固定（または直前の1個成功ごとに
- *    「残り数×perRedMs」で引き直すだけ）だったため、「タップは全て正しく最速で行っていたのに、
- *    赤自体がその時点でまだ出現していなかった」というケースでtimeoutが先に来ることがあった。
- * 2. 出現枠（旧6箇所）が埋まっている間はスポーン試行そのものが黙って無効になる仕組みだった
- *    ため、非対象バッジが枠を埋め続けると赤の出現がさらに遅れる悪化要因になっていた。
- *
- * 修正方針（このコメント内で完結させず、下記の各関数実装も参照）：
- * - 問題開始時（Component mount時、実際に確定したspec.targetTimeMsを使って）に、必要数ぶんの
- *   赤の出現タイミングを先に全て確定させる（buildRequiredRedDelays）。最後の赤の出現時刻は
- *   必ず「timeout − 人間の最低反応猶予（TIMING_SAFETY.notifRush.reactionBufferMs）」以下に
- *   なることを区間分割で構造的に保証し、かつ数値的にも明示的にクランプする。
- * - 前半〜中盤にも適度に分散させ、後半に偏った出現や「5個目が土壇場で出現する」ことを防ぐ
- *   （targetRedCount等分した各区間内でランダムに1個ずつ配置）。
- * - 必須の赤バッジは自動despawn（lifespan経過での消滅）させない。ノイズ（非対象）だけが
- *   従来通りlifespan経過で消える。これにより「正しく見えているのに反応が一瞬遅れて
- *   対象を見失っただけで、二度とその分の赤が来ず詰む」という別種の詰みも構造的に排除する。
- * - 出現枠が全て埋まっている状態で必須の赤の出現時刻が来た場合、最も古いノイズ（非対象）を
- *   1個強制的に退場させて枠を確保する（必須赤の出現だけは何があっても取りこぼさない）。
- * - 正解条件・不正解判定（赤以外タップ即MISS）・resolveOnce（doneRefによる二重確定防止）・
- *   SUCCESS後の全タイマークリーンアップは既存仕様のまま変更していない。
+ * Ver.6 Phase 1: 旧「赤だけ消せ！」（色識別が正解条件だった問題）を、対象図形の
+ * 通知だけを消す課題に再設計した。スポーンタイミング保証（Ver.5.0の重大バグ修正：
+ * 必須対象の出現タイミングを開始時に先に全て確定し、枠不足時はノイズを強制退場させる）
+ * はロジックを一切変更せず維持している。
  */
 function generate() {
+  const target = SHAPE_IDS[randInt(0, SHAPE_IDS.length - 1)]
   const targetRedCount = randInt(4, 5)
   const spawnIntervalMs = randInt(200, 350)
   const lifespanMs = randInt(950, 1250)
-  return { targetRedCount, spawnIntervalMs, lifespanMs }
+  return { target, targetRedCount, spawnIntervalMs, lifespanMs }
 }
 
 function computeMinTargetTimeMs(data: Record<string, unknown>) {
@@ -75,10 +50,9 @@ function computeMinTargetTimeMs(data: Record<string, unknown>) {
 }
 
 /**
- * 必須の赤targetRedCount個の出現タイミング（ms、問題開始からの相対時刻）を確定する。
+ * 必須の対象targetRedCount個の出現タイミング（ms、問題開始からの相対時刻）を確定する。
  * [0, timeoutMs − reactionBufferMs] をtargetRedCount等分し、各区間内の1点をランダムに選ぶ
- * ことで「前半〜中盤にも適度に分散」かつ「最後の赤は締切以下」を同時に満たす。
- * 区間分割で数学的に単調増加になるが、丸め誤差に備えて最後の1個は明示的にもクランプする。
+ * ことで「前半〜中盤にも適度に分散」かつ「最後の対象は締切以下」を同時に満たす。
  */
 function buildRequiredRedDelays(targetRedCount: number, timeoutMs: number): number[] {
   const lastRedDeadlineMs = Math.max(0, timeoutMs - TIMING_SAFETY.notifRush.reactionBufferMs)
@@ -95,12 +69,6 @@ function buildRequiredRedDelays(targetRedCount: number, timeoutMs: number): numb
   return delays
 }
 
-/**
- * 視覚的な密度（既存の「次々出現する通知」の忙しさ）を保つためのノイズ（非対象）出現タイミング。
- * 旧実装は「spawnIntervalMsごとに55%の確率で赤・45%で非対象」だったため、非対象の実質的な
- * 平均間隔はspawnIntervalMs/0.45だった。同じ体感密度になるようその間隔を踏襲する
- * （勝敗条件には一切関与しないため、多少前後してもゲームの解けやすさには影響しない）。
- */
 function buildNoiseDelays(spawnIntervalMs: number, timeoutMs: number): number[] {
   const noiseIntervalMs = Math.round(spawnIntervalMs / 0.45)
   const delays: number[] = []
@@ -113,20 +81,20 @@ function buildNoiseDelays(spawnIntervalMs: number, timeoutMs: number): number[] 
 }
 
 function Component({ spec, onResult }: QuestionComponentProps) {
-  const { targetRedCount, spawnIntervalMs, lifespanMs } = spec.data as {
+  const { target, targetRedCount, spawnIntervalMs, lifespanMs } = spec.data as {
+    target: ShapeId
     targetRedCount: number
     spawnIntervalMs: number
     lifespanMs: number
   }
   const [badges, setBadges] = useState<Badge[]>([])
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const doneRef = useRef(false)
   const clearedRedRef = useRef(0)
   const badgeIdRef = useRef(0)
   const spawnTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
   const despawnTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
   const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  /** slotIndex -> 現在の占有バッジ情報。必須赤が枠不足で取りこぼされないための強制退場判定に使う。 */
   const slotOccupantsRef = useRef<Map<number, { id: number; isTarget: boolean }>>(new Map())
 
   useEffect(() => {
@@ -147,9 +115,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
       const occupied = new Set(slotOccupantsRef.current.keys())
       let freeSlots = SLOTS.map((_, i) => i).filter((i) => !occupied.has(i))
       if (freeSlots.length === 0) {
-        // ノイズは枠が埋まっていれば単に諦める（見た目の密度調整用途のみで勝敗に無関係）。
         if (!isTarget) return
-        // 必須の赤だけは絶対に取りこぼさない：最も古い非対象バッジを1個だけ強制退場させる。
         let evictSlot: number | null = null
         for (const [slot, occ] of slotOccupantsRef.current) {
           if (!occ.isTarget) {
@@ -157,17 +123,16 @@ function Component({ spec, onResult }: QuestionComponentProps) {
             break
           }
         }
-        if (evictSlot === null) return // SLOTS(8) > 必須赤の最大数(5)のため理論上到達しない
+        if (evictSlot === null) return
         removeBadge(slotOccupantsRef.current.get(evictSlot)!.id)
         freeSlots = [evictSlot]
       }
       const slotIndex = freeSlots[randInt(0, freeSlots.length - 1)]
       const id = badgeIdRef.current++
-      const hex = isTarget ? RED_HEX : OTHER_HEX[randInt(0, OTHER_HEX.length - 1)]
+      const shape = isTarget ? target : pickExcluding(SHAPE_IDS, target)
       slotOccupantsRef.current.set(slotIndex, { id, isTarget })
       if (isTarget) sfx.notifSpawn()
-      setBadges((prev) => [...prev, { id, slotIndex, isTarget, hex }])
-      // 必須の赤はlifespanで自動despawnしない（見失っただけで詰む事故を構造的に排除する）。
+      setBadges((prev) => [...prev, { id, slotIndex, isTarget, shape }])
       if (!isTarget) {
         despawnTimersRef.current.set(
           id,
@@ -223,20 +188,20 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     if (clearedRedRef.current >= targetRedCount) {
       finish(true)
     }
-    // 必須の赤は開始時点で全て出現タイミングが確定済み（最後の1個もtimeoutの十分前に
-    // 出現することが保証されている）ため、成功のたびに外側timeoutを引き直す必要はない。
   }
 
   return (
-    <QuestionShell sub={`赤 ${clearedRedRef.current}/${targetRedCount}`} instruction="赤だけ消せ！">
+    <QuestionShell sub={`${clearedRedRef.current}/${targetRedCount}`} instruction={`${SHAPE_LABELS[target]}だけ消せ！`}>
       <div className="relative h-64 w-full max-w-xs">
         {badges.map((badge) => (
           <button
             key={badge.id}
             onPointerDown={() => handleTap(badge)}
-            style={{ left: `${SLOTS[badge.slotIndex].x}%`, top: `${SLOTS[badge.slotIndex].y}%`, backgroundColor: badge.hex }}
-            className="anim-pop absolute h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full active:scale-90"
-          />
+            style={{ left: `${SLOTS[badge.slotIndex].x}%`, top: `${SLOTS[badge.slotIndex].y}%` }}
+            className="anim-pop absolute flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 active:scale-90"
+          >
+            <ShapeIcon shape={badge.shape} size={30} />
+          </button>
         ))}
       </div>
     </QuestionShell>
