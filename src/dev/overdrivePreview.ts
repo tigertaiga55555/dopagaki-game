@@ -53,3 +53,13 @@ export function isClear200PreviewRequested(): boolean {
 export function isChallenge500QaPreviewRequested(): boolean {
   return previewParam() === 'challenge500'
 }
+
+/**
+ * Ver.6 Phase 4 QA補助: ?preview=endless — Endlessモードの難易度選択画面から直接
+ * 始められる確認モード。本番の入口（TitleScreenのENDLESSボタン→通常のscreen遷移）とは
+ * 別の、QA専用の近道（dev/EndlessPreviewScreen.tsx参照）。GA4のendless_start/endless_end
+ * は送信せず、自己ベストも更新しない（EndlessPlayScreenへqaMode=trueで渡す）。
+ */
+export function isEndlessPreviewRequested(): boolean {
+  return previewParam() === 'endless'
+}

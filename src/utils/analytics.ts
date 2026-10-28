@@ -100,3 +100,18 @@ export function trackReach400(): void {
 export function trackReach500(): void {
   trackEvent('reach_500')
 }
+
+/**
+ * Ver.6 Phase 4: Endlessモード開始（難易度選択画面でのボタン押下）。
+ * QA/Previewモードでは送信しない既存方針（engine/useChallenge500.tsのqaModeガードと同様）を
+ * 呼び出し元（engine/useEndlessGame.ts）側で維持する——この関数自体は常に送信する薄いラッパー
+ * のままにし、送信抑制の判断はhook側に一本化する既存設計を踏襲する。
+ */
+export function trackEndlessStart(difficulty: string): void {
+  trackEvent('endless_start', { difficulty })
+}
+
+/** Endlessモード終了（1 MISS・時間切れのいずれでも1回だけ）。 */
+export function trackEndlessEnd(difficulty: string, score: number, isNewBest: boolean): void {
+  trackEvent('endless_end', { difficulty, score, is_new_best: isNewBest })
+}
