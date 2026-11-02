@@ -1,4 +1,5 @@
 import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
+import { ENDLESS_THEME } from '../config/endlessTheme'
 import type { EndlessDifficulty } from '../types'
 
 interface Props {
@@ -12,21 +13,26 @@ interface Props {
 }
 
 /**
- * Ver.6 Phase 4: Endless結果画面。最低限（ENDLESS RESULT／難易度／今回のスコア／自己ベスト）
- * のみを表示し、既存の結果画面（ResultScreen.tsx）のFinalResultV4・Canvas共有は一切流用しない
- * （Endlessにはシェア機能の要求がないため、スコープ外の機能を持ち込まない）。
- * 配色・フォントは既存のゲームUI（グラデーションボタン等）に揃える。
+ * Ver.6 Phase 4.1（難易度再設計）: Endless結果画面。最低限（ENDLESS RESULT／難易度／
+ * 今回のスコア／自己ベスト）のみを表示し、既存の結果画面（ResultScreen.tsx）の
+ * FinalResultV4・Canvas共有は一切流用しない（Endlessにはシェア機能の要求がないため、
+ * スコープ外の機能を持ち込まない）。難易度ラベル・スコア数値・「もう一度」ボタンに
+ * config/endlessTheme.tsのアクセントカラーを適用し、どの難易度で終えたかを結果画面でも
+ * 一目で分かるようにする（NEW BESTバッジだけは「達成」を表す共通色としてamberのまま据え置く）。
  */
 export function EndlessResultScreen({ difficulty, score, best, isNewBest, onRetry, onChangeDifficulty, onHome }: Props) {
+  const theme = ENDLESS_THEME[difficulty]
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-8 px-6 py-10 text-center">
       <div className="flex flex-col items-center gap-1">
         <p className="text-xs font-black tracking-[0.3em] text-white/40">ENDLESS RESULT</p>
-        <p className="text-lg font-black text-fuchsia-300">{ENDLESS_DIFFICULTY_LABEL[difficulty]}</p>
+        <p className={`text-lg font-black ${theme.textClass}`}>
+          {ENDLESS_DIFFICULTY_LABEL[difficulty]} <span className="text-xs font-black tracking-[0.2em] opacity-80">{theme.mood}</span>
+        </p>
       </div>
 
       <div className="flex flex-col items-center gap-2">
-        <p className="text-6xl font-black tabular-nums leading-none text-white">
+        <p className={`text-6xl font-black tabular-nums leading-none text-white ${theme.glowClass}`}>
           {score}
           <span className="ml-2 text-2xl align-middle text-white/60">STREAK</span>
         </p>
@@ -41,7 +47,7 @@ export function EndlessResultScreen({ difficulty, score, best, isNewBest, onRetr
       <div className="flex w-full max-w-xs flex-col gap-3">
         <button
           onClick={onRetry}
-          className="w-full rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-4 text-lg font-black tracking-widest text-white shadow-[0_6px_0_0_rgba(126,34,206,0.8)] transition-transform active:translate-y-1 active:shadow-[0_2px_0_0_rgba(126,34,206,0.8)]"
+          className={`w-full rounded-2xl py-4 text-lg font-black tracking-widest text-white transition-transform active:translate-y-1 ${theme.buttonGradientClass} ${theme.buttonShadowClass}`}
         >
           もう一度
         </button>

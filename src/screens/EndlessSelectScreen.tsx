@@ -1,4 +1,5 @@
 import { ENDLESS_DIFFICULTIES, ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
+import { ENDLESS_THEME } from '../config/endlessTheme'
 import { QuitButton } from '../components/QuitButton'
 import { getEndlessBest } from '../utils/storage'
 import type { EndlessDifficulty } from '../types'
@@ -9,11 +10,12 @@ interface Props {
 }
 
 /**
- * Ver.6 Phase 4: Endless難易度選択画面。
+ * Ver.6 Phase 4.1（難易度再設計）: Endless難易度選択画面。
  * 説明は短く（ENDLESS / 何問連続で正解できる？ / 1 MISS = END・時間切れも終了の3行のみ）、
  * 初級・中級・上級の3ボタンで即開始できるようにする。既存ホーム画面（TitleScreen）の
- * ボタン・配色（fuchsia〜purpleのグラデーション、rounded-2xl、font-black）を踏襲し、
- * 不自然に新しいデザイン言語を持ち込まない。
+ * ボタン形状（rounded-2xl、font-black）は踏襲しつつ、3枚のカードそれぞれに
+ * config/endlessTheme.tsの難易度別アクセントカラー（緑/シアン/赤）を適用し、
+ * 「選んだ瞬間に別カテゴリだと分かる」見た目にする。
  */
 export function EndlessSelectScreen({ onSelect, onQuit }: Props) {
   return (
@@ -30,14 +32,20 @@ export function EndlessSelectScreen({ onSelect, onQuit }: Props) {
         <div className="flex w-full max-w-xs flex-col gap-3">
           {ENDLESS_DIFFICULTIES.map((difficulty) => {
             const best = getEndlessBest(difficulty)
+            const theme = ENDLESS_THEME[difficulty]
             return (
               <button
                 key={difficulty}
                 onClick={() => onSelect(difficulty)}
-                className="flex items-center justify-between rounded-2xl bg-white/10 px-5 py-4 text-left transition-transform active:scale-95"
+                className={`flex items-center justify-between rounded-2xl px-5 py-4 text-left transition-transform active:scale-95 ${theme.cardClass}`}
               >
-                <span className="text-xl font-black text-white">{ENDLESS_DIFFICULTY_LABEL[difficulty]}</span>
-                <span className="text-xs font-bold tabular-nums text-white/40">{best > 0 ? `BEST ${best}` : '-'}</span>
+                <span className="flex flex-col items-start gap-0.5">
+                  <span className="text-xl font-black text-white">{ENDLESS_DIFFICULTY_LABEL[difficulty]}</span>
+                  <span className={`text-[10px] font-black tracking-[0.2em] ${theme.textClass}`}>{theme.mood}</span>
+                </span>
+                <span className={`text-xs font-bold tabular-nums ${best > 0 ? theme.textClass : 'text-white/40'}`}>
+                  {best > 0 ? `BEST ${best}` : '-'}
+                </span>
               </button>
             )
           })}

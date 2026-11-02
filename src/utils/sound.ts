@@ -631,6 +631,49 @@ export const sfx = {
    * つなげる多拍構成にする（「OVERDRIVE級演出→暗転→もう一度OVERDRIVE級の爆発」という
    * 指示の構造をそのままSEに反映）。
    */
+  /**
+   * Ver.6 Phase 4.1（難易度再設計）: Endless正解SE。難易度ごとに音のキャラクターを変える
+   * （ユーザー指示：初級=軽快・明るい、中級=シャープ・テクニカル、上級=緊張感・速い判断）。
+   * 新しい音源構造は作らず、既存のbeep/sweepと、上級だけは既存のfinalSuccess
+   * （FINAL DOPA TRIALの本物の正解SE、intensity 1〜5で段階的に派手になる）をそのまま流用する
+   * ——上級が「FINAL DOPA TRIAL相当」であることを音でも裏付ける。
+   */
+  endlessCorrect: (difficulty: 'beginner' | 'intermediate' | 'advanced', intensity: 1 | 2 | 3 | 4 | 5) => {
+    if (difficulty === 'advanced') {
+      finalSuccess(intensity)
+      return
+    }
+    if (difficulty === 'intermediate') {
+      // シャープで短い二重ヒット（sine中心の初級より硬質な波形で「テクニカル」な手応えを作る）
+      beep(1100, 45, 'square', 0.1)
+      setTimeout(() => beep(1500, 55, 'triangle', 0.09), 45)
+      return
+    }
+    // 初級：明るく軽いsineの二重チャイム
+    beep(1500, 70, 'sine', 0.11)
+    setTimeout(() => beep(1900, 80, 'sine', 0.09), 50)
+  },
+  /**
+   * Ver.6 Phase 4.1: Endless MISS/タイムアウトSE。上級は既存のfinalMiss
+   * （TRIAL FAILED、「積み上げてきたものが崩れ落ちる」下降トーン）をそのまま流用し、
+   * 「1 MISSで終わる緊張感」をFINAL DOPA TRIALと同じ重さで表現する。初級は既存の
+   * 基本miss（sfx.miss）より短く軽くして、心理的な負担を抑える。
+   */
+  endlessMiss: (difficulty: 'beginner' | 'intermediate' | 'advanced') => {
+    if (difficulty === 'advanced') {
+      finalMiss()
+      return
+    }
+    if (difficulty === 'intermediate') {
+      beep(160, 190, 'sawtooth', 0.13)
+      setTimeout(() => beep(110, 150, 'sawtooth', 0.09), 90)
+      return
+    }
+    beep(150, 130, 'sawtooth', 0.09)
+  },
+  /** Ver.6 Phase 4.1: Endless自己ベスト更新時の着地音。既存のcomboMilestone最大強度(5)をそのまま再利用する。 */
+  endlessNewBest: () => comboMilestone(5),
+
   challenge500Clear500: () => {
     megaImpact()
     setTimeout(() => {
