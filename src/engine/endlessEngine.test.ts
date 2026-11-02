@@ -62,4 +62,12 @@ describe('endlessEngine', () => {
     expect(state.streak).toBe(237)
     expect(state.ended).toBe(false)
   })
+
+  it('advanced (120〜500% 全部乗せ) still ends on exactly 1 MISS regardless of which question origin (normal/FINAL/Challenge500) produced it — applyEndlessMiss takes no origin parameter at all, so this holds structurally', () => {
+    let state = createEndlessState()
+    for (let i = 0; i < 4; i++) state = applyEndlessCorrect(state) // simulates e.g. 2 FINAL-origin + 2 Challenge500-origin correct answers
+    state = applyEndlessMiss(state) // a MISS from either origin uses the exact same function
+    expect(state.ended).toBe(true)
+    expect(state.streak).toBe(4)
+  })
 })

@@ -1,12 +1,25 @@
 import { useRef, useState } from 'react'
-import { FINAL_POOL_TIERS, endlessMilestoneLevel, getEndlessPhase, isEndlessMilestone } from '../config/endlessConfig'
+import {
+  ENDLESS_BEGINNER_PHASE,
+  FINAL_POOL_TIERS,
+  endlessMilestoneLevel,
+  isEndlessMilestone,
+} from '../config/endlessConfig'
+import {
+  CHALLENGE500_ENDLESS_TIERS,
+  CHALLENGE500_TIER_REPRESENTATIVE_PERCENT,
+  pickEndlessAdvancedOrigin,
+  type EndlessAdvancedOrigin,
+} from './endlessAdvancedPicker'
 import { applyEndlessCorrect, applyEndlessMiss, createEndlessState, type EndlessState } from './endlessEngine'
 import { pickFinalQuestion } from './finalQuestionPicker'
 import { generateNextQuestion } from './questionPicker'
 import { pick } from './random'
+import { pickChallenge500Question } from '../questions/challenge500'
 import { trackEndlessEnd, trackEndlessStart } from '../utils/analytics'
 import { getEndlessBest, updateEndlessBest } from '../utils/storage'
 import { sfx } from '../utils/sound'
+import type { Challenge500QuestionSpec, Challenge500Tier } from '../questions/challenge500/types'
 import type { EndlessDifficulty, FinalQuestionSpec, FinalQuestionTag, QuestionSpec, QuestionTypeId } from '../types'
 
 /** 直近何問分のタイプを覚えておくか。useRushGame.ts／useFinalTrial.tsと同じ値・同じ目的（カテゴリ連続回避）。 */
@@ -15,20 +28,23 @@ const RECENT_TYPES_LENGTH = 3
 const MILESTONE_BANNER_MS = 900
 
 /**
- * Ver.6 Phase 4.1（難易度再設計）: 初級/中級は通常ゲームのQuestionModule（QUESTION_MODULES）、
- * 上級はFINAL DOPA TRIALのFinalQuestionModule（FINAL_QUESTION_MODULES）と、出題元の問題
- * コンポーネント体系そのものが異なる（型も別：QuestionComponentProps vs
- * FinalQuestionComponentProps、後者はvisualLevelを持たない）。そのため1問ぶんを
- * 「どちらの体系から来たか」ごとタグ付けして保持し、呼び出し元の画面（EndlessPlayScreen）が
- * kindで分岐して正しいComponentを解決する。問題生成ロジック自体は一切複製せず、
- * 既存のgenerateNextQuestion（通常）／pickFinalQuestion（FINAL DOPA TRIAL）をそのまま呼ぶ。
+ * Ver.6 Phase 4.2（難易度再々設計）: 初級は通常ゲームのQuestionModule、中級はFINAL DOPA
+ * TRIALのFinalQuestionModule、上級はその両方に加えてChallenge500QuestionModule（200〜500%
+ * LIMIT BREAKの既存11問題タイプ＋下線反転）も出題元になる。3つの問題コンポーネント体系は
+ * それぞれ型・Component props（visualLevelの有無、targetTimeMsの有無）が異なるため、
+ * 1問ぶんを「どの体系から来たか」ごとタグ付けして保持し、呼び出し元の画面
+ * （EndlessPlayScreen）がkindで分岐して正しいComponent（＋Challenge500のみ別途必要な
+ * 外付けタイマーChallenge500TimerBar）を解決する。問題生成ロジック自体は一切複製せず、
+ * 既存のgenerateNextQuestion／pickFinalQuestion／pickChallenge500Questionをそのまま呼ぶ。
  */
-export type EndlessQuestionSlot = { kind: 'normal'; spec: QuestionSpec } | { kind: 'final'; spec: FinalQuestionSpec }
+export type EndlessQuestionSlot =
+  | { kind: 'normal'; spec: QuestionSpec }
+  | { kind: 'final'; spec: FinalQuestionSpec }
+  | { kind: 'challenge500'; spec: Challenge500QuestionSpec; tier: Challenge500Tier }
 
-/** QuestionResult・FinalQuestionResultの両方が構造的に満たす最小限の結果形。 */
+/** QuestionResult・FinalQuestionResult・Challenge500QuestionResultのいずれもが満たす最小限の結果形。 */
 export interface EndlessQuestionOutcome {
   correct: boolean
-  reactionMs: number
 }
 
 export interface EndlessSnapshot {
@@ -57,11 +73,10 @@ export interface UseEndlessGameOptions {
 /**
  * Ver.6 Phase 4: Endlessモード（「何問連続正解できるか」）の画面用エンジン。
  *
- * 通常ゲーム（useRushGame.ts）のDOPA%・COMBO倍率・MOMENTUM・OVERDRIVE等は一切持たない
- * ——Endlessはスコア＝連続正解数だけのシンプルなモードのため、それらは不要かつ過剰。
- * その代わり、問題生成（questionPicker.generateNextQuestion／finalQuestionPicker.pickFinalQuestion）・
- * 問題コンポーネント自体（QUESTION_MODULES/FINAL_QUESTION_MODULES、呼び出し元の画面が
- * spec.typeから解決する）は通常ゲーム・FINAL DOPA TRIALと完全に共有し、二重管理しない。
+ * 通常ゲーム（useRushGame.ts）のDOPA%・COMBO倍率・MOMENTUM・OVERDRIVEも、Challenge500の
+ * DOPA%・チェックポイント・tier別MISSペナルティも一切持たない——Endlessはスコア＝連続
+ * 正解数だけのシンプルなモードのため、それらは不要かつ過剰（ユーザー指示：Challenge500の
+ * 進行ルールはEndlessへ持ち込まない）。常に「1 MISS = END」のみ。
  *
  * BGM（startBgm/stopBgm/setBgmProgress/setFinalMode/setFinalIntensity）はこのhookではなく
  * 呼び出し元の画面（EndlessPlayScreen.tsx）が担当する——useChallenge500.tsと同じ責務分担
@@ -73,8 +88,6 @@ export function useEndlessGame(
   options?: UseEndlessGameOptions,
 ) {
   const qaMode = options?.qaMode ?? false
-  const isAdvanced = difficulty === 'advanced'
-  const phase = isAdvanced ? null : getEndlessPhase(difficulty)
 
   const [snapshot, setSnapshot] = useState<EndlessSnapshot>(() => ({
     state: createEndlessState(),
@@ -87,21 +100,41 @@ export function useEndlessGame(
   const recentTypesRef = useRef<QuestionTypeId[]>([])
   const recentFinalTypesRef = useRef<string[]>([])
   const recentFinalTagsRef = useRef<FinalQuestionTag[]>([])
+  const recentChallenge500TypeRef = useRef<string | null>(null)
+  const recentAdvancedOriginsRef = useRef<EndlessAdvancedOrigin[]>([])
   const startedRef = useRef(false)
   const milestoneKeyRef = useRef(0)
   const milestoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  function buildFinalSlot(): EndlessQuestionSlot {
+    const tier = pick(FINAL_POOL_TIERS)
+    const spec = pickFinalQuestion(tier, recentFinalTypesRef.current, recentFinalTagsRef.current)
+    recentFinalTypesRef.current = [spec.type, ...recentFinalTypesRef.current].slice(0, RECENT_TYPES_LENGTH)
+    recentFinalTagsRef.current = spec.tags
+    return { kind: 'final', spec }
+  }
+
+  function buildChallenge500Slot(): EndlessQuestionSlot {
+    const tier = pick(CHALLENGE500_ENDLESS_TIERS)
+    const percent = CHALLENGE500_TIER_REPRESENTATIVE_PERCENT[tier]
+    const spec = pickChallenge500Question(percent, recentChallenge500TypeRef.current)
+    recentChallenge500TypeRef.current = spec.type
+    return { kind: 'challenge500', spec, tier }
+  }
+
   function buildNext(): EndlessQuestionSlot {
-    if (isAdvanced) {
-      const tier = pick(FINAL_POOL_TIERS)
-      const spec = pickFinalQuestion(tier, recentFinalTypesRef.current, recentFinalTagsRef.current)
-      recentFinalTypesRef.current = [spec.type, ...recentFinalTypesRef.current].slice(0, RECENT_TYPES_LENGTH)
-      recentFinalTagsRef.current = spec.tags
-      return { kind: 'final', spec }
+    if (difficulty === 'beginner') {
+      const spec = generateNextQuestion(ENDLESS_BEGINNER_PHASE, recentTypesRef.current)
+      recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, RECENT_TYPES_LENGTH)
+      return { kind: 'normal', spec }
     }
-    const spec = generateNextQuestion(phase!, recentTypesRef.current)
-    recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, RECENT_TYPES_LENGTH)
-    return { kind: 'normal', spec }
+    if (difficulty === 'intermediate') {
+      return buildFinalSlot()
+    }
+    // advanced: FINAL系とChallenge500系を既存の問題数ベースの重みで混在させる
+    const origin = pickEndlessAdvancedOrigin(recentAdvancedOriginsRef.current)
+    recentAdvancedOriginsRef.current = [origin, ...recentAdvancedOriginsRef.current].slice(0, RECENT_TYPES_LENGTH)
+    return origin === 'final' ? buildFinalSlot() : buildChallenge500Slot()
   }
 
   function start() {
@@ -140,8 +173,9 @@ export function useEndlessGame(
       return
     }
 
-    // MISS（時間切れも各問題コンポーネント自身がcorrect:falseを返すだけで、ここでは
-    // 区別しない——endlessEngine.applyEndlessMiss参照）。即終了し、結果を一度だけ通知する。
+    // MISS（時間切れも各問題コンポーネント／Challenge500TimerBarがcorrect:falseを返すだけで、
+    // ここでは区別しない——endlessEngine.applyEndlessMiss参照）。出題元（normal/final/
+    // challenge500）に関わらず即終了し、結果を一度だけ通知する。
     sfx.endlessMiss(difficulty)
     const next = applyEndlessMiss(stateRef.current)
     stateRef.current = next

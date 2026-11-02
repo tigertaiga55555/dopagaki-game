@@ -1,62 +1,52 @@
 import { describe, expect, it } from 'vitest'
 import { DIFFICULTY_PHASES } from './difficultyConfig'
 import {
+  ENDLESS_BEGINNER_BGM_STAGE_INDEX,
+  ENDLESS_BEGINNER_PHASE,
   ENDLESS_DIFFICULTIES,
   ENDLESS_DIFFICULTY_LABEL,
   FINAL_POOL_TIERS,
   endlessMilestoneLevel,
-  getEndlessBgmStageIndex,
-  getEndlessPhase,
   isEndlessMilestone,
 } from './endlessConfig'
 
-describe('endlessConfig', () => {
-  it('beginner/intermediate map to existing normal-game DIFFICULTY_PHASES entries (no duplicate difficulty system)', () => {
-    for (const difficulty of ['beginner', 'intermediate'] as const) {
-      const phase = getEndlessPhase(difficulty)
-      expect(DIFFICULTY_PHASES).toContain(phase)
-    }
+describe('endlessConfig (Ver.6 Phase 4.2 再々設計: 初級=0〜120%代表／中級=FINAL／上級=全部乗せ)', () => {
+  describe('ENDLESS_BEGINNER_PHASE (0〜120%全体を代表する合成プール)', () => {
+    it('pool is the union of all 6 normal-game DIFFICULTY_PHASES pools (not a single phase)', () => {
+      const expectedUnion = new Set(DIFFICULTY_PHASES.flatMap((p) => p.pool))
+      expect(new Set(ENDLESS_BEGINNER_PHASE.pool)).toEqual(expectedUnion)
+    })
+
+    it('is strictly broader than any single phase (not just warmup, ramp, or overload alone)', () => {
+      for (const phase of DIFFICULTY_PHASES) {
+        expect(ENDLESS_BEGINNER_PHASE.pool.length).toBeGreaterThanOrEqual(phase.pool.length)
+      }
+    })
+
+    it('speedMultiplier is the plain average of all 6 phases (a representative value, not borrowed from one phase)', () => {
+      const expectedAvg = DIFFICULTY_PHASES.reduce((sum, p) => sum + p.speedMultiplier, 0) / DIFFICULTY_PHASES.length
+      expect(ENDLESS_BEGINNER_PHASE.speedMultiplier).toBeCloseTo(expectedAvg, 10)
+    })
+
+    it('has no weightedTypes (does not artificially bias toward hard types)', () => {
+      expect(ENDLESS_BEGINNER_PHASE.weightedTypes).toBeUndefined()
+    })
+
+    it('bgm stage index is a representative mid value within the normal 0-5 stage range', () => {
+      expect(ENDLESS_BEGINNER_BGM_STAGE_INDEX).toBeGreaterThanOrEqual(0)
+      expect(ENDLESS_BEGINNER_BGM_STAGE_INDEX).toBeLessThanOrEqual(DIFFICULTY_PHASES.length - 1)
+    })
   })
 
-  it('beginner maps to ramp, intermediate maps to overload (the new, more clearly differentiated mapping)', () => {
-    expect(getEndlessPhase('beginner').id).toBe('ramp')
-    expect(getEndlessPhase('intermediate').id).toBe('overload')
-  })
-
-  it('intermediate (overload) is clearly harder than beginner (ramp): broader pool, faster speed, weighted hard types', () => {
-    const beginner = getEndlessPhase('beginner')
-    const intermediate = getEndlessPhase('intermediate')
-    expect(intermediate.pool.length).toBeGreaterThan(beginner.pool.length)
-    expect(intermediate.speedMultiplier).toBeLessThan(beginner.speedMultiplier)
-    expect(beginner.weightedTypes).toBeUndefined()
-    expect(intermediate.weightedTypes).toBeDefined()
-  })
-
-  it('beginner pool never includes the fake-zone/overload-exclusive trick types', () => {
-    const beginner = getEndlessPhase('beginner')
-    const overloadOnlyTypes = ['colorWord', 'shortVideoSwipe', 'releaseZone', 'reverseArrowSwipe', 'popTarget', 'rps', 'moreSide', 'fewerSide', 'biggerShape', 'holdPress', 'notifRush', 'dragGoal', 'sameOne']
-    for (const t of overloadOnlyTypes) {
-      expect(beginner.pool).not.toContain(t)
-    }
+  it('FINAL_POOL_TIERS covers the 4 real FINAL DOPA TRIAL tiers used by both intermediate and advanced', () => {
+    expect(new Set(FINAL_POOL_TIERS)).toEqual(new Set(['reversal', 'twoCondition', 'memory', 'mixed']))
+    expect(FINAL_POOL_TIERS.length).toBe(4)
   })
 
   it('has a Japanese label for every difficulty', () => {
     for (const d of ENDLESS_DIFFICULTIES) {
       expect(ENDLESS_DIFFICULTY_LABEL[d].length).toBeGreaterThan(0)
     }
-  })
-
-  it('bgm stage index corresponds to the phase position within DIFFICULTY_PHASES (beginner/intermediate only)', () => {
-    for (const d of ['beginner', 'intermediate'] as const) {
-      const phase = getEndlessPhase(d)
-      const expectedIndex = DIFFICULTY_PHASES.findIndex((p) => p.id === phase.id)
-      expect(getEndlessBgmStageIndex(d)).toBe(expectedIndex)
-    }
-  })
-
-  it('advanced uses the 4 real FINAL DOPA TRIAL tier pools (reversal/twoCondition/memory/mixed), not a DIFFICULTY_PHASES entry', () => {
-    expect(new Set(FINAL_POOL_TIERS)).toEqual(new Set(['reversal', 'twoCondition', 'memory', 'mixed']))
-    expect(FINAL_POOL_TIERS.length).toBe(4)
   })
 
   describe('isEndlessMilestone / endlessMilestoneLevel', () => {
