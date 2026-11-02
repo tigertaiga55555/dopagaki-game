@@ -42,6 +42,27 @@ export type EndlessQuestionSlot =
   | { kind: 'final'; spec: FinalQuestionSpec }
   | { kind: 'challenge500'; spec: Challenge500QuestionSpec; tier: Challenge500Tier }
 
+/**
+ * Ver.6 Phase 4.3（実機QA修正）: Endless共通の視覚タイマーバー（EndlessPlayScreen.tsx）を
+ * 表示してよいのはnormal（初級）の間だけ。
+ *
+ * final（中級/上級のFINAL DOPA TRIAL由来）はspec.targetTimeMsが必ずしも「問題マウントから
+ * 一定速度で減る」時間を表さない（例: FinalMemoryPickQuestionは記憶表示フェーズの後に
+ * 初めて回答タイマーが開始する）ため、Endless側の単純な線形バーを重ねると実際のMISS
+ * タイミングと視覚上ズレる。本家FINAL DOPA TRIALの画面自体も視覚タイマーバーを持たない
+ * （問題コンポーネント自身の演出だけで時間を伝える）ため、Endlessでも同じ表現に揃える。
+ *
+ * challenge500（上級のChallenge500由来）はそもそもtargetTimeMsという概念がなく
+ * （外付けのChallenge500TimerBarが管理）、本家Challenge500Screen.tsxも視覚タイマーバーを
+ * 持たない（焦り音のテンポだけで時間を伝える）ため、同様に表示しない。
+ *
+ * 時間制限・タイムアウト判定そのものには一切関与しない、純粋な表示ルールだけの関数
+ * （DOM・Reactに依存しないためvitestで直接検証できる）。
+ */
+export function shouldShowEndlessTimerBar(kind: EndlessQuestionSlot['kind']): kind is 'normal' {
+  return kind === 'normal'
+}
+
 /** QuestionResult・FinalQuestionResult・Challenge500QuestionResultのいずれもが満たす最小限の結果形。 */
 export interface EndlessQuestionOutcome {
   correct: boolean

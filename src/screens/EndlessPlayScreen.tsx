@@ -4,7 +4,7 @@ import { QuitButton } from '../components/QuitButton'
 import { CHALLENGE500_CONFIG } from '../config/challenge500Config'
 import { ENDLESS_BEGINNER_BGM_STAGE_INDEX, ENDLESS_BEGINNER_PHASE, ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
 import { ENDLESS_THEME } from '../config/endlessTheme'
-import { useEndlessGame, type EndlessFinishPayload, type EndlessQuestionOutcome } from '../engine/useEndlessGame'
+import { shouldShowEndlessTimerBar, useEndlessGame, type EndlessFinishPayload, type EndlessQuestionOutcome } from '../engine/useEndlessGame'
 import { CHALLENGE500_QUESTION_MODULES } from '../questions/challenge500'
 import { QUESTION_MODULES } from '../questions'
 import { FINAL_QUESTION_MODULES } from '../questions/final'
@@ -52,15 +52,30 @@ function finalBgmIntensity(streak: number): number {
  * コンポーネント＋下線反転）をそのまま描画する（Endless専用の問題コンポーネントは
  * 一切存在しない）。
  *
- * タイムアウトの扱いが出題元ごとに異なる点に注意（既存の設計差をそのまま踏襲）：
- * - normal/final：各問題コンポーネント自身がspec.targetTimeMsでタイムアウトを自己管理する
- *   （setTimeoutベース）。この画面の進捗バーはCSS transitionのみの表示専用。
- * - challenge500：Challenge500QuestionSpecにtargetTimeMsという概念がなく、本家
+ * タイムアウトの扱い・視覚バー表示は出題元ごとに異なる（既存の設計差をそのまま踏襲）：
+ * - normal（初級）：各問題コンポーネント自身がspec.targetTimeMsでタイムアウトを
+ *   自己管理する（単純なsetTimeoutベース、問題マウント直後からtimeoutまで一定速度で
+ *   経過する）。そのためEndlessの進捗バー（CSS transitionのみの表示専用）をそのまま
+ *   表示してよい。
+ * - final（中級/上級）：FINAL DOPA TRIAL本体と全く同じコンポーネントをそのまま描画する。
+ *   実機QAで発覚した不整合：記憶問題（FinalMemoryPickQuestion等）はspec.targetTimeMsが
+ *   「回答フェーズだけ」の時間を表し、実際のMISSタイマーは記憶表示フェーズ
+ *   （TIMING_SAFETY.final.memoryRevealMs）が終わった後に初めて開始される。Endlessの
+ *   進捗バーは問題マウント直後からspec.targetTimeMsで一定速度に減っていくだけなので、
+ *   記憶表示中にバーだけ先に0%へ到達し、実際のOUTタイミングとズレて見えた。
+ *   FINAL系の問題は「本家FINAL DOPA TRIALの画面でも視覚タイマーバーは表示していない
+ *   （問題コンポーネント自身の演出・UIだけで時間を伝える）」ため、Endlessでも同じく
+ *   final問題の間はこの画面の視覚タイマーバーを表示しない（時間管理そのものは一切
+ *   変更せず、「Endless側の重複したタイマーUIを消す」だけの修正）。
+ * - challenge500（上級）：Challenge500QuestionSpecにtargetTimeMsという概念がなく、本家
  *   Challenge500Screen.tsxと同じく画面側が外付けのChallenge500TimerBar（内部でrAF計測・
  *   焦り警告音を管理）をキーごと並置してタイムアウトを管理する。本家が採用している
  *   「進捗バーの可視表示なし（テンポ音のみで時間を伝える）」という設計判断もそのまま
- *   踏襲し、challenge500問題の間だけこの画面の視覚タイマーバーを非表示にする
- *   （新しい表示ルールを作らず、2系統の既存の違いをそのまま反映しただけ）。
+ *   踏襲し、challenge500問題の間もこの画面の視覚タイマーバーを表示しない。
+ *
+ * まとめると、Endless共通の視覚タイマーバーを表示するのは normal（初級）の間だけ。
+ * final/challenge500は、それぞれの出題元（本家FINAL DOPA TRIAL／本家Challenge500）が
+ * 元々採用している時間表現（問題内部の演出・焦り音のみ、可視バーなし）にそのまま委ねる。
  */
 export function EndlessPlayScreen({ difficulty, onFinish, onQuit, qaMode = false }: Props) {
   const { snapshot, start, handleResult } = useEndlessGame(difficulty, onFinish, { qaMode })
@@ -100,12 +115,16 @@ export function EndlessPlayScreen({ difficulty, onFinish, onQuit, qaMode = false
 
   // 問題が切り替わるたびに、制限時間ぶんかけて0%まで縮む進捗バーを再生する
   // （CSS transitionのみ。問題コンポーネント自身のtimeoutロジックとは独立した表示専用）。
-  // challenge500問題にはtargetTimeMsという概念がない（本家Challenge500Screenと同じく
-  // 視覚タイマーバー非表示）ため、このeffect自体をスキップする。
+  // 視覚バーを表示するのはnormal（初級）だけ（final/challenge500は本家と同じく
+  // バーなし——上のコンポーネント先頭コメント参照）なので、final/challenge500では
+  // このeffect自体をスキップする。
   useEffect(() => {
     const el = timerBarRef.current
     const slot = snapshot.currentSlot
-    if (!el || !slot || slot.kind === 'challenge500') return
+    // shouldShowEndlessTimerBar(slot.kind)と同じ判定だが、ここではspec.targetTimeMsへの
+    // アクセスのためにTypeScriptの判別共用体の絞り込みが必要なため、kindのリテラル比較を
+    // 直接書く（JSX側の表示可否はshouldShowEndlessTimerBarを単一の判断基準として使う）。
+    if (!el || !slot || slot.kind !== 'normal') return
     el.style.transitionDuration = '0ms'
     el.style.width = '100%'
     const raf = requestAnimationFrame(() => {
@@ -149,7 +168,7 @@ export function EndlessPlayScreen({ difficulty, onFinish, onQuit, qaMode = false
         </div>
       </div>
 
-      {slot?.kind !== 'challenge500' && (
+      {slot && shouldShowEndlessTimerBar(slot.kind) && (
         <div className="relative z-10 h-1 w-full overflow-hidden bg-white/10">
           <div
             ref={timerBarRef}
