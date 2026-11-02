@@ -24,19 +24,31 @@ interface Props {
  *
  * 高さは以前の小さな丸ボタンとほぼ同じ（見た目のインパクトを抑えたまま「やめる」の
  * 文字を追加できるよう、円形ではなく横に短いピル型にした）。
+ *
+ * 配置修正（3回目、実機QA指摘）: paddingTopがmax(0.35rem, env(safe-area-inset-top))
+ * だと、notch付きiPhoneではenv(safe-area-inset-top)（約47〜59px）がそのまま採用され、
+ * セーフエリアの境界ぎりぎりに張り付いてDynamic Island/ステータスバーに近すぎて
+ * 見えづらかった。セーフエリアを無視するのではなく「セーフエリアの外側にさらに
+ * 余白を足す」方式（calc(env(safe-area-inset-top) + 18px)）に変更し、notchの有無に
+ * かかわらず常に一定の呼吸スペースを確保する。この帯はPlayScreen/FinalTrialScreen/
+ * Challenge500Screen/EndlessPlayScreen/EndlessSelectScreen全てで共有されている唯一の
+ * コンポーネントのため、ここを直すだけで通常モード・Endless・FINAL DOPA TRIAL・
+ * 500%チャレンジすべてに同じ位置ルールが一括適用される（画面側の個別調整は不要）。
+ * 視認性改善のため背景カプセルの濃さ・文字コントラストもわずかに上げた
+ * （形・サイズ・挙動は変更しない）。
  */
 export function QuitButton({ onQuit }: Props) {
   return (
     <div
       className="relative z-[70] flex w-full justify-end px-4"
       style={{
-        paddingTop: 'max(0.35rem, env(safe-area-inset-top))',
-        paddingRight: 'max(0.5rem, env(safe-area-inset-right))',
+        paddingTop: 'calc(env(safe-area-inset-top) + 18px)',
+        paddingRight: 'max(0.75rem, env(safe-area-inset-right))',
       }}
     >
       <button
         onClick={onQuit}
-        className="flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold leading-none text-white/60 active:scale-90"
+        className="flex items-center gap-1 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-bold leading-none text-white/75 active:scale-90"
         aria-label="ゲームをやめてホームへ戻る"
       >
         <span aria-hidden="true">×</span>
