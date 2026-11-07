@@ -3,6 +3,7 @@ import { randInt } from '../engine/random'
 import { createResolveOnce } from '../engine/resolveOnce'
 import { computeBonusGain } from '../config/scoreConfigV4'
 import { sfx } from '../utils/sound'
+import { useInputGateReady } from './useInputGateReady'
 import type { QuestionComponentProps, QuestionModule, QuestionResult } from '../types'
 
 /**
@@ -37,6 +38,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
   const guardRef = useRef<ReturnType<typeof createResolveOnce<QuestionResult>> | null>(null)
   if (!guardRef.current) guardRef.current = createResolveOnce(onResult)
+  const ready = useInputGateReady()
 
   useEffect(() => {
     const t1 = setTimeout(() => {
@@ -65,7 +67,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }, [])
 
   function handleTap() {
-    if (guardRef.current!.isResolved || phaseRef.current !== 'tapping') return
+    if (!ready || guardRef.current!.isResolved || phaseRef.current !== 'tapping') return
     const now = performance.now()
     if (now - lastTapAtRef.current < MIN_TAP_INTERVAL_MS) return
     lastTapAtRef.current = now

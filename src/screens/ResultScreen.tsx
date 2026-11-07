@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
 import { AdSlot } from '../components/AdSlot'
 import { ResultCard } from '../components/ResultCard'
 import { AD_RESULT_SCREEN } from '../config/ads'
@@ -23,6 +24,7 @@ export function ResultScreen({ result, onRetry }: Props) {
   const [saveBusy, setSaveBusy] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const newlyUnlocked = result.newlyUnlockedAchievements ?? []
 
   // Ver.5.0追加(TASK C-12): 200%結果画面へ切り替わった瞬間、完全無音にせず
   // bell/sparkle/victory chordのごく控えめな余韻を一度だけ残す。
@@ -64,7 +66,7 @@ export function ResultScreen({ result, onRetry }: Props) {
     setImageBusy(true)
     try {
       const blob = await captureResultCardPng(result)
-      const outcome = await shareResultWithImage(blob, result.percent, result.type.name, result.finalTrial)
+      const outcome = await shareResultWithImage(blob, result.percent, result.type.name, result.finalTrial, result.challenge500)
       if (outcome === 'shared-with-image-ios') {
         showToast('投稿文をコピーしました。必要ならXで貼り付けてください')
       } else if (outcome === 'ios-share-failed-fallback') {
@@ -100,13 +102,15 @@ export function ResultScreen({ result, onRetry }: Props) {
 
   /** 「結果をコピー」は従来通り画像を含めず、共有文＋URLのテキストのみコピーする。 */
   const handleCopy = async () => {
-    const ok = await copyShareText(result.percent, result.type.name, result.finalTrial)
+    const ok = await copyShareText(result.percent, result.type.name, result.finalTrial, result.challenge500)
     setCopied(ok)
     if (ok) setTimeout(() => setCopied(false), 2000)
   }
 
   return (
     <div className="flex min-h-dvh flex-col items-center gap-5 px-6 py-8">
+      <AchievementUnlockBanner newlyUnlocked={newlyUnlocked} />
+
       {result.isNewBest && !result.isFirstPlay && (
         <p className="anim-pop rounded-full bg-amber-400/20 px-4 py-1.5 text-sm font-black text-amber-300">
           🎉 自己ベスト更新！

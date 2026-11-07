@@ -1,6 +1,8 @@
 import { getNearMissComment } from '../config/messagesV4'
 import { NORMAL_TYPES, TYPE_THRESHOLDS, getOverdriveTitle } from '../config/resultTypesV4'
+import { checkDopaPercentAchievements, checkFinalQuestionAchievement } from '../utils/achievementStorage'
 import { getBestPercent, getPlayCount, incrementPlayCount, updateBestPercent } from '../utils/storage'
+import type { Challenge500State } from './challenge500Engine'
 import type { RushFinishPayload } from './useRushGame'
 import type { FinalTrialFinishPayload } from './useFinalTrial'
 import type { DopagakiTypeDef, FinalResultV4, PlayStats, QuestionTypeId } from '../types'
@@ -186,6 +188,14 @@ function buildFinalTrialComment(trialsCleared: number, cleared200: boolean): str
   return `FINAL DOPA TRIAL\n${trialsCleared} / 16 まで到達し、\nそこで力尽きた。`
 }
 
+/** Ver.6 Phase 1: 限界突破チャレンジ（200〜500%）専用のコメント。 */
+function buildChallenge500Comment(state: Challenge500State): string {
+  if (state.cleared) return '200％の先にある\nすべてを攻略した。\nもう戻れない。'
+  if (state.floor >= 400) return '400％の壁を越え、\nそこで限界を迎えた。'
+  if (state.floor >= 300) return '300％の壁を越え、\nそこで限界を迎えた。'
+  return '200％の先へ挑み、\nそこで限界を迎えた。'
+}
+
 export function computeFinalResult(payload: RushFinishPayload): FinalResultV4 {
   const { finalPercent, overdriveActive, stats } = payload
   const type = determineType(finalPercent, overdriveActive, stats)
@@ -196,6 +206,10 @@ export function computeFinalResult(payload: RushFinishPayload): FinalResultV4 {
   const bestBefore = getBestPercent()
   const isNewBest = updateBestPercent(finalPercent)
   incrementPlayCount()
+  // Ver.6 Phase 5: DOPA%実績（100/120%はこの通常プレイ経路で到達しうる）の判定。
+  // 300/400チェックポイント等の既存演出と競合しないよう、ここでは解除するだけで
+  // 通知はしない——結果画面（ResultScreen.tsx）がnewlyUnlockedAchievementsをまとめて表示する。
+  const newlyUnlockedAchievements = checkDopaPercentAchievements(finalPercent)
 
   return {
     percent: finalPercent,
@@ -211,6 +225,7 @@ export function computeFinalResult(payload: RushFinishPayload): FinalResultV4 {
     isNewBest,
     bestPercent: isNewBest ? finalPercent : bestBefore,
     playCount: getPlayCount(),
+    newlyUnlockedAchievements,
   }
 }
 
@@ -230,6 +245,9 @@ export function computeFinalTrialResult(payload: FinalTrialFinishPayload, stats:
   const bestBefore = getBestPercent()
   const isNewBest = updateBestPercent(finalPercent)
   incrementPlayCount()
+  // Ver.6 Phase 5: DOPA%実績（120/200%はこの経路で到達しうる）の判定。490 FINAL QUESTION・
+  // 200% PERFECT CLEAR等の既存演出と競合しないよう、ここでは解除するだけで通知はしない。
+  const newlyUnlockedAchievements = checkDopaPercentAchievements(finalPercent)
 
   return {
     percent: finalPercent,
@@ -246,5 +264,51 @@ export function computeFinalTrialResult(payload: FinalTrialFinishPayload, stats:
     bestPercent: isNewBest ? finalPercent : bestBefore,
     playCount: getPlayCount(),
     finalTrial: { trialsCleared, cleared200 },
+    newlyUnlockedAchievements,
+  }
+}
+
+/**
+ * Ver.6 Phase 1: 限界突破チャレンジ（200〜500%）の結果を計算する。200%到達時点の
+ * FinalResultV4（baseResult、finalTrial情報を含む）をベースに、percent/type/comment/
+ * bestPercent等をチャレンジの最終状態で上書きする。犯行記録・最大COMBO・最速反応・
+ * 正答率は200%到達までの実績（baseResultのもの）をそのまま引き継ぎ表示する。
+ *
+ * persist（既定true、本番の挙動は不変）をfalseにすると自己ベストの読み取りのみ行い、
+ * localStorageへの書き込み（updateBestPercent）を一切行わない。Preview専用のQA直接
+ * ジャンプ機能（本物の200%到達を経ていない）が結果画面を確認する際、正式な自己ベストが
+ * 書き換わってしまわないようにするためのフラグで、通常プレイの呼び出し元
+ * （FinalTrialScreen.tsxの本番経路）は常に省略してtrue（既存動作）のまま呼ぶ。
+ */
+export function computeChallenge500Result(state: Challenge500State, baseResult: FinalResultV4, persist = true): FinalResultV4 {
+  const finalPercent = state.percent
+  const type = getOverdriveTitle(finalPercent)
+  const comment = buildChallenge500Comment(state)
+
+  const bestBefore = getBestPercent()
+  const isNewBest = persist ? updateBestPercent(finalPercent) : false
+  // Ver.6 Phase 5: 300/400/500%のDOPA%実績。persist=false（QAジャンプ）では自己ベストと
+  // 同様に一切解除しない。baseResult（200%到達時点、120/200%の実績解除を含みうる）の
+  // newlyUnlockedAchievementsに追記する形でまとめる——結果画面は最終的なFinalResultV4
+  // 1つだけを見れば、このプレイで新しく解除された実績が全て分かる。
+  const challenge500NewUnlocks = persist ? checkDopaPercentAchievements(finalPercent) : []
+  // Ver.6 Phase 5.1: DOPA 490（FINAL QUESTION到達）実績。bestPercentの閾値では表現できない
+  // ため、state.reached490を直接の判定材料にする専用関数を使う（engine/challenge500Engine.ts参照）。
+  const finalQuestionNewUnlocks = persist ? checkFinalQuestionAchievement(state.reached490) : []
+
+  return {
+    ...baseResult,
+    percent: finalPercent,
+    rawPercent: finalPercent,
+    type,
+    comment,
+    isNewBest,
+    bestPercent: isNewBest ? finalPercent : bestBefore,
+    challenge500: { floor: state.floor, cleared: state.cleared },
+    newlyUnlockedAchievements: [
+      ...(baseResult.newlyUnlockedAchievements ?? []),
+      ...challenge500NewUnlocks,
+      ...finalQuestionNewUnlocks,
+    ],
   }
 }

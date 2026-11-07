@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQuestionStartRef } from '../useQuestionStartRef'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { randInt } from '../../engine/random'
@@ -28,7 +29,7 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   const { flashIndex, target } = spec.data as { flashIndex: number; target: number }
   const [flashed, setFlashed] = useState(false)
   const [flashing, setFlashing] = useState(false)
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const guardRef = useRef<ReturnType<typeof createResolveOnce<FinalQuestionResult>> | null>(null)
   if (!guardRef.current) guardRef.current = createResolveOnce(onResult)
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { pickExcluding, randInt } from '../engine/random'
 import { QuestionShell } from './QuestionShell'
@@ -28,7 +29,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
     preDelayMs: number
   }
   const [changed, setChanged] = useState(false)
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const changedAtRef = useRef<number | null>(null)
   const doneRef = useRef(false)
 

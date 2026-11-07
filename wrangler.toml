@@ -1,0 +1,23 @@
+name = "dopagaki-game"
+compatibility_date = "2026-10-21"
+main = "src/worker/index.ts"
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+# Ver.6 Phase 5.1（Challengeバックエンド基盤）: /api/* だけをWorkerスクリプトへ渡す。
+# これ以外の全パス（既存のSPA本体）は従来どおり静的アセット優先のまま、一切挙動を変えない。
+run_worker_first = ["/api/*"]
+
+[previews]
+
+# Ver.6 Phase 5.1: Challengeバックエンド用D1データベース（Preview専用、Productionとは
+# 完全に分離した名前・バインディング）。database_idは実際にCloudflareアカウント上で
+# `wrangler d1 create dopagaki-challenges-preview` を実行して得られる値が必要なため、
+# 現時点ではこのブロックごと未設定にしてある（このファイルの一番下に理由を記載）。
+#
+# [[d1_databases]]
+# binding = "CHALLENGE_DB"
+# database_name = "dopagaki-challenges-preview"
+# database_id = "<wrangler d1 create 実行後に得られるID>"
+# migrations_dir = "migrations"

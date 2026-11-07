@@ -1,23 +1,23 @@
 import { useEffect, useRef } from 'react'
+import { ShapeIcon, SHAPE_IDS, SHAPE_LABELS, type ShapeId } from '../components/ShapeIcon'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { pick, shuffle } from '../engine/random'
 import { QuestionShell } from './QuestionShell'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
-const COLORS = [
-  { id: 'red', label: '赤', hex: '#ef4444' },
-  { id: 'blue', label: '青', hex: '#3b82f6' },
-  { id: 'green', label: '緑', hex: '#22c55e' },
-  { id: 'yellow', label: '黄', hex: '#eab308' },
-]
-
+/**
+ * Ver.6 Phase 1: 旧「○色を押せ！」（色識別が正解条件だった問題）を、色覚特性に
+ * 依存しない図形（○△□×）の識別に置き換えた。typeId（'color'）・難易度調整・
+ * プール登録は変更せず、内部の正解条件と描画だけを色→図形に差し替えている。
+ */
 function generate() {
-  return { target: pick(COLORS), options: shuffle(COLORS) }
+  return { target: pick(SHAPE_IDS), options: shuffle(SHAPE_IDS) }
 }
 
 function Component({ spec, onResult }: QuestionComponentProps) {
-  const { target, options } = spec.data as { target: (typeof COLORS)[0]; options: typeof COLORS }
-  const startRef = useRef(performance.now())
+  const { target, options } = spec.data as { target: ShapeId; options: ShapeId[] }
+  const startRef = useQuestionStartRef()
   const doneRef = useRef(false)
 
   useEffect(() => {
@@ -33,15 +33,16 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction={`${target.label}を押せ！`}>
+    <QuestionShell instruction={`${SHAPE_LABELS[target]}を押せ！`}>
       <div className="grid grid-cols-2 gap-5">
-        {options.map((c) => (
+        {options.map((s) => (
           <button
-            key={c.id}
-            onPointerDown={() => finish(c.id === target.id, performance.now() - startRef.current)}
-            className="h-20 w-20 rounded-full active:scale-90"
-            style={{ backgroundColor: c.hex }}
-          />
+            key={s}
+            onPointerDown={() => finish(s === target, performance.now() - startRef.current)}
+            className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 active:scale-90"
+          >
+            <ShapeIcon shape={s} size={44} />
+          </button>
         ))}
       </div>
     </QuestionShell>

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useQuestionStartRef } from '../useQuestionStartRef'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { randInt, shuffle } from '../../engine/random'
@@ -22,7 +23,7 @@ function computeTargetTimeMs() {
 
 function Component({ spec, onResult }: FinalQuestionComponentProps) {
   const { numbers, target } = spec.data as { numbers: number[]; target: number }
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const guardRef = useRef<ReturnType<typeof createResolveOnce<FinalQuestionResult>> | null>(null)
   if (!guardRef.current) guardRef.current = createResolveOnce(onResult)
 

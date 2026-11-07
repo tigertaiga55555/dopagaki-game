@@ -5,9 +5,15 @@ import { getBestPercent } from '../utils/storage'
 
 interface Props {
   onStart: () => void
+  /** Ver.6 Phase 4: Endless難易度選択画面への入口。 */
+  onStartEndless: () => void
+  /** Ver.6 Phase 5: Profile/Achievement/Rankingへのサブ導線。 */
+  onOpenProfile: () => void
+  onOpenAchievements: () => void
+  onOpenRanking: () => void
 }
 
-export function TitleScreen({ onStart }: Props) {
+export function TitleScreen({ onStart, onStartEndless, onOpenProfile, onOpenAchievements, onOpenRanking }: Props) {
   const best = getBestPercent()
 
   return (
@@ -22,14 +28,42 @@ export function TitleScreen({ onStart }: Props) {
         ))}
       </div>
 
-      <button
-        onClick={onStart}
-        className="w-full max-w-xs rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-6 text-2xl font-black tracking-widest text-white shadow-[0_8px_0_0_rgba(126,34,206,0.8)] transition-transform active:translate-y-1 active:shadow-[0_2px_0_0_rgba(126,34,206,0.8)]"
-      >
-        {TITLE_TEXT.startButton}
-      </button>
+      <div className="flex w-full max-w-xs flex-col gap-3">
+        <button
+          onClick={onStart}
+          className="w-full rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-6 text-2xl font-black tracking-widest text-white shadow-[0_8px_0_0_rgba(126,34,206,0.8)] transition-transform active:translate-y-1 active:shadow-[0_2px_0_0_rgba(126,34,206,0.8)]"
+        >
+          {TITLE_TEXT.startButton}
+        </button>
+
+        {/* Ver.6 Phase 4: 新モードENDLESSへの入口。メインのSTARTボタンより明確に控えめな
+            見た目にし、既存のホーム画面レイアウト・世界観を歪めない。 */}
+        <button
+          onClick={onStartEndless}
+          className="w-full rounded-2xl border border-white/15 bg-white/5 py-3 text-base font-black tracking-widest text-white/80 transition-transform active:scale-95"
+        >
+          ENDLESS
+        </button>
+      </div>
 
       {best > 0 && <p className="text-xs text-white/40">自己ベスト：ドパガキ度 {best}％</p>}
+
+      {/* Ver.6 Phase 5: Profile/Achievement/Rankingへのサブ導線。START/ENDLESSの主導線を
+          弱めないよう、あくまで控えめな小さいテキストリンク3つに留める
+          （アプリの管理画面のような見た目にしない）。 */}
+      <div className="flex items-center gap-4 text-[11px] font-bold text-white/35">
+        <button onClick={onOpenProfile} className="flex items-center gap-1 active:text-white/60">
+          <span aria-hidden="true">👤</span> PROFILE
+        </button>
+        <span className="text-white/15">|</span>
+        <button onClick={onOpenAchievements} className="flex items-center gap-1 active:text-white/60">
+          <span aria-hidden="true">🏆</span> ACHIEVEMENT
+        </button>
+        <span className="text-white/15">|</span>
+        <button onClick={onOpenRanking} className="flex items-center gap-1 active:text-white/60">
+          <span aria-hidden="true">📊</span> RANKING
+        </button>
+      </div>
 
       <AdSlot adTag={AD_START_SCREEN.tag} width={AD_START_SCREEN.width} height={AD_START_SCREEN.height} label={AD_START_SCREEN.slotName} />
     </div>

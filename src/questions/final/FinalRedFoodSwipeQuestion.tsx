@@ -1,53 +1,33 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
+import { ShapeIcon, SHAPE_IDS, SHAPE_LABELS, type ShapeId } from '../../components/ShapeIcon'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
-import { pick } from '../../engine/random'
+import { pick, pickExcluding } from '../../engine/random'
 import { sfx } from '../../utils/sound'
+import { useInputGateReady } from '../useInputGateReady'
+import { useQuestionStartRef } from '../useQuestionStartRef'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
 const SWIPE_THRESHOLD_PX = 50
+const BADGE_SHAPE: ShapeId = 'circle'
 
-const RED_FOOD = [
-  { icon: '🍎', hex: '#ef4444' },
-  { icon: '🍓', hex: '#ef4444' },
-  { icon: '🌶️', hex: '#ef4444' },
-]
-const NON_RED_FOOD = [
-  { icon: '🍌', hex: '#eab308' },
-  { icon: '🍇', hex: '#a855f7' },
-  { icon: '🥦', hex: '#22c55e' },
-]
-const RED_NONFOOD = [
-  { icon: '🚗', hex: '#ef4444' },
-  { icon: '❤️', hex: '#ef4444' },
-  { icon: '🎈', hex: '#ef4444' },
-]
-const NONRED_NONFOOD = [
-  { icon: '⭐', hex: '#eab308' },
-  { icon: '📱', hex: '#3b82f6' },
-  { icon: '🎸', hex: '#a855f7' },
-]
-
-type Category = 'redFood' | 'nonRedFood' | 'redNonFood' | 'nonRedNonFood'
-const POOLS: Record<Category, { icon: string; hex: string }[]> = {
-  redFood: RED_FOOD,
-  nonRedFood: NON_RED_FOOD,
-  redNonFood: RED_NONFOOD,
-  nonRedNonFood: NONRED_NONFOOD,
-}
-const CATEGORIES: Category[] = ['redFood', 'nonRedFood', 'redNonFood', 'nonRedNonFood']
+const FOOD_ICONS = ['🍎', '🍓', '🌶️', '🍌', '🍇', '🥦']
+const NONFOOD_ICONS = ['🚗', '❤️', '🎈', '⭐', '📱', '🎸']
 
 /**
- * FINAL DOPA TRIAL Q5〜Q8（2条件処理プール）：「赤い食べ物は右、それ以外は左へスワイプ！」。
- * 「赤色である」＋「食べ物である」のAND条件。赤いのに食べ物じゃない物（❤️等）・
- * 食べ物なのに赤くない物（🍌等）をディストラクターとして混ぜ、単一条件だけでの
- * 誤判断を誘発する。
+ * Ver.6 Phase 1: 旧「赤い食べ物は右、それ以外は左！」（色識別が正解条件の半分だった
+ * 問題）を再設計した。「赤である」の代わりに、カードの隅に図形バッジ（○固定）を
+ * 付け、「バッジが○である」＋「食べ物である」のAND条件にした。バッジが○なのに
+ * 食べ物じゃない物・食べ物なのにバッジが○じゃない物をディストラクターとして混ぜ、
+ * 単一条件だけでの誤判断を誘発する構成は旧実装を踏襲している。
  */
 function generate() {
-  const category = pick(CATEGORIES)
-  const item = pick(POOLS[category])
-  const isRightAnswer = category === 'redFood'
-  return { icon: item.icon, hex: item.hex, isRightAnswer }
+  const isFood = Math.random() < 0.5
+  const icon = isFood ? pick(FOOD_ICONS) : pick(NONFOOD_ICONS)
+  const hasBadge = Math.random() < 0.5
+  const badgeShape = hasBadge ? BADGE_SHAPE : pickExcluding(SHAPE_IDS, BADGE_SHAPE)
+  const isRightAnswer = isFood && hasBadge
+  return { icon, badgeShape, isRightAnswer }
 }
 
 function computeTargetTimeMs() {
@@ -55,11 +35,12 @@ function computeTargetTimeMs() {
 }
 
 function Component({ spec, onResult }: FinalQuestionComponentProps) {
-  const { icon, isRightAnswer } = spec.data as { icon: string; hex: string; isRightAnswer: boolean }
-  const startRef = useRef(performance.now())
+  const { icon, badgeShape, isRightAnswer } = spec.data as { icon: string; badgeShape: ShapeId; isRightAnswer: boolean }
+  const startRef = useQuestionStartRef()
   const guardRef = useRef<ReturnType<typeof createResolveOnce<FinalQuestionResult>> | null>(null)
   if (!guardRef.current) guardRef.current = createResolveOnce(onResult)
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
+  const ready = useInputGateReady()
 
   useEffect(() => {
     const timer = setTimeout(() => finish(false), spec.targetTimeMs)
@@ -72,11 +53,12 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   }
 
   function handlePointerDown(e: ReactPointerEvent) {
+    if (!ready) return
     e.currentTarget.setPointerCapture(e.pointerId)
     dragStartRef.current = { x: e.clientX, y: e.clientY }
   }
   function handlePointerUp(e: ReactPointerEvent) {
-    if (!dragStartRef.current || guardRef.current!.isResolved) return
+    if (!ready || !dragStartRef.current || guardRef.current!.isResolved) return
     const dx = e.clientX - dragStartRef.current.x
     dragStartRef.current = null
     if (Math.abs(dx) < SWIPE_THRESHOLD_PX) return
@@ -96,10 +78,15 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
     >
       <div className="relative z-10 flex w-full max-w-xs items-center justify-between px-1 text-xs font-black">
         <span className="text-sky-300">← それ以外は左へ</span>
-        <span className="text-red-300">赤い食べ物は右へ →</span>
+        <span className="text-amber-300">{SHAPE_LABELS[BADGE_SHAPE]}の食べ物は右へ →</span>
       </div>
-      <div className="relative z-10 flex flex-1 flex-col items-center justify-center">
-        <p className="text-8xl">{icon}</p>
+      <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-2">
+        <div className="relative">
+          <p className="text-8xl">{icon}</p>
+          <div className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/15">
+            <ShapeIcon shape={badgeShape} size={20} />
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -107,7 +94,7 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
 
 export const FinalRedFoodSwipeModule: FinalQuestionModule = {
   id: 'finalRedFoodSwipe',
-  tags: ['color', 'swipe', 'inhibition'],
+  tags: ['swipe', 'inhibition'],
   tier: 'twoCondition',
   generate,
   computeTargetTimeMs,

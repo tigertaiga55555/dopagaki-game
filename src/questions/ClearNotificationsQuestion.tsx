@@ -1,38 +1,36 @@
 import { useEffect, useRef, useState } from 'react'
+import { ShapeIcon, SHAPE_IDS, SHAPE_LABELS, type ShapeId } from '../components/ShapeIcon'
 import { TIMING_SAFETY } from '../config/timingConfig'
-import { randInt, shuffle } from '../engine/random'
+import { pickExcluding, randInt, shuffle } from '../engine/random'
 import { sfx } from '../utils/sound'
 import { QuestionShell } from './QuestionShell'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import type { QuestionComponentProps, QuestionModule } from '../types'
-
-const OTHER_COLORS = ['#3b82f6', '#22c55e', '#a855f7']
 
 interface Badge {
   id: number
   isTarget: boolean
-  hex: string
+  shape: ShapeId
 }
 
 /**
- * 「通知を消せ」：通知バッジを見ると全部消したくなる、というドパガキの衝動を狙う。
- *
- * Ver.4.6の重要な修正：外側の汎用タイムアウトが一度きりだったため、1個目を見つけるのに
- * 想定よりわずかに時間がかかっただけで、正しく消し続けている最中にタイムアウトが
- * 先に発火してMISSになるレースがあった。正しく1個消すたびに、残り対象数ぶんの猶予で
- * タイマーを引き直すことでこれを防ぐ。
+ * Ver.6 Phase 1: 旧「赤い通知だけ消せ！」（色識別が正解条件だった問題）を、
+ * 対象図形の通知だけを消す課題に再設計。タイマー再設定ロジック等、既存の
+ * バグ修正（Ver.4.6）はそのまま維持している。
  */
 function generate() {
+  const target = SHAPE_IDS[randInt(0, SHAPE_IDS.length - 1)]
   const targetCount = randInt(3, 4)
   const distractorCount = randInt(2, 3)
   const badges: Badge[] = [
-    ...Array.from({ length: targetCount }, (_, i) => ({ id: i, isTarget: true, hex: '#ef4444' })),
+    ...Array.from({ length: targetCount }, (_, i) => ({ id: i, isTarget: true, shape: target })),
     ...Array.from({ length: distractorCount }, (_, i) => ({
       id: targetCount + i,
       isTarget: false,
-      hex: OTHER_COLORS[randInt(0, OTHER_COLORS.length - 1)],
+      shape: pickExcluding(SHAPE_IDS, target),
     })),
   ]
-  return { badges: shuffle(badges), targetCount }
+  return { badges: shuffle(badges), targetCount, target }
 }
 
 function computeMinTargetTimeMs(data: Record<string, unknown>) {
@@ -41,9 +39,9 @@ function computeMinTargetTimeMs(data: Record<string, unknown>) {
 }
 
 function Component({ spec, onResult }: QuestionComponentProps) {
-  const { badges, targetCount } = spec.data as { badges: Badge[]; targetCount: number }
+  const { badges, targetCount, target } = spec.data as { badges: Badge[]; targetCount: number; target: ShapeId }
   const [cleared, setCleared] = useState<Set<number>>(new Set())
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const doneRef = useRef(false)
   const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -90,15 +88,17 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction="赤い通知だけ消せ！">
+    <QuestionShell instruction={`${SHAPE_LABELS[target]}の通知だけ消せ！`}>
       <div className="grid grid-cols-3 gap-4">
         {badges.map((badge) => (
           <button
             key={badge.id}
             onPointerDown={() => handleTap(badge)}
-            className="flex h-16 w-16 items-center justify-center rounded-full transition-opacity active:scale-90"
-            style={{ backgroundColor: badge.hex, opacity: cleared.has(badge.id) ? 0.15 : 1 }}
-          />
+            className="flex h-16 w-16 items-center justify-center rounded-full bg-white/10 transition-opacity active:scale-90"
+            style={{ opacity: cleared.has(badge.id) ? 0.15 : 1 }}
+          >
+            <ShapeIcon shape={badge.shape} size={32} />
+          </button>
         ))}
       </div>
     </QuestionShell>
