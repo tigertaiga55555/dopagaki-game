@@ -45,8 +45,8 @@ describe('playerStatsRepository (Ver.6 Phase 5: 既存storageを二重管理し�
   })
 
   it('achievementCountが実際の解除数と一致する', () => {
-    checkDopaPercentAchievements(250)
-    expect(localPlayerStatsRepository.getPlayerStats().achievementCount).toBe(3)
+    checkDopaPercentAchievements(250) // dopa50/100/120/150/200/250の6個
+    expect(localPlayerStatsRepository.getPlayerStats().achievementCount).toBe(6)
   })
 
   it('worldBattleWins/worldBattleMaxStreakは未実装のため常にundefined（偽の0を持たない）', () => {

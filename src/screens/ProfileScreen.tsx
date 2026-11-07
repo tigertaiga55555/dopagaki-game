@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { BackButton } from '../components/BackButton'
-import { PRESET_ICON_EMOJI } from '../config/profileConfig'
+import { ACHIEVEMENT_DEFS } from '../config/achievements'
+import { resolveAvatarEmoji } from '../config/profileConfig'
 import { TITLE_DEFS_BY_ID } from '../config/titles'
 import { trackProfileView } from '../utils/analytics'
 import { localPlayerStatsRepository } from '../utils/playerStatsRepository'
@@ -38,7 +39,7 @@ export function ProfileScreen({ onBack, onEdit, onAchievements, onRanking }: Pro
         {/* プレイヤーカード */}
         <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-3xl border border-fuchsia-400/20 bg-gradient-to-b from-white/[0.06] to-white/[0.02] px-6 py-6 text-center shadow-[0_0_30px_rgba(217,70,239,0.08)]">
           <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-fuchsia-400/50 bg-fuchsia-500/10 text-4xl shadow-[0_0_20px_rgba(217,70,239,0.3)]">
-            {PRESET_ICON_EMOJI[profile.iconId]}
+            {resolveAvatarEmoji(profile.avatar)}
           </div>
           <p className="text-xl font-black text-white">{profile.nickname}</p>
           <p className="text-xs font-bold tracking-widest text-fuchsia-300/90">
@@ -59,7 +60,7 @@ export function ProfileScreen({ onBack, onEdit, onAchievements, onRanking }: Pro
           <StatRow label="Endless 初級 BEST" value={`${stats.endlessBeginnerBest} STREAK`} />
           <StatRow label="Endless 中級 BEST" value={`${stats.endlessIntermediateBest} STREAK`} />
           <StatRow label="Endless 上級 BEST" value={`${stats.endlessAdvancedBest} STREAK`} />
-          <StatRow label="実績解除数" value={`${stats.achievementCount} / 6`} />
+          <StatRow label="実績解除数" value={`${stats.achievementCount} / ${ACHIEVEMENT_DEFS.length}`} />
         </div>
 
         <div className="flex w-full max-w-xs flex-col gap-3">

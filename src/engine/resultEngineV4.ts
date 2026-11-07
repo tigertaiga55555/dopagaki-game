@@ -1,6 +1,6 @@
 import { getNearMissComment } from '../config/messagesV4'
 import { NORMAL_TYPES, TYPE_THRESHOLDS, getOverdriveTitle } from '../config/resultTypesV4'
-import { checkDopaPercentAchievements } from '../utils/achievementStorage'
+import { checkDopaPercentAchievements, checkFinalQuestionAchievement } from '../utils/achievementStorage'
 import { getBestPercent, getPlayCount, incrementPlayCount, updateBestPercent } from '../utils/storage'
 import type { Challenge500State } from './challenge500Engine'
 import type { RushFinishPayload } from './useRushGame'
@@ -292,6 +292,9 @@ export function computeChallenge500Result(state: Challenge500State, baseResult: 
   // newlyUnlockedAchievementsに追記する形でまとめる——結果画面は最終的なFinalResultV4
   // 1つだけを見れば、このプレイで新しく解除された実績が全て分かる。
   const challenge500NewUnlocks = persist ? checkDopaPercentAchievements(finalPercent) : []
+  // Ver.6 Phase 5.1: DOPA 490（FINAL QUESTION到達）実績。bestPercentの閾値では表現できない
+  // ため、state.reached490を直接の判定材料にする専用関数を使う（engine/challenge500Engine.ts参照）。
+  const finalQuestionNewUnlocks = persist ? checkFinalQuestionAchievement(state.reached490) : []
 
   return {
     ...baseResult,
@@ -302,6 +305,10 @@ export function computeChallenge500Result(state: Challenge500State, baseResult: 
     isNewBest,
     bestPercent: isNewBest ? finalPercent : bestBefore,
     challenge500: { floor: state.floor, cleared: state.cleared },
-    newlyUnlockedAchievements: [...(baseResult.newlyUnlockedAchievements ?? []), ...challenge500NewUnlocks],
+    newlyUnlockedAchievements: [
+      ...(baseResult.newlyUnlockedAchievements ?? []),
+      ...challenge500NewUnlocks,
+      ...finalQuestionNewUnlocks,
+    ],
   }
 }

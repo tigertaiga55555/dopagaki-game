@@ -293,8 +293,50 @@ export interface FinalTrialResultInfo {
  */
 export type PlayerId = string
 
-/** Ver.6 Phase 5: プロフィールアイコン。外部画像は使わず、既存のemoji数種から選ぶだけ。 */
-export type PresetIconId = 'bolt' | 'flame' | 'skull' | 'eye' | 'swirl' | 'star' | 'crown' | 'gem'
+/**
+ * Ver.6 Phase 5.1（icon拡充）: プロフィールアイコン。外部画像は使わず、既存のemoji
+ * 24種から選ぶだけ。既存8種（bolt〜gem）のidは互換性維持のため一切変更していない。
+ */
+export type PresetIconId =
+  // ネオン系（既存8種、Ver.6 Phase 5からそのまま）
+  | 'bolt'
+  | 'flame'
+  | 'skull'
+  | 'eye'
+  | 'swirl'
+  | 'star'
+  | 'crown'
+  | 'gem'
+  // 顔
+  | 'devil'
+  | 'sunglasses'
+  | 'mindblown'
+  | 'hot'
+  | 'ogre'
+  // 動物
+  | 'cat'
+  | 'wolf'
+  | 'fox'
+  | 'frog'
+  // ゲーム的
+  | 'joystick'
+  | 'target'
+  | 'trophy'
+  | 'dice'
+  // エフェクト
+  | 'boom'
+  | 'rainbow'
+  | 'crystalball'
+
+/**
+ * Ver.6 Phase 5.1: プロフィールアイコンの参照。今回はpresetのみ使用するが、将来
+ * 自分の写真（サーバー画像ストレージ実装後）を追加しやすいよう、最初からkindで
+ * 分岐する判別共用体にしてある。remoteCustomは今回どこからも生成しない
+ * （型だけ先に用意し、実際のアップロード機能はサーバーProfile基盤＋R2実装時に追加する）。
+ */
+export type AvatarRef =
+  | { kind: 'preset'; iconId: PresetIconId }
+  | { kind: 'remoteCustom'; url: string }
 
 /**
  * Ver.6 Phase 5: ログイン不要のローカルプロフィール。将来Public Profile（サーバー接続後）
@@ -303,23 +345,62 @@ export type PresetIconId = 'bolt' | 'flame' | 'skull' | 'eye' | 'swirl' | 'star'
 export interface PlayerProfile {
   playerId: PlayerId
   nickname: string
-  iconId: PresetIconId
+  /** Ver.6 Phase 5.1: 旧来の`iconId`フラットフィールドから移行。既存ユーザーの保存値は
+   *  utils/profileStorage.tsのgetProfile()が透過的に{kind:'preset', iconId}へ変換する。 */
+  avatar: AvatarRef
   /** 装備中Title（config/titles.tsのTitleDef.id）。未装備はnull。 */
   equippedTitleId: TitleId | null
   createdAt: number
 }
 
 /**
- * Ver.6 Phase 5: DOPA%系実績（6個）の識別子。idはnameと分離してあり、将来名称だけを
+ * Ver.6 Phase 5.1（Achievement大幅拡充）: 実績の識別子。DOPA%系12個
+ * （既存6個のidは維持：dopa100/120/200/300/400/500）＋Endless系12個
+ * （初級/中級/上級×4段階）＝計24個。idはnameと分離してあり、将来名称だけを
  * 差し替えてもid・解除済みフラグには一切影響しない。
  */
-export type AchievementId = 'dopa100' | 'dopa120' | 'dopa200' | 'dopa300' | 'dopa400' | 'dopa500'
+export type AchievementId =
+  | 'dopa50'
+  | 'dopa100'
+  | 'dopa120'
+  | 'dopa150'
+  | 'dopa200'
+  | 'dopa250'
+  | 'dopa300'
+  | 'dopa350'
+  | 'dopa400'
+  | 'dopa450'
+  | 'dopa490'
+  | 'dopa500'
+  | 'endlessBeginner10'
+  | 'endlessBeginner25'
+  | 'endlessBeginner50'
+  | 'endlessBeginner100'
+  | 'endlessIntermediate5'
+  | 'endlessIntermediate15'
+  | 'endlessIntermediate30'
+  | 'endlessIntermediate50'
+  | 'endlessAdvanced3'
+  | 'endlessAdvanced10'
+  | 'endlessAdvanced20'
+  | 'endlessAdvanced30'
 
-/** 実績の解除条件。今回はDOPA%到達の1種類のみだが、将来の拡張（Endless記録等）に備えて種別を持たせてある。 */
-export interface AchievementUnlockCondition {
-  type: 'dopaPercent'
-  threshold: number
-}
+/**
+ * 実績の解除条件。
+ * - dopaPercent: 通常モード・FINAL DOPA TRIAL・500%チャレンジのいずれで到達しても共通の
+ *   bestPercentV4（utils/storage.ts）がthreshold以上になった時点で解除。
+ * - endlessStreak: 難易度別のEndless自己ベストがthreshold以上になった時点で解除。
+ * - challenge500FinalQuestion: 490%（FINAL QUESTION、あと1問で500%）到達という一度きりの
+ *   イベント。bestPercentの閾値では表現できない（490はMISSなら400へ、正解なら500へ
+ *   瞬時に遷移し、記録される最終%として490そのものが残ることがないため）、専用の種別。
+ */
+export type AchievementUnlockCondition =
+  | { type: 'dopaPercent'; threshold: number }
+  | { type: 'endlessStreak'; difficulty: EndlessDifficulty; threshold: number }
+  | { type: 'challenge500FinalQuestion' }
+
+/** 実績のカテゴリ（Achievement画面のALL/DOPA/ENDLESSフィルタに使う）。 */
+export type AchievementCategory = 'dopa' | 'endless'
 
 /** 実績定義（config/achievements.ts）。id/name/description/unlockConditionを分離し、名称だけの差し替えを容易にする。 */
 export interface AchievementDef {
@@ -327,6 +408,9 @@ export interface AchievementDef {
   name: string
   description: string
   unlockCondition: AchievementUnlockCondition
+  category: AchievementCategory
+  /** categoryが'endless'の場合のみ存在。Achievement画面のカード上に難易度バッジを出すために使う。 */
+  endlessDifficulty?: EndlessDifficulty
 }
 
 /**

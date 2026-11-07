@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { BackButton } from '../components/BackButton'
-import { NICKNAME_MAX_LENGTH, PRESET_ICONS, PRESET_ICON_EMOJI } from '../config/profileConfig'
+import { ICON_CATEGORIES, NICKNAME_MAX_LENGTH, PRESET_ICON_EMOJI, resolveAvatarEmoji } from '../config/profileConfig'
 import { trackProfileEdit } from '../utils/analytics'
 import { getProfile, updateIcon, updateNickname } from '../utils/profileStorage'
 import type { PresetIconId } from '../types'
@@ -10,13 +10,15 @@ interface Props {
 }
 
 /**
- * Ver.6 Phase 5（Profile/Achievement/Ranking基盤）: ニックネーム編集＋プリセットアイコン選択。
- * ユーザー画像アップロードは今回実装しない（既存emojiのプリセットから選ぶだけ）。
+ * Ver.6 Phase 5.1（icon拡充）: ニックネーム編集＋プリセットアイコン選択（24種、5カテゴリ）。
+ * ユーザー画像アップロードは今回実装しない（既存emojiのプリセットから選ぶだけ。
+ * 将来の自分の写真設定は、サーバーProfile基盤＋画像ストレージ実装時にavatar.kind=
+ * 'remoteCustom'として追加する想定——types.ts AvatarRef参照）。
  */
 export function ProfileEditScreen({ onDone }: Props) {
   const initial = getProfile()
   const [nickname, setNickname] = useState(initial.nickname)
-  const [iconId, setIconId] = useState<PresetIconId>(initial.iconId)
+  const [iconId, setIconId] = useState<PresetIconId>(initial.avatar.kind === 'preset' ? initial.avatar.iconId : 'bolt')
 
   function handleSave() {
     updateNickname(nickname)
@@ -29,11 +31,11 @@ export function ProfileEditScreen({ onDone }: Props) {
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
       <BackButton onBack={onDone} label="キャンセル" />
 
-      <div className="flex flex-1 flex-col items-center gap-6 px-6 py-4">
+      <div className="flex flex-1 flex-col items-center gap-6 px-6 py-4 pb-10">
         <h1 className="text-lg font-black tracking-widest text-white">プロフィール編集</h1>
 
         <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-fuchsia-400/50 bg-fuchsia-500/10 text-4xl shadow-[0_0_20px_rgba(217,70,239,0.3)]">
-          {PRESET_ICON_EMOJI[iconId]}
+          {resolveAvatarEmoji({ kind: 'preset', iconId })}
         </div>
 
         <div className="w-full max-w-xs">
@@ -55,25 +57,32 @@ export function ProfileEditScreen({ onDone }: Props) {
           />
         </div>
 
-        <div className="w-full max-w-xs">
-          <p className="mb-2 text-xs font-bold text-white/50">アイコンを選ぶ</p>
-          <div className="grid grid-cols-4 gap-3">
-            {PRESET_ICONS.map((id) => {
-              const selected = id === iconId
-              return (
-                <button
-                  key={id}
-                  onClick={() => setIconId(id)}
-                  aria-pressed={selected}
-                  className={`flex aspect-square items-center justify-center rounded-2xl text-2xl transition-transform active:scale-90 ${
-                    selected ? 'border-2 border-fuchsia-400 bg-fuchsia-500/20 shadow-[0_0_14px_rgba(217,70,239,0.4)]' : 'border border-white/10 bg-white/5'
-                  }`}
-                >
-                  {PRESET_ICON_EMOJI[id]}
-                </button>
-              )
-            })}
-          </div>
+        <div className="w-full max-w-xs space-y-4">
+          <p className="text-xs font-bold text-white/50">アイコンを選ぶ</p>
+          {ICON_CATEGORIES.map((category) => (
+            <div key={category.id}>
+              <p className="mb-1.5 text-[10px] font-black tracking-widest text-white/35">{category.label}</p>
+              <div className="grid grid-cols-5 gap-2.5">
+                {category.icons.map((id) => {
+                  const selected = id === iconId
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => setIconId(id)}
+                      aria-pressed={selected}
+                      className={`flex aspect-square items-center justify-center rounded-2xl text-xl transition-transform active:scale-90 ${
+                        selected
+                          ? 'border-2 border-fuchsia-400 bg-fuchsia-500/20 shadow-[0_0_14px_rgba(217,70,239,0.4)]'
+                          : 'border border-white/10 bg-white/5'
+                      }`}
+                    >
+                      {PRESET_ICON_EMOJI[id]}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
 
         <button

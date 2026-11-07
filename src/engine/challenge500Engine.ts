@@ -14,6 +14,14 @@ export interface Challenge500State {
   ended: boolean
   /** 500%に到達して完全クリアしたか */
   cleared: boolean
+  /**
+   * Ver.6 Phase 5.1（Achievement拡充）: 490%（FINAL QUESTION、あと1問で500%）へ一度でも
+   * 到達したか。一度trueになったら、その後MISSで400%へ戻っても（cleared=falseのままでも）
+   * falseには戻らない——「到達したという事実」自体を表すフラグのため。bestPercentV4の
+   * 閾値では表現できない（MISS時は400、クリア時は500が記録され、490そのものが最終%として
+   * 残ることがない）ため、DOPA 490実績の判定専用にこのフラグを新設した。
+   */
+  reached490: boolean
 }
 
 export function createChallenge500State(): Challenge500State {
@@ -22,6 +30,7 @@ export function createChallenge500State(): Challenge500State {
     floor: CHALLENGE500_CONFIG.startPercent,
     ended: false,
     cleared: false,
+    reached490: false,
   }
 }
 
@@ -38,10 +47,12 @@ function securedFloor(currentFloor: number, percent: number): number {
 export function applyCorrect(state: Challenge500State): Challenge500State {
   if (state.ended) return state
   const raw = state.percent + CHALLENGE500_CONFIG.correctGain
+  // 500%クリアは必ず直前が490%からの+10なので、500%へ到達した時点で490%も通過済み扱いにする。
+  const reached490 = state.reached490 || raw >= 490
   if (raw >= CHALLENGE500_CONFIG.clearPercent) {
-    return { percent: CHALLENGE500_CONFIG.clearPercent, floor: CHALLENGE500_CONFIG.clearPercent, ended: true, cleared: true }
+    return { percent: CHALLENGE500_CONFIG.clearPercent, floor: CHALLENGE500_CONFIG.clearPercent, ended: true, cleared: true, reached490: true }
   }
-  return { percent: raw, floor: securedFloor(state.floor, raw), ended: false, cleared: false }
+  return { percent: raw, floor: securedFloor(state.floor, raw), ended: false, cleared: false, reached490 }
 }
 
 /**
@@ -53,10 +64,10 @@ export function applyCorrect(state: Challenge500State): Challenge500State {
  */
 export function createChallenge500StateAt(percent: number): Challenge500State {
   if (percent >= CHALLENGE500_CONFIG.clearPercent) {
-    return { percent: CHALLENGE500_CONFIG.clearPercent, floor: CHALLENGE500_CONFIG.clearPercent, ended: true, cleared: true }
+    return { percent: CHALLENGE500_CONFIG.clearPercent, floor: CHALLENGE500_CONFIG.clearPercent, ended: true, cleared: true, reached490: true }
   }
   const floor = securedFloor(CHALLENGE500_CONFIG.startPercent, percent)
-  return { percent, floor, ended: false, cleared: false }
+  return { percent, floor, ended: false, cleared: false, reached490: percent >= 490 }
 }
 
 /**
@@ -77,12 +88,12 @@ export function applyMiss(state: Challenge500State): Challenge500State {
   if (state.ended) return state
   const tier = tierForPercent(state.percent)
   if (tier === 3) {
-    return { percent: state.floor, floor: state.floor, ended: true, cleared: false }
+    return { percent: state.floor, floor: state.floor, ended: true, cleared: false, reached490: state.reached490 }
   }
   const penalty = tier === 1 ? CHALLENGE500_CONFIG.missPenaltyTier1 : CHALLENGE500_CONFIG.missPenaltyTier2
   const raw = state.percent - penalty
   if (raw <= state.floor) {
-    return { percent: state.floor, floor: state.floor, ended: true, cleared: false }
+    return { percent: state.floor, floor: state.floor, ended: true, cleared: false, reached490: state.reached490 }
   }
-  return { percent: raw, floor: state.floor, ended: false, cleared: false }
+  return { percent: raw, floor: state.floor, ended: false, cleared: false, reached490: state.reached490 }
 }

@@ -148,32 +148,32 @@ describe('challenge500Engine', () => {
   describe('createChallenge500StateAt (QA/Preview jump helper)', () => {
     it('200 -> start state, floor 200, not ended', () => {
       const s = createChallenge500StateAt(200)
-      expect(s).toEqual({ percent: 200, floor: 200, ended: false, cleared: false })
+      expect(s).toEqual({ percent: 200, floor: 200, ended: false, cleared: false, reached490: false })
     })
 
     it('300 -> floor secures at 300 (the checkpoint itself)', () => {
       const s = createChallenge500StateAt(300)
-      expect(s).toEqual({ percent: 300, floor: 300, ended: false, cleared: false })
+      expect(s).toEqual({ percent: 300, floor: 300, ended: false, cleared: false, reached490: false })
     })
 
     it('400 -> floor secures at 400', () => {
       const s = createChallenge500StateAt(400)
-      expect(s).toEqual({ percent: 400, floor: 400, ended: false, cleared: false })
+      expect(s).toEqual({ percent: 400, floor: 400, ended: false, cleared: false, reached490: false })
     })
 
-    it('490 -> floor stays at the most recently passed checkpoint (400), not 490', () => {
+    it('490 -> floor stays at the most recently passed checkpoint (400), not 490; reached490 becomes true', () => {
       const s = createChallenge500StateAt(490)
-      expect(s).toEqual({ percent: 490, floor: 400, ended: false, cleared: false })
+      expect(s).toEqual({ percent: 490, floor: 400, ended: false, cleared: false, reached490: true })
     })
 
     it('250 (between checkpoints) -> floor stays at the implicit 200 checkpoint', () => {
       const s = createChallenge500StateAt(250)
-      expect(s).toEqual({ percent: 250, floor: 200, ended: false, cleared: false })
+      expect(s).toEqual({ percent: 250, floor: 200, ended: false, cleared: false, reached490: false })
     })
 
-    it('500 or above -> clamped to exactly 500%, ended and cleared', () => {
-      expect(createChallenge500StateAt(500)).toEqual({ percent: 500, floor: 500, ended: true, cleared: true })
-      expect(createChallenge500StateAt(9999)).toEqual({ percent: 500, floor: 500, ended: true, cleared: true })
+    it('500 or above -> clamped to exactly 500%, ended and cleared, reached490 true', () => {
+      expect(createChallenge500StateAt(500)).toEqual({ percent: 500, floor: 500, ended: true, cleared: true, reached490: true })
+      expect(createChallenge500StateAt(9999)).toEqual({ percent: 500, floor: 500, ended: true, cleared: true, reached490: true })
     })
 
     it('a jumped-to state behaves identically to one reached by real play for applyMiss', () => {
@@ -184,6 +184,37 @@ describe('challenge500Engine', () => {
       const jumped = createChallenge500StateAt(390)
       expect(jumped).toEqual(real)
       expect(miss(jumped)).toEqual(miss(real))
+    })
+  })
+
+  describe('reached490 (Ver.6 Phase 5.1: DOPA 490/FINAL QUESTION実績用フラグ)', () => {
+    it('490未到達の間はfalseのまま', () => {
+      let s = createChallenge500State()
+      for (let i = 0; i < 28; i++) s = correct(s) // -> 480
+      expect(s.percent).toBe(480)
+      expect(s.reached490).toBe(false)
+    })
+
+    it('490へ到達した瞬間にtrueになる', () => {
+      let s = createChallenge500State()
+      for (let i = 0; i < 29; i++) s = correct(s) // -> 490
+      expect(s.percent).toBe(490)
+      expect(s.reached490).toBe(true)
+    })
+
+    it('490到達後にMISSで400へ戻っても、reached490はtrueのまま保持される（一度到達した事実は消えない）', () => {
+      let s = createChallenge500State()
+      for (let i = 0; i < 29; i++) s = correct(s) // -> 490
+      s = miss(s) // tier3: 即終了して400へ
+      expect(s.percent).toBe(400)
+      expect(s.ended).toBe(true)
+      expect(s.reached490).toBe(true)
+    })
+
+    it('500%クリア時は、490を経由せずに直接ジャンプしていてもreached490がtrueになる', () => {
+      const s = createChallenge500StateAt(500)
+      expect(s.cleared).toBe(true)
+      expect(s.reached490).toBe(true)
     })
   })
 })

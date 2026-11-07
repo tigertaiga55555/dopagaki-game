@@ -1,6 +1,6 @@
-import { buildDefaultNickname, DEFAULT_ICON_ID, NICKNAME_MAX_LENGTH } from '../config/profileConfig'
+import { buildDefaultNickname, DEFAULT_ICON_ID, NICKNAME_MAX_LENGTH, PRESET_ICONS } from '../config/profileConfig'
 import { isTitleUnlocked } from './achievementStorage'
-import type { PlayerId, PlayerProfile, PresetIconId, TitleId } from '../types'
+import type { AvatarRef, PlayerId, PlayerProfile, PresetIconId, TitleId } from '../types'
 
 /**
  * Ver.6 Phase 5（Profile/Achievement/Ranking基盤）: ログイン不要の匿名プレイヤーIDと
@@ -40,14 +40,37 @@ export function getOrCreatePlayerId(): PlayerId {
 }
 
 function isValidIconId(value: unknown): value is PresetIconId {
-  return typeof value === 'string' && ['bolt', 'flame', 'skull', 'eye', 'swirl', 'star', 'crown', 'gem'].includes(value)
+  return typeof value === 'string' && (PRESET_ICONS as string[]).includes(value)
+}
+
+const DEFAULT_AVATAR: AvatarRef = { kind: 'preset', iconId: DEFAULT_ICON_ID }
+
+/**
+ * Ver.6 Phase 5.1: 保存されていた値（新形式のavatar、または旧形式のフラットなiconId、
+ * またはどちらも無い/壊れている）から、必ず有効なAvatarRefを1つ組み立てる。
+ * 既存ユーザーが持っていた旧iconIdは{kind:'preset', iconId}へそのまま透過的に変換する
+ * （Phase 5.1導入前のユーザーのアイコン選択を失わない）。
+ */
+function resolveAvatar(stored: { avatar?: unknown; iconId?: unknown }): AvatarRef {
+  const avatar = stored.avatar as Partial<AvatarRef> | undefined
+  if (avatar && avatar.kind === 'preset' && isValidIconId(avatar.iconId)) {
+    return { kind: 'preset', iconId: avatar.iconId }
+  }
+  if (avatar && avatar.kind === 'remoteCustom' && typeof avatar.url === 'string' && avatar.url.length > 0) {
+    return { kind: 'remoteCustom', url: avatar.url }
+  }
+  // 旧形式（Ver.6 Phase 5時点のフラットなiconIdフィールド）からの移行。
+  if (isValidIconId(stored.iconId)) {
+    return { kind: 'preset', iconId: stored.iconId }
+  }
+  return DEFAULT_AVATAR
 }
 
 function createDefaultProfile(playerId: PlayerId): PlayerProfile {
   return {
     playerId,
     nickname: buildDefaultNickname(playerId),
-    iconId: DEFAULT_ICON_ID,
+    avatar: DEFAULT_AVATAR,
     equippedTitleId: null,
     createdAt: Date.now(),
   }
@@ -61,7 +84,10 @@ function saveProfile(profile: PlayerProfile): void {
   }
 }
 
-function readStoredProfile(): Partial<PlayerProfile> | null {
+/** 保存形式が将来変わっても読み込めるよう、型を厳密なPlayerProfileに固定しない（旧iconIdフィールドも許容する）。 */
+type StoredProfileShape = Partial<Omit<PlayerProfile, 'avatar'>> & { avatar?: unknown; iconId?: unknown }
+
+function readStoredProfile(): StoredProfileShape | null {
   try {
     const raw = localStorage.getItem(PROFILE_KEY)
     if (!raw) return null
@@ -90,7 +116,7 @@ export function getProfile(): PlayerProfile {
   const merged: PlayerProfile = {
     playerId,
     nickname: typeof stored.nickname === 'string' && stored.nickname.length > 0 ? stored.nickname : buildDefaultNickname(playerId),
-    iconId: isValidIconId(stored.iconId) ? stored.iconId : DEFAULT_ICON_ID,
+    avatar: resolveAvatar(stored),
     equippedTitleId: typeof stored.equippedTitleId === 'string' ? stored.equippedTitleId : null,
     createdAt: typeof stored.createdAt === 'number' ? stored.createdAt : Date.now(),
   }
@@ -108,9 +134,13 @@ export function updateNickname(rawNickname: string): PlayerProfile {
   return next
 }
 
+/**
+ * プリセットアイコンを選択する。将来の自分の写真設定（remoteCustom）はこの関数とは
+ * 別のAPIとして追加する想定（サーバーProfile基盤＋画像ストレージ実装時）。
+ */
 export function updateIcon(iconId: PresetIconId): PlayerProfile {
   const profile = getProfile()
-  const next: PlayerProfile = { ...profile, iconId }
+  const next: PlayerProfile = { ...profile, avatar: { kind: 'preset', iconId } }
   saveProfile(next)
   return next
 }

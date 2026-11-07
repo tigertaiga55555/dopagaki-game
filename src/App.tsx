@@ -175,6 +175,7 @@ export default function App() {
               score={endlessResult.score}
               best={endlessResult.best}
               isNewBest={endlessResult.isNewBest}
+              newlyUnlockedAchievements={endlessResult.newlyUnlockedAchievements}
               onRetry={() => startEndless(endlessDifficulty)}
               onChangeDifficulty={() => setScreen('endlessSelect')}
               onHome={quitToHome}

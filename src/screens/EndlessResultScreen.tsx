@@ -1,12 +1,14 @@
+import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
 import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
 import { ENDLESS_THEME } from '../config/endlessTheme'
-import type { EndlessDifficulty } from '../types'
+import type { AchievementId, EndlessDifficulty } from '../types'
 
 interface Props {
   difficulty: EndlessDifficulty
   score: number
   best: number
   isNewBest: boolean
+  newlyUnlockedAchievements: AchievementId[]
   onRetry: () => void
   onChangeDifficulty: () => void
   onHome: () => void
@@ -20,10 +22,21 @@ interface Props {
  * config/endlessTheme.tsのアクセントカラーを適用し、どの難易度で終えたかを結果画面でも
  * 一目で分かるようにする（NEW BESTバッジだけは「達成」を表す共通色としてamberのまま据え置く）。
  */
-export function EndlessResultScreen({ difficulty, score, best, isNewBest, onRetry, onChangeDifficulty, onHome }: Props) {
+export function EndlessResultScreen({
+  difficulty,
+  score,
+  best,
+  isNewBest,
+  newlyUnlockedAchievements,
+  onRetry,
+  onChangeDifficulty,
+  onHome,
+}: Props) {
   const theme = ENDLESS_THEME[difficulty]
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-8 px-6 py-10 text-center">
+      <AchievementUnlockBanner newlyUnlocked={newlyUnlockedAchievements} />
+
       <div className="flex flex-col items-center gap-1">
         <p className="text-xs font-black tracking-[0.3em] text-white/40">ENDLESS RESULT</p>
         <p className={`text-lg font-black ${theme.textClass}`}>

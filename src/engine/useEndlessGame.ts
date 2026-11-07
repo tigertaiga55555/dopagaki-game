@@ -16,11 +16,12 @@ import { pickFinalQuestion } from './finalQuestionPicker'
 import { generateNextQuestion } from './questionPicker'
 import { pick } from './random'
 import { pickChallenge500Question } from '../questions/challenge500'
+import { checkEndlessAchievements } from '../utils/achievementStorage'
 import { trackEndlessEnd, trackEndlessStart } from '../utils/analytics'
 import { getEndlessBest, updateEndlessBest } from '../utils/storage'
 import { sfx } from '../utils/sound'
 import type { Challenge500QuestionSpec, Challenge500Tier } from '../questions/challenge500/types'
-import type { EndlessDifficulty, FinalQuestionSpec, FinalQuestionTag, QuestionSpec, QuestionTypeId } from '../types'
+import type { AchievementId, EndlessDifficulty, FinalQuestionSpec, FinalQuestionTag, QuestionSpec, QuestionTypeId } from '../types'
 
 /** 直近何問分のタイプを覚えておくか。useRushGame.ts／useFinalTrial.tsと同じ値・同じ目的（カテゴリ連続回避）。 */
 const RECENT_TYPES_LENGTH = 3
@@ -80,6 +81,8 @@ export interface EndlessFinishPayload {
   score: number
   isNewBest: boolean
   best: number
+  /** Ver.6 Phase 5.1: 今回のプレイで新たに解除されたEndless実績（qaModeでは常に空配列）。 */
+  newlyUnlockedAchievements: AchievementId[]
 }
 
 export interface UseEndlessGameOptions {
@@ -204,8 +207,10 @@ export function useEndlessGame(
     const isNewBest = !qaMode && updateEndlessBest(difficulty, next.streak)
     if (isNewBest) sfx.endlessNewBest()
     if (!qaMode) trackEndlessEnd(difficulty, next.streak, isNewBest)
+    // Ver.6 Phase 5.1: Endless STREAK実績。qaModeではDOPA%実績・自己ベスト更新と同様、一切解除しない。
+    const newlyUnlockedAchievements = qaMode ? [] : checkEndlessAchievements(difficulty, next.streak)
     setSnapshot((s) => ({ ...s, state: next, currentSlot: null, milestoneLabel: null }))
-    onFinish({ score: next.streak, isNewBest, best: getEndlessBest(difficulty) })
+    onFinish({ score: next.streak, isNewBest, best: getEndlessBest(difficulty), newlyUnlockedAchievements })
   }
 
   return { snapshot, start, handleResult }

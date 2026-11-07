@@ -64,8 +64,18 @@ describe('profileStorage (Ver.6 Phase 5: 匿名player_id・ローカルプロフ
 
   it('preset icon更新: 選択したアイコンが保存される', () => {
     const updated = updateIcon('flame')
-    expect(updated.iconId).toBe('flame')
-    expect(getProfile().iconId).toBe('flame')
+    expect(updated.avatar).toEqual({ kind: 'preset', iconId: 'flame' })
+    expect(getProfile().avatar).toEqual({ kind: 'preset', iconId: 'flame' })
+  })
+
+  it('legacy iconId互換: 旧フラットiconIdが保存されていてもavatar.iconIdとして読める', () => {
+    const playerId = getOrCreatePlayerId()
+    localStorage.setItem(
+      'dopagaki:profileV1',
+      JSON.stringify({ playerId, nickname: '旧ユーザー', iconId: 'crown', equippedTitleId: null, createdAt: Date.now() }),
+    )
+    const profile = getProfile()
+    expect(profile.avatar).toEqual({ kind: 'preset', iconId: 'crown' })
   })
 
   it('title装備: 解除済みのTitleは装備できる', () => {
