@@ -8,11 +8,16 @@ import { useRushGame } from '../engine/useRushGame'
 import { QUESTION_MODULES } from '../questions'
 import { FinalTrialScreen } from './FinalTrialScreen'
 import { isMuted, setMuted } from '../utils/sound'
-import type { FinalResultV4, PlayStats } from '../types'
+import type { ChallengeProblemSetItem, FinalResultV4, PlayStats } from '../types'
 
 interface Props {
   onFinish: (result: FinalResultV4) => void
   onQuit: () => void
+  /**
+   * Ver.6 Phase 5.2（Challenge機能完成）: 指定されると、通常のランダム出題の代わりに
+   * この配列を順番に出題する（Challenge挑戦時、作成者と完全に同じ問題で再生するため）。
+   */
+  replayQuestions?: ChallengeProblemSetItem[]
 }
 
 const JUDGEMENT_COLOR: Record<string, string> = {
@@ -24,11 +29,12 @@ const JUDGEMENT_COLOR: Record<string, string> = {
 
 const PARTICLE_POSITIONS = Array.from({ length: 8 }).map((_, i) => ({ x: (i * 12.5) % 100, delay: i * 0.2 }))
 
-export function PlayScreen({ onFinish, onQuit }: Props) {
+export function PlayScreen({ onFinish, onQuit, replayQuestions }: Props) {
   const [finalEntryStats, setFinalEntryStats] = useState<PlayStats | null>(null)
-  const { snapshot, handleQuestionResult } = useRushGame(
-    (payload) => onFinish(computeFinalResult(payload)),
+  const { snapshot, handleQuestionResult, getRecordedProblemSet } = useRushGame(
+    (payload) => onFinish(computeFinalResult(payload, getRecordedProblemSet())),
     (stats) => setFinalEntryStats(stats),
+    { replayQuestions },
   )
   const [muted, setMutedState] = useState(isMuted())
   const shakeWrapperRef = useRef<HTMLDivElement>(null)

@@ -25,7 +25,7 @@ import { LimitBreakUnlockScreen } from './LimitBreakUnlockScreen'
 import { duckAudio, unlockAudio } from '../utils/audioContext'
 import { setFinalIntensity, setFinalMode, setUltimateMode, startBgm, stopBgm } from '../utils/bgm'
 import { isMuted, PERFECT_FANFARE_200_TIMING_MS, setMuted, sfx } from '../utils/sound'
-import type { FinalResultV4, PlayStats } from '../types'
+import type { ChallengeProblemSetItem, FinalResultV4, PlayStats } from '../types'
 
 interface Props {
   initialStats: PlayStats
@@ -50,6 +50,11 @@ interface Props {
    * すぐ確認できるようにするための便宜機能。本番からは絶対に渡されない。
    */
   autoForceCorrectDelayMs?: number
+  /**
+   * Ver.6 Phase 5.2（Challenge機能完成）: 指定されると、通常のランダム出題の代わりに
+   * この配列を順番に出題する（mode='finalTrial'のChallenge挑戦時に使う）。
+   */
+  replayQuestions?: ChallengeProblemSetItem[]
 }
 
 /**
@@ -104,6 +109,7 @@ export function FinalTrialScreen({
   startAtQuestion = 1,
   showForceCorrect = false,
   autoForceCorrectDelayMs,
+  replayQuestions,
 }: Props) {
   const [entryDone, setEntryDone] = useState(startAtQuestion >= FINAL_TRIAL_CONFIG.totalQuestions)
   const [muted, setMutedState] = useState(isMuted())
@@ -116,14 +122,18 @@ export function FinalTrialScreen({
    */
   const [challengePhase, setChallengePhase] = useState<'none' | 'unlock' | 'intro' | 'active'>('none')
   const clear200ResultRef = useRef<FinalResultV4 | null>(null)
-  const { snapshot, start, handleResult } = useFinalTrial((payload) => {
-    if (payload.cleared200) {
-      clear200ResultRef.current = computeFinalTrialResult(payload, initialStats)
-      setChallengePhase('unlock')
-      return
-    }
-    onFinish(computeFinalTrialResult(payload, initialStats))
-  }, startAtQuestion)
+  const { snapshot, start, handleResult, getRecordedProblemSet } = useFinalTrial(
+    (payload) => {
+      if (payload.cleared200) {
+        clear200ResultRef.current = computeFinalTrialResult(payload, initialStats, getRecordedProblemSet())
+        setChallengePhase('unlock')
+        return
+      }
+      onFinish(computeFinalTrialResult(payload, initialStats, getRecordedProblemSet()))
+    },
+    startAtQuestion,
+    { replayQuestions },
+  )
 
   // 突入演出の各ビート
   const [showCrack, setShowCrack] = useState(false)
@@ -376,10 +386,10 @@ export function FinalTrialScreen({
     return (
       <Challenge500Screen
         onQuit={onQuit}
-        onFinish={(state: Challenge500State) => {
+        onFinish={(state: Challenge500State, recordedProblemSet) => {
           const base = clear200ResultRef.current
           if (!base) return
-          onFinish(computeChallenge500Result(state, base))
+          onFinish(computeChallenge500Result(state, base, true, recordedProblemSet))
         }}
       />
     )

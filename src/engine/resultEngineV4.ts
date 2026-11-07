@@ -5,6 +5,7 @@ import { getBestPercent, getPlayCount, incrementPlayCount, updateBestPercent } f
 import type { Challenge500State } from './challenge500Engine'
 import type { RushFinishPayload } from './useRushGame'
 import type { FinalTrialFinishPayload } from './useFinalTrial'
+import type { ChallengeProblemSetItem } from '../challenge/types'
 import type { DopagakiTypeDef, FinalResultV4, PlayStats, QuestionTypeId } from '../types'
 
 const SPEED_TYPES = new Set<QuestionTypeId>([
@@ -196,7 +197,7 @@ function buildChallenge500Comment(state: Challenge500State): string {
   return '200％の先へ挑み、\nそこで限界を迎えた。'
 }
 
-export function computeFinalResult(payload: RushFinishPayload): FinalResultV4 {
+export function computeFinalResult(payload: RushFinishPayload, recordedProblemSet?: ChallengeProblemSetItem[]): FinalResultV4 {
   const { finalPercent, overdriveActive, stats } = payload
   const type = determineType(finalPercent, overdriveActive, stats)
   const crimeRecords = buildCrimeRecords(stats)
@@ -226,6 +227,9 @@ export function computeFinalResult(payload: RushFinishPayload): FinalResultV4 {
     bestPercent: isNewBest ? finalPercent : bestBefore,
     playCount: getPlayCount(),
     newlyUnlockedAchievements,
+    // Ver.6 Phase 5.2（Challenge機能完成）: このプレイで実際に出題された問題列。
+    // 結果画面の「挑戦状を送る」がこれをそのままChallengeのproblemSetとして送信する。
+    recordedProblemSet: recordedProblemSet && recordedProblemSet.length > 0 ? recordedProblemSet : undefined,
   }
 }
 
@@ -235,7 +239,11 @@ export function computeFinalResult(payload: RushFinishPayload): FinalResultV4 {
  * statsは120%到達までにcomputeFinalResult側と同じPlayStatsを引き継いで使う
  * （犯行記録・最大COMBO・最速反応・正答率は通常プレイぶんの実績をそのまま表示する）。
  */
-export function computeFinalTrialResult(payload: FinalTrialFinishPayload, stats: PlayStats): FinalResultV4 {
+export function computeFinalTrialResult(
+  payload: FinalTrialFinishPayload,
+  stats: PlayStats,
+  recordedProblemSet?: ChallengeProblemSetItem[],
+): FinalResultV4 {
   const { finalPercent, trialsCleared, cleared200 } = payload
   const type = getOverdriveTitle(finalPercent)
   const crimeRecords = buildCrimeRecords(stats)
@@ -265,6 +273,7 @@ export function computeFinalTrialResult(payload: FinalTrialFinishPayload, stats:
     playCount: getPlayCount(),
     finalTrial: { trialsCleared, cleared200 },
     newlyUnlockedAchievements,
+    recordedProblemSet: recordedProblemSet && recordedProblemSet.length > 0 ? recordedProblemSet : undefined,
   }
 }
 
@@ -280,7 +289,12 @@ export function computeFinalTrialResult(payload: FinalTrialFinishPayload, stats:
  * 書き換わってしまわないようにするためのフラグで、通常プレイの呼び出し元
  * （FinalTrialScreen.tsxの本番経路）は常に省略してtrue（既存動作）のまま呼ぶ。
  */
-export function computeChallenge500Result(state: Challenge500State, baseResult: FinalResultV4, persist = true): FinalResultV4 {
+export function computeChallenge500Result(
+  state: Challenge500State,
+  baseResult: FinalResultV4,
+  persist = true,
+  recordedProblemSet?: ChallengeProblemSetItem[],
+): FinalResultV4 {
   const finalPercent = state.percent
   const type = getOverdriveTitle(finalPercent)
   const comment = buildChallenge500Comment(state)
@@ -310,5 +324,8 @@ export function computeChallenge500Result(state: Challenge500State, baseResult: 
       ...challenge500NewUnlocks,
       ...finalQuestionNewUnlocks,
     ],
+    // Ver.6 Phase 5.2: 500%チャレンジ自身の問題列で上書きする（baseResultが120/200%側の
+    // problemSetを持っていても、「500%挑戦状」としてはこちらだけが正しいproblemSetのため）。
+    recordedProblemSet: recordedProblemSet && recordedProblemSet.length > 0 ? recordedProblemSet : baseResult.recordedProblemSet,
   }
 }

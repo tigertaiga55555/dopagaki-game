@@ -20,9 +20,14 @@ import type { Challenge500QuestionResult } from '../questions/challenge500/types
 import { duckAudio, duckBgm } from '../utils/audioContext'
 import { setChallenge500Mode, setChallenge500Tier, startBgm, stopBgm } from '../utils/bgm'
 import { sfx } from '../utils/sound'
+import type { ChallengeProblemSetItem } from '../challenge/types'
 
 interface Props {
-  onFinish: (state: Challenge500State) => void
+  /**
+   * Ver.6 Phase 5.2（Challenge機能完成）: 第2引数は、このプレイで実際に出題された問題列
+   * （Challenge作成に使う。呼び出し元が不要なら無視してよい）。
+   */
+  onFinish: (state: Challenge500State, recordedProblemSet: ChallengeProblemSetItem[]) => void
   onQuit: () => void
   /**
    * Preview専用のQA補助モード（既定false）。__DOPAGAKI_PREVIEW_ENABLED__
@@ -33,6 +38,11 @@ interface Props {
    * 500〜200%本体のゲームロジック・難易度・問題内容には一切手を加えない。
    */
   qaMode?: boolean
+  /**
+   * Ver.6 Phase 5.2: 指定されると、通常のランダム出題の代わりにこの配列を順番に出題する
+   * （mode='challenge500'のChallenge挑戦時に使う）。
+   */
+  replayQuestions?: ChallengeProblemSetItem[]
 }
 
 const END_FLASH_MS = 900
@@ -124,9 +134,12 @@ type ClearBeat = 'first' | 'blackout' | 'second' | null
  * 色覚アクセシビリティ・QAモード）は一切変更しない。制限時間はCHALLENGE500_CONFIG側で
  * 4.5秒→3.8秒へ調整済み（このファイルは値を参照するだけ）。
  */
-export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) {
+export function Challenge500Screen({ onFinish, onQuit, qaMode = false, replayQuestions }: Props) {
   const [finalState, setFinalState] = useState<Challenge500State | null>(null)
-  const { snapshot, start, handleResult, jumpTo } = useChallenge500((state) => setFinalState(state), { qaMode })
+  const { snapshot, start, handleResult, jumpTo, getRecordedProblemSet } = useChallenge500((state) => setFinalState(state), {
+    qaMode,
+    replayQuestions,
+  })
   const startedRef = useRef(false)
   const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const showQaPanel = qaMode && __DOPAGAKI_PREVIEW_ENABLED__
@@ -310,7 +323,7 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
       // チャレンジ終了（MISS）：常駐ハートビートはここで止め、結果画面まで持ち越さない。
       setChallenge500Mode(false)
       stopBgm()
-      finishTimerRef.current = setTimeout(() => onFinish(finalState), END_FLASH_MS)
+      finishTimerRef.current = setTimeout(() => onFinish(finalState, getRecordedProblemSet()), END_FLASH_MS)
       return () => {
         if (finishTimerRef.current) clearTimeout(finishTimerRef.current)
       }
@@ -336,7 +349,7 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false }: Props) 
         },
         CLEAR500_SILENCE_MS + CLEAR_FIRST_BEAT_MS + CLEAR_BLACKOUT_MS,
       ),
-      setTimeout(() => onFinish(finalState), CLEAR500_SILENCE_MS + CLEAR_FLASH_MS),
+      setTimeout(() => onFinish(finalState, getRecordedProblemSet()), CLEAR500_SILENCE_MS + CLEAR_FLASH_MS),
     )
     return () => {
       clearTimersRef.current.forEach(clearTimeout)

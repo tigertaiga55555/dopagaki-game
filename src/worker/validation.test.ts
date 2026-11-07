@@ -76,7 +76,7 @@ describe('validateCreateChallengeInput (Ver.6 Phase 5.1: Challenge作成入力�
   })
 
   it('problemSetの項目数が上限を超えるとinvalid（D1行の肥大化防止）', () => {
-    const items = Array.from({ length: 201 }, (_, i) => ({ type: `q${i}`, data: {} }))
+    const items = Array.from({ length: 301 }, (_, i) => ({ type: `q${i}`, data: {} }))
     const result = validateCreateChallengeInput({ ...validInput(), problemSet: { version: 1, items } })
     expect(result.ok).toBe(false)
   })

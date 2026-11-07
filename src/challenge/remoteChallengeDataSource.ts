@@ -1,14 +1,19 @@
-import type { ChallengeApiResult, ChallengeDataSource, ChallengeRecord, CreateChallengeInput } from './types'
+import type {
+  ChallengeApiResult,
+  ChallengeAttemptListResult,
+  ChallengeAttemptRecord,
+  ChallengeDataSource,
+  ChallengeRecord,
+  CreateChallengeAttemptInput,
+  CreateChallengeInput,
+} from './types'
 
 /**
- * Ver.6 Phase 5.1（Challengeバックエンド基盤）: Worker API（src/worker/index.ts）を
- * fetchで呼び出すクライアント側実装。将来の「挑戦状を送る」ボタン・受諾画面は、
- * このChallengeDataSourceインターフェースだけに依存させる想定（utils/
- * playerStatsRepository.tsと同じ「実装を差し替えてもUIを書き換えない」方針）。
- *
- * 今回のラウンドではこのクラス自体を呼び出すUIはまだ実装しない（ユーザー指示の
- * 今回の最低目標はWorker API側の作成・取得だけ）。将来、結果画面に「挑戦状を送る」
- * ボタンを追加する際にこのまま使えるよう、型・エラーハンドリングだけ先に用意する。
+ * Ver.6 Phase 5.1/5.2（Challengeバックエンド基盤→機能完成）: Worker API
+ * （src/worker/index.ts）をfetchで呼び出すクライアント側実装。結果画面の
+ * 「挑戦状を送る」・Challenge受信画面・履歴画面は、このChallengeDataSourceインターフェース
+ * だけに依存する（utils/playerStatsRepository.tsと同じ「実装を差し替えてもUIを
+ * 書き換えない」方針）。
  */
 async function parseJsonResponse<T>(response: Response): Promise<ChallengeApiResult<T>> {
   try {
@@ -39,6 +44,35 @@ export const remoteChallengeDataSource: ChallengeDataSource = {
       return parseJsonResponse<ChallengeRecord>(response)
     } catch {
       return { ok: false, error: 'internal_error', message: 'network error while fetching challenge' }
+    }
+  },
+
+  async createAttempt(challengeId: string, input: CreateChallengeAttemptInput): Promise<ChallengeApiResult<ChallengeAttemptRecord>> {
+    try {
+      const response = await fetch(`/api/challenges/${encodeURIComponent(challengeId)}/attempts`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+      return parseJsonResponse<ChallengeAttemptRecord>(response)
+    } catch {
+      return { ok: false, error: 'internal_error', message: 'network error while creating attempt' }
+    }
+  },
+
+  async getAttempts(
+    challengeId: string,
+    options?: { playerId?: string; limit?: number },
+  ): Promise<ChallengeApiResult<ChallengeAttemptListResult>> {
+    try {
+      const params = new URLSearchParams()
+      if (options?.playerId) params.set('playerId', options.playerId)
+      if (options?.limit) params.set('limit', String(options.limit))
+      const qs = params.toString()
+      const response = await fetch(`/api/challenges/${encodeURIComponent(challengeId)}/attempts${qs ? `?${qs}` : ''}`)
+      return parseJsonResponse<ChallengeAttemptListResult>(response)
+    } catch {
+      return { ok: false, error: 'internal_error', message: 'network error while fetching attempts' }
     }
   },
 }

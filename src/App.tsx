@@ -13,6 +13,11 @@ import {
 } from './dev/overdrivePreview'
 import type { EndlessFinishPayload } from './engine/useEndlessGame'
 import { AchievementScreen } from './screens/AchievementScreen'
+import { ChallengeHistoryScreen } from './screens/ChallengeHistoryScreen'
+import { ChallengePlayScreen } from './screens/ChallengePlayScreen'
+import { ChallengeReceiveScreen } from './screens/ChallengeReceiveScreen'
+import { ChallengeResultScreen } from './screens/ChallengeResultScreen'
+import { ChallengeSentScreen } from './screens/ChallengeSentScreen'
 import { EndlessPlayScreen } from './screens/EndlessPlayScreen'
 import { EndlessResultScreen } from './screens/EndlessResultScreen'
 import { EndlessSelectScreen } from './screens/EndlessSelectScreen'
@@ -22,17 +27,27 @@ import { ProfileScreen } from './screens/ProfileScreen'
 import { RankingScreen } from './screens/RankingScreen'
 import { ResultScreen } from './screens/ResultScreen'
 import { TitleScreen } from './screens/TitleScreen'
-import { trackGameStart, trackReplayStart } from './utils/analytics'
+import { extractChallengeIdFromLocation } from './challenge/url'
+import { trackChallengePlayed, trackGameStart, trackReplayStart } from './utils/analytics'
 import { unlockAudio } from './utils/audioContext'
 import { runMigrationsOnce } from './utils/migrations'
 import { getOrCreatePlayerId } from './utils/profileStorage'
 import { sfx } from './utils/sound'
+import type { ChallengeRecord } from './challenge/types'
 import type { EndlessDifficulty, FinalResultV4, ScreenName } from './types'
 
 export default function App() {
-  const [screen, setScreen] = useState<ScreenName>('title')
+  // Ver.6 Phase 5.2（Challenge機能完成）: Challenge URLを直接開いた場合（別端末で
+  // 共有されたURLを開く場合を含む）、タイトル画面を経由せず直接Challenge受信画面へ
+  // 入る。それ以外は常に従来どおりtitleから始まる。
+  const [screen, setScreen] = useState<ScreenName>(() => (extractChallengeIdFromLocation() ? 'challengeReceive' : 'title'))
   const [result, setResult] = useState<FinalResultV4 | null>(null)
   const [playKey, setPlayKey] = useState(0)
+  // Ver.6 Phase 5.2: Challenge専用の状態。通常ゲーム・Endlessとは完全に独立させる。
+  const [challengeId] = useState(() => extractChallengeIdFromLocation())
+  const [activeChallenge, setActiveChallenge] = useState<ChallengeRecord | null>(null)
+  const [challengeResult, setChallengeResult] = useState<FinalResultV4 | null>(null)
+  const [challengePlayKey, setChallengePlayKey] = useState(0)
   // Ver.6 Phase 4: Endless専用の状態。通常ゲーム（screen/result/playKey）とは
   // 完全に独立させており、互いの画面遷移には一切影響しない。
   const [endlessDifficulty, setEndlessDifficulty] = useState<EndlessDifficulty>('beginner')
@@ -122,6 +137,41 @@ export default function App() {
   }, [])
 
   /**
+   * Ver.6 Phase 5.2（Challenge機能完成）: Challengeの一連の画面遷移。
+   * フラットな遷移モデル（バックスタックを持たない）を既存のEndless/Profile系と
+   * 統一し、activeChallengeという単一の状態をsent/receive/play/result/historyの
+   * どの画面からも共通で参照する（Challenge専用の複雑な状態管理を増やさない）。
+   */
+  const handleChallengeSent = useCallback((challenge: ChallengeRecord) => {
+    setActiveChallenge(challenge)
+    setScreen('challengeSent')
+  }, [])
+
+  const handleChallengeAccept = useCallback((challenge: ChallengeRecord) => {
+    trackChallengePlayed(challenge.mode)
+    setActiveChallenge(challenge)
+    setChallengePlayKey((k) => k + 1)
+    setScreen('challengePlaying')
+  }, [])
+
+  const handleChallengeRetry = useCallback(() => {
+    if (!activeChallenge) return
+    trackChallengePlayed(activeChallenge.mode)
+    setChallengePlayKey((k) => k + 1)
+    setScreen('challengePlaying')
+  }, [activeChallenge])
+
+  const handleChallengeFinish = useCallback((finalResult: FinalResultV4) => {
+    setChallengeResult(finalResult)
+    setScreen('challengeResult')
+  }, [])
+
+  const openChallengeHistory = useCallback((challenge: ChallengeRecord) => {
+    setActiveChallenge(challenge)
+    setScreen('challengeHistory')
+  }, [])
+
+  /**
    * Ver.6 Phase 5: Profile/Achievement/Rankingはゲームプレイとは独立した単純な画面遷移
    * （バックスタックを持たない、既存のEndlessSelectScreen等と同じフラットな遷移モデル）。
    * どの入口（TitleScreenのサブ導線／ProfileScreenのボタン）から来ても「戻る」は
@@ -164,7 +214,9 @@ export default function App() {
             />
           )}
           {screen === 'playing' && <PlayScreen key={playKey} onFinish={handleFinish} onQuit={quitToHome} />}
-          {screen === 'result' && result && <ResultScreen result={result} onRetry={() => startPlay('retry')} />}
+          {screen === 'result' && result && (
+            <ResultScreen result={result} onRetry={() => startPlay('retry')} onChallengeSent={handleChallengeSent} />
+          )}
           {screen === 'endlessSelect' && <EndlessSelectScreen onSelect={startEndless} onQuit={quitToHome} />}
           {screen === 'endlessPlaying' && (
             <EndlessPlayScreen key={endlessPlayKey} difficulty={endlessDifficulty} onFinish={handleEndlessFinish} onQuit={quitToHome} />
@@ -187,6 +239,30 @@ export default function App() {
           {screen === 'profileEdit' && <ProfileEditScreen onDone={openProfile} />}
           {screen === 'achievements' && <AchievementScreen onBack={quitToHome} />}
           {screen === 'ranking' && <RankingScreen onBack={quitToHome} />}
+          {screen === 'challengeReceive' && challengeId && (
+            <ChallengeReceiveScreen
+              challengeId={challengeId}
+              onAccept={handleChallengeAccept}
+              onHome={quitToHome}
+              onViewHistory={openChallengeHistory}
+            />
+          )}
+          {screen === 'challengeSent' && activeChallenge && <ChallengeSentScreen challenge={activeChallenge} onDone={quitToHome} />}
+          {screen === 'challengePlaying' && activeChallenge && (
+            <ChallengePlayScreen key={challengePlayKey} challenge={activeChallenge} onFinish={handleChallengeFinish} onQuit={quitToHome} />
+          )}
+          {screen === 'challengeResult' && activeChallenge && challengeResult && (
+            <ChallengeResultScreen
+              challenge={activeChallenge}
+              myResult={challengeResult}
+              onRetry={handleChallengeRetry}
+              onHome={quitToHome}
+              onViewHistory={() => openChallengeHistory(activeChallenge)}
+            />
+          )}
+          {screen === 'challengeHistory' && activeChallenge && (
+            <ChallengeHistoryScreen challenge={activeChallenge} onBack={quitToHome} />
+          )}
         </>
       )}
     </div>

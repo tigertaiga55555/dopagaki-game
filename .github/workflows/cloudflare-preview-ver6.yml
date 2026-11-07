@@ -27,6 +27,127 @@ jobs:
           WORKERS_CI_BRANCH: ${{ github.ref_name }}
         run: npm run build
 
+      - name: Provision Preview-only D1 database (dopagaki-challenges-preview)
+        id: d1_setup
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set +e
+          # Ver.6 Phase 5.2（Challenge機能完成）: Challengeバックエンド専用のD1データベースを
+          # Preview環境にだけ用意する。Productionのデータベース・Workerには一切触れない
+          # （名前も"dopagaki-challenges-preview"でProductionと明確に分離）。
+          #
+          # wrangler CLIの`d1 create`はJSON出力が整備されていないため、Cloudflareの
+          # REST API（wranglerの内部実装と同じエンドポイント）へ直接curlする。
+          # CLOUDFLARE_API_TOKEN自体はヘッダーにのみ使い、ログへは一切出力しない
+          # （レスポンスのJSON本文にはトークンは含まれないため、本文をそのままログへ
+          # 出しても安全）。
+          API_BASE="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database"
+          DB_NAME="dopagaki-challenges-preview"
+
+          LIST_RESP=$(curl -sS -w '\n%{http_code}' "${API_BASE}?per_page=50" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json")
+          LIST_STATUS=$(echo "$LIST_RESP" | tail -1)
+          LIST_BODY=$(echo "$LIST_RESP" | sed '$d')
+          LIST_SUCCESS=$(echo "$LIST_BODY" | jq -r '.success // false' 2>/dev/null)
+
+          echo "D1 list HTTP status: $LIST_STATUS"
+
+          if [ "$LIST_STATUS" != "200" ] || [ "$LIST_SUCCESS" != "true" ]; then
+            echo "d1_available=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Preview D1 (dopagaki-challenges-preview)"
+              echo ""
+              echo "⚠️ D1 APIへのアクセスに失敗しました（HTTP $LIST_STATUS）。"
+              echo "CLOUDFLARE_API_TOKENにD1の権限（D1:Edit）が付与されていない可能性があります。"
+              echo ""
+              echo '```json'
+              echo "$LIST_BODY" | jq -c '.errors // empty' 2>/dev/null || echo "$LIST_BODY"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            EXISTING_ID=$(echo "$LIST_BODY" | jq -r --arg name "$DB_NAME" '.result[] | select(.name==$name) | .uuid' | head -1)
+
+            if [ -n "$EXISTING_ID" ] && [ "$EXISTING_ID" != "null" ]; then
+              DB_ID="$EXISTING_ID"
+              echo "Found existing D1 database: $DB_ID"
+            else
+              CREATE_RESP=$(curl -sS -w '\n%{http_code}' -X POST "$API_BASE" \
+                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                --data "{\"name\":\"${DB_NAME}\"}")
+              CREATE_STATUS=$(echo "$CREATE_RESP" | tail -1)
+              CREATE_BODY=$(echo "$CREATE_RESP" | sed '$d')
+              CREATE_SUCCESS=$(echo "$CREATE_BODY" | jq -r '.success // false' 2>/dev/null)
+              echo "D1 create HTTP status: $CREATE_STATUS"
+
+              if [ "$CREATE_SUCCESS" == "true" ]; then
+                DB_ID=$(echo "$CREATE_BODY" | jq -r '.result.uuid')
+              else
+                # エラーコード7502＝同名DBが既に存在（並行実行等のレース）。再度listして拾う。
+                DB_ID=$(curl -sS "${API_BASE}?per_page=50" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                  | jq -r --arg name "$DB_NAME" '.result[] | select(.name==$name) | .uuid' | head -1)
+              fi
+            fi
+
+            if [ -n "$DB_ID" ] && [ "$DB_ID" != "null" ]; then
+              echo "d1_available=true" >> "$GITHUB_OUTPUT"
+              echo "d1_database_id=$DB_ID" >> "$GITHUB_OUTPUT"
+              {
+                echo "## Preview D1 (dopagaki-challenges-preview)"
+                echo ""
+                echo "✅ D1データベースを確認/作成しました（database_id: \`$DB_ID\`）。"
+              } >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "d1_available=false" >> "$GITHUB_OUTPUT"
+              {
+                echo "## Preview D1 (dopagaki-challenges-preview)"
+                echo ""
+                echo "⚠️ D1データベースのid取得に失敗しました。"
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+          set -e
+
+      - name: Apply D1 migrations to Preview database
+        if: steps.d1_setup.outputs.d1_available == 'true'
+        id: d1_migrate
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # wrangler.tomlへ[[d1_databases]]を追記するのはこのジョブのワークスペース上だけ
+          # （リポジトリへコミットし直すことはしない）。database_idはPreview専用DBのIDのみで、
+          # Production側のwrangler.tomlやコードには一切触れない。
+          # continue-on-error: trueにしているのは、migration適用に何らかの問題があっても
+          # D1バインディング無しの安全な状態（既存の静的サイト配信のみ）へフォールバックして
+          # デプロイ自体は継続させるため（DBだけが未接続のまま、他の全機能は壊さない）。
+          cat >> wrangler.toml <<EOF
+
+          [[d1_databases]]
+          binding = "CHALLENGE_DB"
+          database_name = "dopagaki-challenges-preview"
+          database_id = "${{ steps.d1_setup.outputs.d1_database_id }}"
+          migrations_dir = "migrations"
+          EOF
+
+          npx wrangler d1 migrations apply CHALLENGE_DB --remote
+
+      - name: Report D1 migration outcome
+        if: steps.d1_setup.outputs.d1_available == 'true' && steps.d1_migrate.outcome == 'failure'
+        run: |
+          {
+            echo ""
+            echo "⚠️ D1 migrationの適用に失敗しました。wrangler.tomlからd1_databasesブロックを"
+            echo "取り除き、D1バインディング無しでデプロイを継続します（他機能には影響しません）。"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # 失敗時はd1_databasesブロックを取り除き、後続のpreviewデプロイが
+          # 壊れたバインディングを引きずらないようにする。
+          git checkout -- wrangler.toml
+
       - name: Create Cloudflare Worker Preview (ver6)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

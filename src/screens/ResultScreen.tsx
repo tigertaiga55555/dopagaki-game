@@ -5,26 +5,33 @@ import { ResultCard } from '../components/ResultCard'
 import { AD_RESULT_SCREEN } from '../config/ads'
 import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
 import { getRetryLabel } from '../config/messagesV4'
-import { trackResultView, trackShareClick } from '../utils/analytics'
+import { buildCreateChallengeInput } from '../challenge/createChallengeFromResult'
+import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSource'
+import { trackChallengeCreated, trackResultView, trackShareClick } from '../utils/analytics'
 import { captureResultCardPng, downloadPngBlob } from '../utils/shareImage'
 import { copyShareText, shareResultWithImage } from '../utils/share'
 import { sfx } from '../utils/sound'
+import type { ChallengeRecord } from '../challenge/types'
 import type { FinalResultV4 } from '../types'
 
 interface Props {
   result: FinalResultV4
   onRetry: () => void
+  /** Ver.6 Phase 5.2（Challenge機能完成）: 「挑戦状を送る」が成功した際に呼ばれる。 */
+  onChallengeSent?: (challenge: ChallengeRecord) => void
 }
 
 const TOAST_MS = 3200
 
-export function ResultScreen({ result, onRetry }: Props) {
+export function ResultScreen({ result, onRetry, onChallengeSent }: Props) {
   const [copied, setCopied] = useState(false)
   const [imageBusy, setImageBusy] = useState(false)
   const [saveBusy, setSaveBusy] = useState(false)
+  const [challengeBusy, setChallengeBusy] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const newlyUnlocked = result.newlyUnlockedAchievements ?? []
+  const challengeInput = buildCreateChallengeInput(result)
 
   // Ver.5.0追加(TASK C-12): 200%結果画面へ切り替わった瞬間、完全無音にせず
   // bell/sparkle/victory chordのごく控えめな余韻を一度だけ残す。
@@ -107,6 +114,30 @@ export function ResultScreen({ result, onRetry }: Props) {
     if (ok) setTimeout(() => setCopied(false), 2000)
   }
 
+  /**
+   * Ver.6 Phase 5.2（Challenge機能完成）: 「挑戦状を送る」。recordedProblemSetが
+   * 存在する（＝実際に出題された問題列を記録できた）場合だけボタンを表示する。
+   * サーバー（Worker）が実際にDBへ保存した正規のChallengeRecordを受け取ってから
+   * onChallengeSentを呼ぶ（クライアント側で先にIDを生成して見せかけたりしない）。
+   */
+  async function handleSendChallenge() {
+    if (challengeBusy || !challengeInput || !onChallengeSent) return
+    setChallengeBusy(true)
+    try {
+      const res = await remoteChallengeDataSource.createChallenge(challengeInput)
+      if (res.ok) {
+        trackChallengeCreated(challengeInput.mode)
+        onChallengeSent(res.value)
+      } else {
+        showToast('挑戦状の作成に失敗しました。もう一度お試しください。')
+      }
+    } catch {
+      showToast('挑戦状の作成に失敗しました。もう一度お試しください。')
+    } finally {
+      setChallengeBusy(false)
+    }
+  }
+
   return (
     <div className="flex min-h-dvh flex-col items-center gap-5 px-6 py-8">
       <AchievementUnlockBanner newlyUnlocked={newlyUnlocked} />
@@ -130,6 +161,16 @@ export function ResultScreen({ result, onRetry }: Props) {
             <span className="font-bold tabular-nums text-white">{result.bestPercent}％</span>
           </div>
         </div>
+      )}
+
+      {challengeInput && onChallengeSent && (
+        <button
+          onClick={handleSendChallenge}
+          disabled={challengeBusy}
+          className="w-full max-w-xs rounded-2xl bg-gradient-to-b from-amber-400 to-orange-500 py-3.5 text-sm font-black text-[#2a1200] shadow-[0_5px_0_0_rgba(154,52,18,0.8)] transition-transform active:translate-y-1 active:shadow-[0_1px_0_0_rgba(154,52,18,0.8)] disabled:opacity-60"
+        >
+          {challengeBusy ? '挑戦状を作成中…' : '⚔️ 挑戦状を送る'}
+        </button>
       )}
 
       <div className="w-full max-w-xs space-y-2">

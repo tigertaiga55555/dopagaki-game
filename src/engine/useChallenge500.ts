@@ -2,7 +2,21 @@ import { useRef, useState } from 'react'
 import { applyCorrect, applyMiss, createChallenge500State, createChallenge500StateAt, type Challenge500State } from './challenge500Engine'
 import { pickChallenge500Question } from '../questions/challenge500'
 import { trackChallenge500Start, trackReach300, trackReach400, trackReach500 } from '../utils/analytics'
+import type { ChallengeProblemSetItem } from '../challenge/types'
 import type { Challenge500QuestionResult, Challenge500QuestionSpec } from '../questions/challenge500/types'
+
+/** Ver.6 Phase 5.2（Challenge機能完成）: 1件のChallengeへ保存する問題数の上限（Worker側validation.tsと同じ値）。 */
+const MAX_RECORDED_PROBLEMS = 300
+
+export function specToProblemSetItem(spec: Challenge500QuestionSpec): ChallengeProblemSetItem {
+  return { type: spec.type, data: spec.data }
+}
+
+let replaySpecCounter = 0
+export function problemSetItemToSpec(item: ChallengeProblemSetItem): Challenge500QuestionSpec {
+  replaySpecCounter += 1
+  return { instanceId: `challenge500-replay-${replaySpecCounter}`, type: item.type, data: item.data }
+}
 
 export interface Challenge500Snapshot {
   state: Challenge500State
@@ -18,6 +32,14 @@ export interface UseChallenge500Options {
    * によるビルド時ガードと二重に守られている）。
    */
   qaMode?: boolean
+  /**
+   * Ver.6 Phase 5.2（Challenge機能完成）: 指定されると、pickChallenge500Question
+   * によるランダム出題の代わりにこの配列を順番に出題する（Challenge挑戦時、作成者と
+   * 完全に同じ問題・同じ順番で再生するために使う）。配列を使い切った後は、
+   * 元々の問題生成ロジックへ自動的にフォールバックする（挑戦者が作成者より速く
+   * 先へ進んだ場合など、記録済みの範囲を超えた分はランダム出題で続行する）。
+   */
+  replayQuestions?: ChallengeProblemSetItem[]
 }
 
 /**
@@ -28,6 +50,7 @@ export interface UseChallenge500Options {
  */
 export function useChallenge500(onFinish: (state: Challenge500State) => void, options?: UseChallenge500Options) {
   const qaMode = options?.qaMode ?? false
+  const replayQuestionsRef = useRef(options?.replayQuestions)
   const [snapshot, setSnapshot] = useState<Challenge500Snapshot>(() => ({
     state: createChallenge500State(),
     currentSpec: null,
@@ -38,11 +61,31 @@ export function useChallenge500(onFinish: (state: Challenge500State) => void, op
   const reached300Ref = useRef(false)
   const reached400Ref = useRef(false)
   const reached500Ref = useRef(false)
+  const replayIndexRef = useRef(0)
+  const recordedRef = useRef<ChallengeProblemSetItem[]>([])
 
   function buildNext(): Challenge500QuestionSpec {
-    const spec = pickChallenge500Question(stateRef.current.percent, recentTypeRef.current)
+    const replayQuestions = replayQuestionsRef.current
+    let spec: Challenge500QuestionSpec
+    if (replayQuestions && replayIndexRef.current < replayQuestions.length) {
+      spec = problemSetItemToSpec(replayQuestions[replayIndexRef.current])
+      replayIndexRef.current += 1
+    } else {
+      spec = pickChallenge500Question(stateRef.current.percent, recentTypeRef.current)
+    }
     recentTypeRef.current = spec.type
+    if (recordedRef.current.length < MAX_RECORDED_PROBLEMS) {
+      recordedRef.current = [...recordedRef.current, specToProblemSetItem(spec)]
+    }
     return spec
+  }
+
+  /**
+   * Ver.6 Phase 5.2: このプレイで実際に出題された問題列（Challenge作成に使う）。
+   * replayQuestionsを使い切った後の問題も含め、実際に出た問題をそのまま記録している。
+   */
+  function getRecordedProblemSet(): ChallengeProblemSetItem[] {
+    return recordedRef.current
   }
 
   function checkMilestones(state: Challenge500State) {
@@ -100,5 +143,5 @@ export function useChallenge500(onFinish: (state: Challenge500State) => void, op
     setSnapshot({ state: next, currentSpec: spec })
   }
 
-  return { snapshot, start, handleResult, jumpTo }
+  return { snapshot, start, handleResult, jumpTo, getRecordedProblemSet }
 }

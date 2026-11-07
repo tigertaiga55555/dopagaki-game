@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { createD1ChallengeRepository } from './challengeRepository'
+import { createD1ChallengeAttemptRepository, createD1ChallengeRepository } from './challengeRepository'
 import { createFakeD1Database } from './testFakeD1'
-import type { CreateChallengeInput } from '../challenge/types'
+import type { CreateChallengeAttemptInput, CreateChallengeInput } from '../challenge/types'
+
+function sampleAttemptInput(overrides: Partial<CreateChallengeAttemptInput> = {}): CreateChallengeAttemptInput {
+  return {
+    challengeId: 'challenge-1',
+    playerId: 'pid-challenger-1',
+    nickname: '挑戦者太郎',
+    avatar: { kind: 'preset', iconId: 'star' },
+    equippedTitle: null,
+    score: 350,
+    ...overrides,
+  }
+}
 
 function sampleInput(): CreateChallengeInput {
   return {
@@ -56,5 +68,83 @@ describe('createD1ChallengeRepository (Ver.6 Phase 5.1: Challenge D1リポジト
     await repo.create('challenge-4', 1700000000003, { ...sampleInput(), creatorEquippedTitle: null })
     const fetched = await repo.getById('challenge-4')
     expect(fetched?.creatorEquippedTitle).toBeNull()
+  })
+})
+
+describe('createD1ChallengeAttemptRepository (Ver.6 Phase 5.2: challenge_attempts D1リポジトリ)', () => {
+  it('countForPlayer: 挑戦前は0', async () => {
+    const db = createFakeD1Database()
+    const repo = createD1ChallengeAttemptRepository(db as never)
+    expect(await repo.countForPlayer('challenge-1', 'pid-challenger-1')).toBe(0)
+  })
+
+  it('create: 挿入した内容がattemptNumber・resultとともにChallengeAttemptRecordとして返る', async () => {
+    const db = createFakeD1Database()
+    const repo = createD1ChallengeAttemptRepository(db as never)
+    const record = await repo.create('attempt-1', 1700000001000, 1, 'lose', sampleAttemptInput())
+    expect(record).toEqual({ id: 'attempt-1', createdAt: 1700000001000, attemptNumber: 1, result: 'lose', ...sampleAttemptInput() })
+  })
+
+  it('attemptNumber increment: 同一playerIdが同じchallengeへ複数回挑戦すると回数が正しく増える', async () => {
+    const db = createFakeD1Database()
+    const repo = createD1ChallengeAttemptRepository(db as never)
+
+    const first = await repo.countForPlayer('challenge-1', 'pid-challenger-1')
+    await repo.create('attempt-1', 1700000001000, first + 1, 'lose', sampleAttemptInput())
+
+    const second = await repo.countForPlayer('challenge-1', 'pid-challenger-1')
+    expect(second).toBe(1)
+    await repo.create('attempt-2', 1700000002000, second + 1, 'lose', sampleAttemptInput())
+
+    const third = await repo.countForPlayer('challenge-1', 'pid-challenger-1')
+    expect(third).toBe(2)
+    await repo.create('attempt-3', 1700000003000, third + 1, 'win', sampleAttemptInput({ score: 520 }))
+
+    expect(await repo.countForPlayer('challenge-1', 'pid-challenger-1')).toBe(3)
+  })
+
+  it('同一ユーザー複数attempt: 別のplayerIdのattempt数には影響しない', async () => {
+    const db = createFakeD1Database()
+    const repo = createD1ChallengeAttemptRepository(db as never)
+    await repo.create('attempt-1', 1700000001000, 1, 'lose', sampleAttemptInput({ playerId: 'pid-a' }))
+    await repo.create('attempt-2', 1700000002000, 1, 'lose', sampleAttemptInput({ playerId: 'pid-b' }))
+    expect(await repo.countForPlayer('challenge-1', 'pid-a')).toBe(1)
+    expect(await repo.countForPlayer('challenge-1', 'pid-b')).toBe(1)
+  })
+
+  it('list: playerId指定時は新しい順でその挑戦者ぶんだけ返す', async () => {
+    const db = createFakeD1Database()
+    const repo = createD1ChallengeAttemptRepository(db as never)
+    await repo.create('attempt-1', 1700000001000, 1, 'lose', sampleAttemptInput({ playerId: 'pid-a' }))
+    await repo.create('attempt-2', 1700000002000, 1, 'lose', sampleAttemptInput({ playerId: 'pid-b' }))
+    await repo.create('attempt-3', 1700000003000, 2, 'win', sampleAttemptInput({ playerId: 'pid-a', score: 520 }))
+
+    const { rows, totalCount } = await repo.list('challenge-1', { playerId: 'pid-a', limit: 10 })
+    expect(totalCount).toBe(2)
+    expect(rows.map((r) => r.id)).toEqual(['attempt-3', 'attempt-1'])
+  })
+
+  it('list: playerId省略時は全挑戦者ぶんを新しい順で返す', async () => {
+    const db = createFakeD1Database()
+    const repo = createD1ChallengeAttemptRepository(db as never)
+    await repo.create('attempt-1', 1700000001000, 1, 'lose', sampleAttemptInput({ playerId: 'pid-a' }))
+    await repo.create('attempt-2', 1700000002000, 1, 'win', sampleAttemptInput({ playerId: 'pid-b', score: 600 }))
+
+    const { rows, totalCount } = await repo.list('challenge-1', { limit: 10 })
+    expect(totalCount).toBe(2)
+    expect(rows.map((r) => r.id)).toEqual(['attempt-2', 'attempt-1'])
+  })
+
+  it('10件表示制限: limitを超えるattemptがあっても、limit件数＋truncated判定に使えるtotalCountを返す', async () => {
+    const db = createFakeD1Database()
+    const repo = createD1ChallengeAttemptRepository(db as never)
+    for (let i = 0; i < 15; i++) {
+      await repo.create(`attempt-${i}`, 1700000000000 + i * 1000, i + 1, 'lose', sampleAttemptInput({ playerId: 'pid-a' }))
+    }
+    const { rows, totalCount } = await repo.list('challenge-1', { playerId: 'pid-a', limit: 10 })
+    expect(rows.length).toBe(10)
+    expect(totalCount).toBe(15)
+    // truncated判定（index.ts側のtotalCount > rows.length）が成立することを確認する。
+    expect(totalCount > rows.length).toBe(true)
   })
 })

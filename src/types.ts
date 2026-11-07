@@ -11,6 +11,11 @@ export type ScreenName =
   | 'profileEdit'
   | 'achievements'
   | 'ranking'
+  | 'challengeReceive'
+  | 'challengeSent'
+  | 'challengePlaying'
+  | 'challengeResult'
+  | 'challengeHistory'
 
 /**
  * Ver.6 Phase 4: Endlessモードの難易度。既存通常ゲームの問題難易度システム
@@ -226,6 +231,28 @@ export interface FinalResultV4 {
    * ゲーム中には出さず結果画面でまとめて通知する（screens/ResultScreen.tsx参照）。
    */
   newlyUnlockedAchievements?: AchievementId[]
+  /**
+   * Ver.6 Phase 5.2（Challenge機能完成）: このプレイで実際に出題された問題列。
+   * 結果画面の「挑戦状を送る」がこれをそのままChallengeのproblemSetとして送信する
+   * （未定義または空配列なら「挑戦状を送る」ボタン自体を表示しない）。
+   */
+  recordedProblemSet?: ChallengeProblemSetItem[]
+}
+
+/**
+ * Ver.6 Phase 5.2（Challenge機能完成）: 出題された1問を再現するための最小限の情報。
+ * src/challenge/types.tsのChallengeProblemSetItemと同一の型をここで定義し、
+ * challenge/types.ts側はこれをそのまま再利用する（types.ts→challenge/types.tsの
+ * 一方向依存を保ち、循環importを避けるため）。既存の3つの問題体系
+ * （QuestionSpec／FinalQuestionSpec／Challenge500QuestionSpec）はいずれも
+ * {type, data} を核に持つ（targetTimeMs・tagsは体系によって有無が異なる）ため、
+ * その共通部分だけを持つ。
+ */
+export interface ChallengeProblemSetItem {
+  type: string
+  targetTimeMs?: number
+  tags?: string[]
+  data: Record<string, unknown>
 }
 
 /** Ver.6 Phase 1: 結果画面用に持ち越す限界突破チャレンジ（200〜500%）の進捗情報。 */

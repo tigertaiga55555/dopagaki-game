@@ -1,6 +1,16 @@
 import { PRESET_ICONS } from '../config/profileConfig'
-import type { ChallengeConditions, ChallengeMode, ChallengeProblemSet, ChallengeProblemSetItem, CreateChallengeInput } from '../challenge/types'
+import { TITLE_DEFS } from '../config/titles'
+import type {
+  ChallengeConditions,
+  ChallengeMode,
+  ChallengeProblemSet,
+  ChallengeProblemSetItem,
+  CreateChallengeAttemptInput,
+  CreateChallengeInput,
+} from '../challenge/types'
 import type { AvatarRef } from '../types'
+
+const KNOWN_TITLE_IDS = new Set(TITLE_DEFS.map((t) => t.id))
 
 /**
  * Ver.6 Phase 5.1（Challengeバックエンド基盤）: 「任意のクライアント入力をそのまま信用しない」
@@ -12,10 +22,11 @@ import type { AvatarRef } from '../types'
  * という曖昧な扱いは一切しない。
  */
 const MAX_NICKNAME_LENGTH = 40
-const MAX_TITLE_ID_LENGTH = 64
 const MAX_PLAYER_ID_LENGTH = 128
-const MAX_PROBLEM_SET_ITEMS = 200
-const MAX_PROBLEM_SET_JSON_BYTES = 32_000
+// Ver.6 Phase 5.2: 通常モード（0〜120%）は60秒間で理論上200問を超えうるため、
+// Phase 5.1時点の200/32000から引き上げた（それでも無制限ではない、明確な上限）。
+const MAX_PROBLEM_SET_ITEMS = 300
+const MAX_PROBLEM_SET_JSON_BYTES = 60_000
 const MAX_QUESTION_TYPE_LENGTH = 80
 const MAX_TAG_LENGTH = 40
 const MAX_SCORE = 100_000
@@ -73,6 +84,12 @@ function validateConditions(value: unknown, mode: ChallengeMode): value is Chall
   return conditions.mode === mode
 }
 
+/** null（未装備）、または実在するTitleDef.idのいずれかだけを許可する（任意の文字列を信用しない）。 */
+function isValidEquippedTitle(value: unknown): value is string | null {
+  if (value === null) return true
+  return typeof value === 'string' && KNOWN_TITLE_IDS.has(value)
+}
+
 export interface ValidationResult {
   ok: boolean
   value?: CreateChallengeInput
@@ -94,8 +111,8 @@ export function validateCreateChallengeInput(raw: unknown): ValidationResult {
   if (!validateAvatar(input.creatorIcon)) {
     return { ok: false, message: 'creatorIcon is invalid' }
   }
-  if (input.creatorEquippedTitle !== null && !isNonEmptyString(input.creatorEquippedTitle, MAX_TITLE_ID_LENGTH)) {
-    return { ok: false, message: 'creatorEquippedTitle must be a string or null' }
+  if (!isValidEquippedTitle(input.creatorEquippedTitle)) {
+    return { ok: false, message: 'creatorEquippedTitle must be a known title id or null' }
   }
   if (typeof input.mode !== 'string' || !CHALLENGE_MODES.includes(input.mode as ChallengeMode)) {
     return { ok: false, message: 'mode is invalid' }
@@ -128,4 +145,52 @@ export function validateCreateChallengeInput(raw: unknown): ValidationResult {
 /** Challenge IDとしてURLに載せる値の形式チェック（D1へクエリを投げる前の最終防衛）。 */
 export function isValidChallengeId(id: string): boolean {
   return /^[A-Za-z0-9_-]{1,64}$/.test(id)
+}
+
+export interface AttemptValidationResult {
+  ok: boolean
+  value?: CreateChallengeAttemptInput
+  message?: string
+}
+
+/**
+ * Ver.6 Phase 5.2（Challenge機能完成）: POST /api/challenges/:id/attemptsの入力検証。
+ * challengeIdはURLパス由来（既にisValidChallengeIdで検証済みの前提）のためここでは
+ * 見ない。resultやattemptNumberはクライアントから一切受け取らず、常にサーバー側
+ * （index.ts）がcreatorScoreとの比較・countForPlayerの結果から確定させる
+ * （クライアントが勝敗や挑戦回数を自己申告できる余地を一切残さない）。
+ */
+export function validateCreateChallengeAttemptInput(raw: unknown, challengeId: string): AttemptValidationResult {
+  if (typeof raw !== 'object' || raw === null) {
+    return { ok: false, message: 'request body must be a JSON object' }
+  }
+  const input = raw as Partial<CreateChallengeAttemptInput>
+
+  if (!isNonEmptyString(input.playerId, MAX_PLAYER_ID_LENGTH)) {
+    return { ok: false, message: 'playerId is required' }
+  }
+  if (!isNonEmptyString(input.nickname, MAX_NICKNAME_LENGTH)) {
+    return { ok: false, message: 'nickname is required' }
+  }
+  if (!validateAvatar(input.avatar)) {
+    return { ok: false, message: 'avatar is invalid' }
+  }
+  if (!isValidEquippedTitle(input.equippedTitle)) {
+    return { ok: false, message: 'equippedTitle must be a known title id or null' }
+  }
+  if (!isFiniteNumberInRange(input.score, 0, MAX_SCORE)) {
+    return { ok: false, message: 'score is invalid' }
+  }
+
+  return {
+    ok: true,
+    value: {
+      challengeId,
+      playerId: input.playerId,
+      nickname: input.nickname,
+      avatar: input.avatar as AvatarRef,
+      equippedTitle: input.equippedTitle ?? null,
+      score: input.score as number,
+    },
+  }
 }

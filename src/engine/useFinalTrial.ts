@@ -4,7 +4,27 @@ import { pickFinalQuestion } from './finalQuestionPicker'
 import { ULTIMATE_QUESTION_POOL } from '../questions/final'
 import { pick } from './random'
 import { trackPerfectClear, trackReach200, trackUltimateReached } from '../utils/analytics'
+import type { ChallengeProblemSetItem } from '../challenge/types'
 import type { FinalQuestionResult, FinalQuestionSpec, FinalQuestionTag } from '../types'
+
+/** Ver.6 Phase 5.2（Challenge機能完成）: FINAL DOPA TRIALは最大16問のため実質無制限だが、Worker側validation.tsと揃えておく。 */
+const MAX_RECORDED_PROBLEMS = 300
+
+export function specToProblemSetItem(spec: FinalQuestionSpec): ChallengeProblemSetItem {
+  return { type: spec.type, targetTimeMs: spec.targetTimeMs, tags: spec.tags, data: spec.data }
+}
+
+let replaySpecCounter = 0
+export function problemSetItemToSpec(item: ChallengeProblemSetItem): FinalQuestionSpec {
+  replaySpecCounter += 1
+  return {
+    instanceId: `final-replay-${replaySpecCounter}`,
+    type: item.type,
+    tags: (item.tags as FinalQuestionTag[] | undefined) ?? [],
+    targetTimeMs: item.targetTimeMs ?? 0,
+    data: item.data,
+  }
+}
 
 /**
  * Ver.5.0: FINAL DOPA TRIALのエンジン。120%到達後、全体の残り時間・+10秒延長などの
@@ -83,7 +103,25 @@ function milestoneLabelFor(clearedNumber: number): string {
   return `${clearedNumber} / ${FINAL_TRIAL_CONFIG.totalQuestions} CLEAR`
 }
 
-export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => void, initialQuestionNumber = 1) {
+export interface UseFinalTrialOptions {
+  /**
+   * Ver.6 Phase 5.2（Challenge機能完成）: 指定されると、pickFinalQuestion/
+   * ULTIMATE_QUESTION_POOLによるランダム出題の代わりにこの配列を順番に出題する
+   * （Q16 ULTIMATE QUESTIONも含め、questionNumberに関わらず配列を優先する）。
+   * 配列を使い切った後は元々の問題生成ロジックへ自動的にフォールバックする。
+   */
+  replayQuestions?: ChallengeProblemSetItem[]
+}
+
+export function useFinalTrial(
+  onFinish: (payload: FinalTrialFinishPayload) => void,
+  initialQuestionNumber = 1,
+  options?: UseFinalTrialOptions,
+) {
+  const replayQuestionsRef = useRef(options?.replayQuestions)
+  const replayIndexRef = useRef(0)
+  const recordedRef = useRef<ChallengeProblemSetItem[]>([])
+
   const [snapshot, setSnapshot] = useState<FinalTrialSnapshot>({
     questionNumber: initialQuestionNumber,
     percent: FINAL_TRIAL_CONFIG.startPercent + (initialQuestionNumber - 1) * FINAL_TRIAL_CONFIG.percentPerCorrect,
@@ -105,6 +143,11 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const endTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  /** Ver.6 Phase 5.2: このプレイで実際に出題された問題列（Challenge作成に使う）。 */
+  function getRecordedProblemSet(): ChallengeProblemSetItem[] {
+    return recordedRef.current
+  }
+
   useEffect(() => {
     return () => {
       if (successTimerRef.current) clearTimeout(successTimerRef.current)
@@ -120,6 +163,19 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
    * の階層プールからanti-clusteringで抽選する。
    */
   function buildQuestion(questionNumber: number): FinalQuestionSpec {
+    const replayQuestions = replayQuestionsRef.current
+    if (replayQuestions && replayIndexRef.current < replayQuestions.length) {
+      const spec = problemSetItemToSpec(replayQuestions[replayIndexRef.current])
+      replayIndexRef.current += 1
+      recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, 3)
+      recentTagsRef.current = spec.tags
+      currentSpecRef.current = spec
+      if (recordedRef.current.length < MAX_RECORDED_PROBLEMS) {
+        recordedRef.current = [...recordedRef.current, specToProblemSetItem(spec)]
+      }
+      return spec
+    }
+
     if (questionNumber === FINAL_TRIAL_CONFIG.totalQuestions) {
       const module = pick(ULTIMATE_QUESTION_POOL)
       const data = module.generate()
@@ -134,6 +190,9 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
       recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, 3)
       recentTagsRef.current = spec.tags
       currentSpecRef.current = spec
+      if (recordedRef.current.length < MAX_RECORDED_PROBLEMS) {
+        recordedRef.current = [...recordedRef.current, specToProblemSetItem(spec)]
+      }
       return spec
     }
 
@@ -142,6 +201,9 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
     recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, 3)
     recentTagsRef.current = spec.tags
     currentSpecRef.current = spec
+    if (recordedRef.current.length < MAX_RECORDED_PROBLEMS) {
+      recordedRef.current = [...recordedRef.current, specToProblemSetItem(spec)]
+    }
     return spec
   }
 
@@ -246,5 +308,5 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
     triggerPostClearFlow(clearedNumber)
   }
 
-  return { snapshot, start, handleResult }
+  return { snapshot, start, handleResult, getRecordedProblemSet }
 }

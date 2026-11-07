@@ -23,7 +23,26 @@ import { QUESTION_MODULES } from '../questions'
 import { duckAudio } from '../utils/audioContext'
 import { playLateGameSweetener, playRiser, setBgmProgress, setOverdriveMode, startBgm, stopBgm } from '../utils/bgm'
 import { sfx } from '../utils/sound'
+import type { ChallengeProblemSetItem } from '../challenge/types'
 import type { DifficultyPhaseId, Judgement, PlayStats, QuestionResult, QuestionSpec, QuestionTypeId } from '../types'
+
+/** Ver.6 Phase 5.2（Challenge機能完成）: 1件のChallengeへ保存する問題数の上限（Worker側validation.tsと同じ値）。 */
+const MAX_RECORDED_PROBLEMS = 300
+
+export function specToProblemSetItem(spec: QuestionSpec): ChallengeProblemSetItem {
+  return { type: spec.type, targetTimeMs: spec.targetTimeMs, data: spec.data }
+}
+
+let replaySpecCounter = 0
+export function problemSetItemToSpec(item: ChallengeProblemSetItem): QuestionSpec {
+  replaySpecCounter += 1
+  return {
+    instanceId: `normal-replay-${replaySpecCounter}`,
+    type: item.type as QuestionTypeId,
+    targetTimeMs: item.targetTimeMs ?? 1000,
+    data: item.data,
+  }
+}
 
 /** Ver.4.9: OVERDRIVE正式突入時に一度だけ加算する残り時間ボーナス（秒） */
 const OVERDRIVE_TIME_BONUS_SEC = 10
@@ -185,7 +204,7 @@ export interface RushFinishPayload {
   stats: PlayStats
 }
 
-function createStats(): PlayStats {
+export function createStats(): PlayStats {
   return {
     totalAnswered: 0,
     correctCount: 0,
@@ -226,7 +245,27 @@ function easeOutCubic(t: number): number {
  * （useFinalTrial）が別エンジンとしてゲームを引き継ぐ。onFinishは非FINALな終了
  * （時間切れ、MISS経験ありでの101〜119%終了など）でのみ呼ばれる。
  */
-export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEnterFinal: (stats: PlayStats) => void) {
+export interface UseRushGameOptions {
+  /**
+   * Ver.6 Phase 5.2（Challenge機能完成）: 指定されると、generateNextQuestionによる
+   * ランダム出題の代わりにこの配列を順番に出題する（DOPA BONUS TIMEの強制挿入も
+   * 含め、Challenge作成者が実際に見た問題をそのままの順番で再生する）。配列を
+   * 使い切った後は元々の問題生成ロジックへ自動的にフォールバックする。
+   * タイマー・COMBO・OVERDRIVE等の進行ロジックは一切変更しない
+   * （挑戦者自身の反応速度・正誤だけがスコアを左右する、という既存の公平性は保つ）。
+   */
+  replayQuestions?: ChallengeProblemSetItem[]
+}
+
+export function useRushGame(
+  onFinish: (payload: RushFinishPayload) => void,
+  onEnterFinal: (stats: PlayStats) => void,
+  options?: UseRushGameOptions,
+) {
+  const replayQuestionsRef = useRef(options?.replayQuestions)
+  const replayIndexRef = useRef(0)
+  const recordedRef = useRef<ChallengeProblemSetItem[]>([])
+
   const [snapshot, setSnapshot] = useState<RushSnapshot>({
     phaseId: 'warmup',
     remainingSec: TOTAL_GAME_SEC,
@@ -405,6 +444,23 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEn
     if (endedRef.current || startTimeRef.current === null) return null
     const elapsedSec = (performance.now() - startTimeRef.current) / 1000
     if (elapsedSec >= totalGameSec()) return null
+
+    // Ver.6 Phase 5.2（Challenge機能完成）: replayQuestionsが残っている間は、経過時間・
+    // DOPA BONUS TIMEのスケジュール・phaseに一切関係なく、記録済みの問題をそのまま
+    // 順番に出す（「同じ問題・同じ順番」を保証する唯一の方法——タイマー・COMBO・
+    // OVERDRIVEなど他のロジックは一切変更しない）。使い切ったら通常の抽選に戻る。
+    const replayQuestions = replayQuestionsRef.current
+    if (replayQuestions && replayIndexRef.current < replayQuestions.length) {
+      const spec = problemSetItemToSpec(replayQuestions[replayIndexRef.current])
+      replayIndexRef.current += 1
+      recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, RECENT_TYPES_LENGTH)
+      currentSpecRef.current = spec
+      if (recordedRef.current.length < MAX_RECORDED_PROBLEMS) {
+        recordedRef.current = [...recordedRef.current, specToProblemSetItem(spec)]
+      }
+      return spec
+    }
+
     const phase = getPhaseAt(elapsedSec)
     let spec: QuestionSpec
     // Ver.4.9: DOPA BONUS TIMEは抽選プールに含めず、1ゲームにつき必ず1回、開始時に決めた
@@ -423,7 +479,15 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEn
     }
     recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, RECENT_TYPES_LENGTH)
     currentSpecRef.current = spec
+    if (recordedRef.current.length < MAX_RECORDED_PROBLEMS) {
+      recordedRef.current = [...recordedRef.current, specToProblemSetItem(spec)]
+    }
     return spec
+  }
+
+  /** Ver.6 Phase 5.2: このプレイで実際に出題された問題列（Challenge作成に使う）。 */
+  function getRecordedProblemSet(): ChallengeProblemSetItem[] {
+    return recordedRef.current
   }
 
   function handleQuestionResult(result: QuestionResult) {
@@ -751,5 +815,5 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEn
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return { snapshot, handleQuestionResult }
+  return { snapshot, handleQuestionResult, getRecordedProblemSet }
 }

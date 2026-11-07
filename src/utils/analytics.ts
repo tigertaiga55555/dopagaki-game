@@ -143,3 +143,28 @@ export function trackTitleEquipped(titleId: string | null): void {
 export function trackRankingView(): void {
   trackEvent('ranking_view')
 }
+
+/**
+ * Ver.6 Phase 5.2（Challenge機能完成）: Challengeライフサイクルのイベント。
+ * challengeIdやplayerIdなど個人・記録を特定できる識別情報は一切送信せず、modeだけを
+ * 送る（既存のtrackEndlessStart等と同じ「個人を特定できる情報を含めない」方針）。
+ * QA/Previewでは送信しない既存方針を呼び出し元（画面側）が維持する。
+ */
+export function trackChallengeCreated(mode: string): void {
+  trackEvent('challenge_created', { mode })
+}
+
+/** Challenge受信画面を開いた回数（URLを開いた瞬間。本人が自分のChallengeを開いた場合も含む）。 */
+export function trackChallengeOpened(mode: string): void {
+  trackEvent('challenge_opened', { mode })
+}
+
+/** 「挑戦する」を押してChallengeのプレイを開始した回数。 */
+export function trackChallengePlayed(mode: string): void {
+  trackEvent('challenge_played', { mode })
+}
+
+/** Challengeの挑戦結果がWINだった回数。 */
+export function trackChallengeWin(mode: string): void {
+  trackEvent('challenge_win', { mode })
+}
