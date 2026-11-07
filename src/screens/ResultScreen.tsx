@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { AdSlot } from '../components/AdSlot'
 import { ResultCard } from '../components/ResultCard'
 import { AD_RESULT_SCREEN } from '../config/ads'
+import { ACHIEVEMENT_DEFS_BY_ID } from '../config/achievements'
 import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
 import { getRetryLabel } from '../config/messagesV4'
-import { trackResultView, trackShareClick } from '../utils/analytics'
+import { trackAchievementUnlock, trackResultView, trackShareClick } from '../utils/analytics'
 import { captureResultCardPng, downloadPngBlob } from '../utils/shareImage'
 import { copyShareText, shareResultWithImage } from '../utils/share'
 import { sfx } from '../utils/sound'
@@ -16,6 +17,12 @@ interface Props {
 }
 
 const TOAST_MS = 3200
+/**
+ * Ver.6 Phase 5: 実績解除バナーの表示時間。300/400チェックポイント・490 FINAL QUESTION・
+ * 500 CLEAR等の既存の長い演出とは完全に別のタイミング（結果画面に来てから）でだけ出すため、
+ * ゲーム進行を一切止めない短いバナーで済む。
+ */
+const ACHIEVEMENT_BANNER_MS = 3200
 
 export function ResultScreen({ result, onRetry }: Props) {
   const [copied, setCopied] = useState(false)
@@ -23,6 +30,18 @@ export function ResultScreen({ result, onRetry }: Props) {
   const [saveBusy, setSaveBusy] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const newlyUnlocked = result.newlyUnlockedAchievements ?? []
+  const [showAchievementBanner, setShowAchievementBanner] = useState(newlyUnlocked.length > 0)
+
+  // Ver.6 Phase 5: 今回のプレイで新たに解除された実績を、結果画面に来てから一度だけ
+  // GA4のachievement_unlockとして送信し、短いバナーを自動で消す（ゲーム進行は一切止めない）。
+  useEffect(() => {
+    if (newlyUnlocked.length === 0) return
+    for (const id of newlyUnlocked) trackAchievementUnlock(id)
+    const timer = setTimeout(() => setShowAchievementBanner(false), ACHIEVEMENT_BANNER_MS)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Ver.5.0追加(TASK C-12): 200%結果画面へ切り替わった瞬間、完全無音にせず
   // bell/sparkle/victory chordのごく控えめな余韻を一度だけ残す。
@@ -107,6 +126,17 @@ export function ResultScreen({ result, onRetry }: Props) {
 
   return (
     <div className="flex min-h-dvh flex-col items-center gap-5 px-6 py-8">
+      {showAchievementBanner && newlyUnlocked.length > 0 && (
+        <div className="anim-pop flex w-full max-w-xs flex-col items-center gap-0.5 rounded-2xl border border-amber-300/40 bg-amber-400/10 px-4 py-2 text-center">
+          <p className="text-[10px] font-black tracking-[0.2em] text-amber-300">ACHIEVEMENT UNLOCKED</p>
+          {newlyUnlocked.map((id) => (
+            <p key={id} className="text-sm font-black text-white">
+              {ACHIEVEMENT_DEFS_BY_ID[id].name}
+            </p>
+          ))}
+        </div>
+      )}
+
       {result.isNewBest && !result.isFirstPlay && (
         <p className="anim-pop rounded-full bg-amber-400/20 px-4 py-1.5 text-sm font-black text-amber-300">
           🎉 自己ベスト更新！

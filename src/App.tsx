@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Challenge500QaPreviewScreen } from './dev/Challenge500QaPreviewScreen'
 import { EndlessPreviewScreen } from './dev/EndlessPreviewScreen'
 import { FinalTrialPreviewScreen } from './dev/FinalTrialPreviewScreen'
@@ -12,14 +12,20 @@ import {
   isOverdrivePreviewRequested,
 } from './dev/overdrivePreview'
 import type { EndlessFinishPayload } from './engine/useEndlessGame'
+import { AchievementScreen } from './screens/AchievementScreen'
 import { EndlessPlayScreen } from './screens/EndlessPlayScreen'
 import { EndlessResultScreen } from './screens/EndlessResultScreen'
 import { EndlessSelectScreen } from './screens/EndlessSelectScreen'
 import { PlayScreen } from './screens/PlayScreen'
+import { ProfileEditScreen } from './screens/ProfileEditScreen'
+import { ProfileScreen } from './screens/ProfileScreen'
+import { RankingScreen } from './screens/RankingScreen'
 import { ResultScreen } from './screens/ResultScreen'
 import { TitleScreen } from './screens/TitleScreen'
 import { trackGameStart, trackReplayStart } from './utils/analytics'
 import { unlockAudio } from './utils/audioContext'
+import { runMigrationsOnce } from './utils/migrations'
+import { getOrCreatePlayerId } from './utils/profileStorage'
 import { sfx } from './utils/sound'
 import type { EndlessDifficulty, FinalResultV4, ScreenName } from './types'
 
@@ -48,6 +54,16 @@ export default function App() {
   // Ver.6 Phase 4 QA補助: ?preview=endless の場合のみ、Endlessの難易度選択画面から
   // 直接始められるQA専用画面を表示する。
   const [showEndlessPreview] = useState(isEndlessPreviewRequested)
+
+  /**
+   * Ver.6 Phase 5（Profile/Achievement/Ranking基盤）: アプリ起動時に1回だけ、匿名
+   * player_idを確保し（なければ生成）、既存記録からのAchievement遡及マイグレーションを
+   * 走らせる。どちらも冪等（何度呼んでも安全）で、既存のBEST等のキーには一切書き込まない。
+   */
+  useEffect(() => {
+    getOrCreatePlayerId()
+    runMigrationsOnce()
+  }, [])
 
   /**
    * Ver.5.0追加: GA4のgame_start（常に）とreplay_start（結果画面からのリトライ時のみ）を
@@ -105,6 +121,18 @@ export default function App() {
     setScreen('endlessResult')
   }, [])
 
+  /**
+   * Ver.6 Phase 5: Profile/Achievement/Rankingはゲームプレイとは独立した単純な画面遷移
+   * （バックスタックを持たない、既存のEndlessSelectScreen等と同じフラットな遷移モデル）。
+   * どの入口（TitleScreenのサブ導線／ProfileScreenのボタン）から来ても「戻る」は
+   * 常にホームへ戻る。ProfileEditScreenだけはProfileの一段下なので、保存/キャンセル
+   * いずれも'profile'へ戻す。
+   */
+  const openProfile = useCallback(() => setScreen('profile'), [])
+  const openProfileEdit = useCallback(() => setScreen('profileEdit'), [])
+  const openAchievements = useCallback(() => setScreen('achievements'), [])
+  const openRanking = useCallback(() => setScreen('ranking'), [])
+
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-[430px] overflow-hidden bg-[#0b0620]">
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
@@ -126,7 +154,15 @@ export default function App() {
         <EndlessPreviewScreen />
       ) : (
         <>
-          {screen === 'title' && <TitleScreen onStart={() => startPlay('title')} onStartEndless={openEndlessSelect} />}
+          {screen === 'title' && (
+            <TitleScreen
+              onStart={() => startPlay('title')}
+              onStartEndless={openEndlessSelect}
+              onOpenProfile={openProfile}
+              onOpenAchievements={openAchievements}
+              onOpenRanking={openRanking}
+            />
+          )}
           {screen === 'playing' && <PlayScreen key={playKey} onFinish={handleFinish} onQuit={quitToHome} />}
           {screen === 'result' && result && <ResultScreen result={result} onRetry={() => startPlay('retry')} />}
           {screen === 'endlessSelect' && <EndlessSelectScreen onSelect={startEndless} onQuit={quitToHome} />}
@@ -144,6 +180,12 @@ export default function App() {
               onHome={quitToHome}
             />
           )}
+          {screen === 'profile' && (
+            <ProfileScreen onBack={quitToHome} onEdit={openProfileEdit} onAchievements={openAchievements} onRanking={openRanking} />
+          )}
+          {screen === 'profileEdit' && <ProfileEditScreen onDone={openProfile} />}
+          {screen === 'achievements' && <AchievementScreen onBack={quitToHome} />}
+          {screen === 'ranking' && <RankingScreen onBack={quitToHome} />}
         </>
       )}
     </div>

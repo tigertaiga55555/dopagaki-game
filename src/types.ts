@@ -1,6 +1,16 @@
 import type { ComponentType } from 'react'
 
-export type ScreenName = 'title' | 'playing' | 'result' | 'endlessSelect' | 'endlessPlaying' | 'endlessResult'
+export type ScreenName =
+  | 'title'
+  | 'playing'
+  | 'result'
+  | 'endlessSelect'
+  | 'endlessPlaying'
+  | 'endlessResult'
+  | 'profile'
+  | 'profileEdit'
+  | 'achievements'
+  | 'ranking'
 
 /**
  * Ver.6 Phase 4: Endlessモードの難易度。既存通常ゲームの問題難易度システム
@@ -210,6 +220,12 @@ export interface FinalResultV4 {
   finalTrial?: FinalTrialResultInfo
   /** Ver.6 Phase 1: 200%到達後、限界突破チャレンジ（200〜500%）に挑戦した場合のみ存在する。 */
   challenge500?: Challenge500ResultInfo
+  /**
+   * Ver.6 Phase 5: 今回のプレイで新たに解除されたDOPA%実績（0件なら空配列）。
+   * 300/400チェックポイント・490 FINAL QUESTION・500 CLEAR等の既存演出と競合しないよう、
+   * ゲーム中には出さず結果画面でまとめて通知する（screens/ResultScreen.tsx参照）。
+   */
+  newlyUnlockedAchievements?: AchievementId[]
 }
 
 /** Ver.6 Phase 1: 結果画面用に持ち越す限界突破チャレンジ（200〜500%）の進捗情報。 */
@@ -265,3 +281,96 @@ export interface FinalTrialResultInfo {
   /** FINAL QUESTION（16問目）に正解して200%へ到達したか */
   cleared200: boolean
 }
+
+/**
+ * Ver.6 Phase 5（Profile/Achievement/Ranking基盤）: 匿名プレイヤーID。ログイン不要の
+ * まま、同一ブラウザ内でプレイヤーを識別するためだけの値（個人情報は含まない）。
+ * crypto.randomUUID()等の衝突しにくい形式で生成し、一度生成したら
+ * localStorage（utils/profileStorage.ts）へ保存してブラウザを閉じても維持する。
+ * 将来のDOPA PASS購入・Google/Email認証導入時は、このIDをそのままアカウントへ
+ * 紐付ける鍵として使う想定（storageへ密結合しすぎない構造にするため、型としては
+ * ただのstringで扱う）。
+ */
+export type PlayerId = string
+
+/** Ver.6 Phase 5: プロフィールアイコン。外部画像は使わず、既存のemoji数種から選ぶだけ。 */
+export type PresetIconId = 'bolt' | 'flame' | 'skull' | 'eye' | 'swirl' | 'star' | 'crown' | 'gem'
+
+/**
+ * Ver.6 Phase 5: ログイン不要のローカルプロフィール。将来Public Profile（サーバー接続後）
+ * にもそのまま使える最小限のフィールド構成にしてある。
+ */
+export interface PlayerProfile {
+  playerId: PlayerId
+  nickname: string
+  iconId: PresetIconId
+  /** 装備中Title（config/titles.tsのTitleDef.id）。未装備はnull。 */
+  equippedTitleId: TitleId | null
+  createdAt: number
+}
+
+/**
+ * Ver.6 Phase 5: DOPA%系実績（6個）の識別子。idはnameと分離してあり、将来名称だけを
+ * 差し替えてもid・解除済みフラグには一切影響しない。
+ */
+export type AchievementId = 'dopa100' | 'dopa120' | 'dopa200' | 'dopa300' | 'dopa400' | 'dopa500'
+
+/** 実績の解除条件。今回はDOPA%到達の1種類のみだが、将来の拡張（Endless記録等）に備えて種別を持たせてある。 */
+export interface AchievementUnlockCondition {
+  type: 'dopaPercent'
+  threshold: number
+}
+
+/** 実績定義（config/achievements.ts）。id/name/description/unlockConditionを分離し、名称だけの差し替えを容易にする。 */
+export interface AchievementDef {
+  id: AchievementId
+  name: string
+  description: string
+  unlockCondition: AchievementUnlockCondition
+}
+
+/**
+ * Ver.6 Phase 5: Title（称号）のid。現時点ではAchievementIdと1対1だが、将来Titleが
+ * Achievement以外（Ranking順位・Challenge等）からも解放されうるため、型としては
+ * AchievementIdへ固定せず別名として分離してある。
+ */
+export type TitleId = string
+
+/** Title定義（config/titles.ts）。今回は仮称（例: "DOPA 300%"）でよい。 */
+export interface TitleDef {
+  id: TitleId
+  name: string
+  description: string
+  unlockedByAchievementId: AchievementId
+}
+
+/**
+ * Ver.6 Phase 5: 共通プレイヤー記録。既存storage（bestPercentV4・EndlessBestV1×3）を
+ * 二重管理せず、utils/playerStatsRepository.tsが読み取り専用のビューとして組み立てる。
+ * worldBattle*は将来のリアルタイム対戦実装後に初めて値を持つ（今回は常にundefined、
+ * 偽の0としてUIへ表示しない）。
+ */
+export interface PlayerStats {
+  maxDopaPercent: number
+  endlessBeginnerBest: number
+  endlessIntermediateBest: number
+  endlessAdvancedBest: number
+  achievementCount: number
+  /** 将来用（世界対戦実装後）。今回は常にundefined。 */
+  worldBattleWins?: number
+  /** 将来用（世界対戦実装後）。今回は常にundefined。 */
+  worldBattleMaxStreak?: number
+}
+
+/**
+ * Ver.6 Phase 5: 将来のRanking6種類の識別子。Elo/rating/勝率ランキングは作らない
+ * （ユーザー指示）。worldBattle系2種は対戦実装後に初めて値を持つカテゴリとして
+ * 先に型だけ用意する。
+ */
+export type RankingCategoryId =
+  | 'maxDopaPercent'
+  | 'endlessBeginner'
+  | 'endlessIntermediate'
+  | 'endlessAdvanced'
+  | 'worldBattleWins'
+  | 'worldBattleMaxStreak'
