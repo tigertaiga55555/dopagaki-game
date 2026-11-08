@@ -178,9 +178,12 @@ jobs:
           cat preview-stderr.log || true
           echo "----- wrangler exit code: $WRANGLER_EXIT_CODE -----"
 
-          PREVIEW_URL=$(jq -r '.preview_urls[0] // .deployment_urls[0] // empty' preview-output.json 2>/dev/null || true)
+          PREVIEW_URL=$(jq -r '.preview.urls[0] // .deployment.urls[0] // .preview_urls[0] // .deployment_urls[0] // empty' preview-output.json 2>/dev/null || true)
           if [ -z "$PREVIEW_URL" ]; then
-            PREVIEW_URL=$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev[^"[:space:]]*' preview-output.json preview-stderr.log 2>/dev/null | head -1 || true)
+            # -h（--no-filename）で、複数ファイルを渡してもURLの前に"ファイル名:"が
+            # 付かないようにする（以前はこの保険ルートに落ちた場合、抽出結果が
+            # "preview-output.json:https://..."という壊れた文字列になっていた）。
+            PREVIEW_URL=$(grep -hoE 'https://[A-Za-z0-9.-]+\.workers\.dev[^"[:space:]]*' preview-output.json preview-stderr.log 2>/dev/null | head -1 || true)
           fi
 
           {
