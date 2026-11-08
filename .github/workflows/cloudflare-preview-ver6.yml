@@ -245,7 +245,10 @@ jobs:
           done
           echo "Probe GET /api/challenges/does-not-exist -> HTTP $PROBE_STATUS"
 
-          CREATE_PAYLOAD='{"creatorPlayerId":"ci-verify-creator","creatorNickname":"CI Verify","creatorIcon":{"kind":"preset","iconId":"bolt"},"creatorEquippedTitle":null,"mode":"challenge500","problemSet":{"version":1,"items":[{"type":"numberPick","data":{"answer":3}}]},"conditions":{"mode":"challenge500"},"creatorScore":420}'
+          # Ver.6 Phase 5.3（Challenge勝敗判定強化）: performanceが必須フィールドになったため、
+          # 検証用ペイロードにも妥当なChallengePerformanceを含める（欠けていると
+          # validateCreateChallengeInputがHTTP 400 "performance is invalid"で弾く）。
+          CREATE_PAYLOAD='{"creatorPlayerId":"ci-verify-creator","creatorNickname":"CI Verify","creatorIcon":{"kind":"preset","iconId":"bolt"},"creatorEquippedTitle":null,"mode":"challenge500","problemSet":{"version":1,"items":[{"type":"numberPick","data":{"answer":3}}]},"conditions":{"mode":"challenge500"},"creatorScore":420,"performance":{"finalDopaPercent":420,"baseDopaPercent":400,"accuracy":0.8,"maxCombo":15,"medianCorrectReactionMs":500}}'
           CREATE_RESP=$(curl -sS -w '\n%{http_code}' -X POST "${PREVIEW_URL}/api/challenges" \
             -H "Content-Type: application/json" \
             --data "$CREATE_PAYLOAD")
@@ -302,7 +305,9 @@ jobs:
           fi
           echo "GET content matches creation (creatorScore=$GET_SCORE). Challenge create -> get is confirmed working on the real Preview."
 
-          ATTEMPT_PAYLOAD='{"playerId":"ci-verify-challenger","nickname":"CI Verify Challenger","avatar":{"kind":"preset","iconId":"flame"},"equippedTitle":null,"score":500}'
+          # finalDopaPercent(500) > creator(420)の時点で第1優先指標により決着するため、
+          # 他の指標（accuracy/maxCombo/reaction）の値に関わらずwin/finalDopaPercentになる。
+          ATTEMPT_PAYLOAD='{"playerId":"ci-verify-challenger","nickname":"CI Verify Challenger","avatar":{"kind":"preset","iconId":"flame"},"equippedTitle":null,"score":500,"performance":{"finalDopaPercent":500,"baseDopaPercent":480,"accuracy":0.9,"maxCombo":20,"medianCorrectReactionMs":400}}'
           ATTEMPT_RESP=$(curl -sS -w '\n%{http_code}' -X POST "${PREVIEW_URL}/api/challenges/${CHALLENGE_ID}/attempts" \
             -H "Content-Type: application/json" \
             --data "$ATTEMPT_PAYLOAD")
@@ -321,7 +326,8 @@ jobs:
 
           if [ "$ATTEMPT_STATUS" == "201" ]; then
             ATTEMPT_RESULT=$(echo "$ATTEMPT_BODY" | jq -r '.value.result // empty')
-            echo "Attempt created with result=$ATTEMPT_RESULT (score 500 > creatorScore 420 should be 'win')."
+            ATTEMPT_DECIDED_BY=$(echo "$ATTEMPT_BODY" | jq -r '.value.decidedBy // empty')
+            echo "Attempt created with result=$ATTEMPT_RESULT, decidedBy=$ATTEMPT_DECIDED_BY (finalDopaPercent 500 > creator's 420 should decide 'win' by 'finalDopaPercent')."
 
             ATTEMPTS_GET_RESP=$(curl -sS -w '\n%{http_code}' "${PREVIEW_URL}/api/challenges/${CHALLENGE_ID}/attempts?playerId=ci-verify-challenger")
             ATTEMPTS_GET_STATUS=$(echo "$ATTEMPTS_GET_RESP" | tail -1)
