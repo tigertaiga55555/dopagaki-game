@@ -168,3 +168,16 @@ export function trackChallengePlayed(mode: string): void {
 export function trackChallengeWin(mode: string): void {
   trackEvent('challenge_win', { mode })
 }
+
+/**
+ * Ver.6 Phase 5.3（Challenge勝敗判定強化）: Challenge履歴画面（作成者・挑戦者どちらが
+ * 開いた場合も含む）を表示した回数。Challenge ID・playerId等の識別情報は送信しない。
+ */
+export function trackChallengeHistoryView(mode: string): void {
+  trackEvent('challenge_history_view', { mode })
+}
+
+/** 「送った挑戦状」一覧画面を表示した回数。識別情報は送信しない。 */
+export function trackChallengeSentListView(): void {
+  trackEvent('challenge_sent_list_view')
+}

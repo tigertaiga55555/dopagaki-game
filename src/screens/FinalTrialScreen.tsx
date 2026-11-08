@@ -386,10 +386,10 @@ export function FinalTrialScreen({
     return (
       <Challenge500Screen
         onQuit={onQuit}
-        onFinish={(state: Challenge500State, recordedProblemSet) => {
+        onFinish={(state: Challenge500State, recordedProblemSet, performanceStats) => {
           const base = clear200ResultRef.current
           if (!base) return
-          onFinish(computeChallenge500Result(state, base, true, recordedProblemSet))
+          onFinish(computeChallenge500Result(state, base, true, recordedProblemSet, performanceStats))
         }}
       />
     )

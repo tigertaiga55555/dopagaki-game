@@ -26,7 +26,9 @@ import { ProfileEditScreen } from './screens/ProfileEditScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
 import { RankingScreen } from './screens/RankingScreen'
 import { ResultScreen } from './screens/ResultScreen'
+import { SentChallengesScreen } from './screens/SentChallengesScreen'
 import { TitleScreen } from './screens/TitleScreen'
+import { addCreatedChallengeId } from './challenge/createdChallengesStorage'
 import { extractChallengeIdFromLocation } from './challenge/url'
 import { trackChallengePlayed, trackGameStart, trackReplayStart } from './utils/analytics'
 import { unlockAudio } from './utils/audioContext'
@@ -143,6 +145,8 @@ export default function App() {
    * どの画面からも共通で参照する（Challenge専用の複雑な状態管理を増やさない）。
    */
   const handleChallengeSent = useCallback((challenge: ChallengeRecord) => {
+    // Ver.6 Phase 5.3（送った挑戦状一覧）: Challenge情報本体は保存せず、IDだけを記録する。
+    addCreatedChallengeId(challenge.id)
     setActiveChallenge(challenge)
     setScreen('challengeSent')
   }, [])
@@ -182,6 +186,7 @@ export default function App() {
   const openProfileEdit = useCallback(() => setScreen('profileEdit'), [])
   const openAchievements = useCallback(() => setScreen('achievements'), [])
   const openRanking = useCallback(() => setScreen('ranking'), [])
+  const openSentChallenges = useCallback(() => setScreen('challengeSentList'), [])
 
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-[430px] overflow-hidden bg-[#0b0620]">
@@ -234,7 +239,13 @@ export default function App() {
             />
           )}
           {screen === 'profile' && (
-            <ProfileScreen onBack={quitToHome} onEdit={openProfileEdit} onAchievements={openAchievements} onRanking={openRanking} />
+            <ProfileScreen
+              onBack={quitToHome}
+              onEdit={openProfileEdit}
+              onAchievements={openAchievements}
+              onRanking={openRanking}
+              onSentChallenges={openSentChallenges}
+            />
           )}
           {screen === 'profileEdit' && <ProfileEditScreen onDone={openProfile} />}
           {screen === 'achievements' && <AchievementScreen onBack={quitToHome} />}
@@ -263,6 +274,7 @@ export default function App() {
           {screen === 'challengeHistory' && activeChallenge && (
             <ChallengeHistoryScreen challenge={activeChallenge} onBack={quitToHome} />
           )}
+          {screen === 'challengeSentList' && <SentChallengesScreen onBack={quitToHome} onOpenHistory={openChallengeHistory} />}
         </>
       )}
     </div>

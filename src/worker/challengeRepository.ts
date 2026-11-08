@@ -1,4 +1,11 @@
-import type { ChallengeAttemptRecord, ChallengeRecord, CreateChallengeAttemptInput, CreateChallengeInput } from '../challenge/types'
+import type {
+  ChallengeAttemptRecord,
+  ChallengeDecidedBy,
+  ChallengePerformance,
+  ChallengeRecord,
+  CreateChallengeAttemptInput,
+  CreateChallengeInput,
+} from '../challenge/types'
 
 /**
  * Ver.6 Phase 5.1（Challengeバックエンド基盤）: D1（SQLite互換）への実際のクエリだけを
@@ -13,6 +20,12 @@ import type { ChallengeAttemptRecord, ChallengeRecord, CreateChallengeAttemptInp
 export interface ChallengeRepository {
   create(id: string, createdAt: number, input: CreateChallengeInput): Promise<ChallengeRecord>
   getById(id: string): Promise<ChallengeRecord | null>
+  /**
+   * Ver.6 Phase 5.3（送った挑戦状一覧）: 複数idを一括取得する（N+1回避。createdChallengeIdsの
+   * 件数に関わらず1回のクエリで済む）。見つからなかったidは結果に含めない（他人のChallengeの
+   * 存在を推測で埋めたりしない）。
+   */
+  getByIds(ids: string[]): Promise<ChallengeRecord[]>
 }
 
 interface ChallengeRow {
@@ -27,6 +40,28 @@ interface ChallengeRow {
   conditions: string
   creator_score: number
   created_at: number
+  performance_final_dopa_percent: number | null
+  performance_base_dopa_percent: number | null
+  performance_accuracy: number | null
+  performance_max_combo: number | null
+  performance_median_reaction_ms: number | null
+}
+
+/**
+ * Ver.6 Phase 5.3（Challenge勝敗判定強化）: performance_*列が1つでもNULLなら、
+ * このmigration以前に作成された既存Challenge（performanceという概念自体が無かった）
+ * として扱い、nullを返す（推測で埋めない）。5列は常に同時にセットされるため、
+ * 代表して1列だけ見れば十分判定できる。
+ */
+function rowToPerformance(row: ChallengeRow): ChallengePerformance | null {
+  if (row.performance_final_dopa_percent === null) return null
+  return {
+    finalDopaPercent: row.performance_final_dopa_percent,
+    baseDopaPercent: row.performance_base_dopa_percent ?? row.performance_final_dopa_percent,
+    accuracy: row.performance_accuracy ?? 0,
+    maxCombo: row.performance_max_combo ?? 0,
+    medianCorrectReactionMs: row.performance_median_reaction_ms,
+  }
 }
 
 function rowToRecord(row: ChallengeRow): ChallengeRecord {
@@ -44,6 +79,7 @@ function rowToRecord(row: ChallengeRow): ChallengeRecord {
     conditions: JSON.parse(row.conditions),
     creatorScore: row.creator_score,
     createdAt: row.created_at,
+    performance: rowToPerformance(row),
   }
 }
 
@@ -54,8 +90,10 @@ export function createD1ChallengeRepository(db: D1Database): ChallengeRepository
         .prepare(
           `INSERT INTO challenges
             (id, creator_player_id, creator_nickname, creator_icon_kind, creator_icon_value,
-             creator_equipped_title, mode, problem_set, conditions, creator_score, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             creator_equipped_title, mode, problem_set, conditions, creator_score, created_at,
+             performance_final_dopa_percent, performance_base_dopa_percent, performance_accuracy,
+             performance_max_combo, performance_median_reaction_ms)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           id,
@@ -69,6 +107,11 @@ export function createD1ChallengeRepository(db: D1Database): ChallengeRepository
           JSON.stringify(input.conditions),
           input.creatorScore,
           createdAt,
+          input.performance.finalDopaPercent,
+          input.performance.baseDopaPercent,
+          input.performance.accuracy,
+          input.performance.maxCombo,
+          input.performance.medianCorrectReactionMs,
         )
         .run()
 
@@ -78,6 +121,16 @@ export function createD1ChallengeRepository(db: D1Database): ChallengeRepository
     async getById(id) {
       const row = await db.prepare(`SELECT * FROM challenges WHERE id = ?`).bind(id).first<ChallengeRow>()
       return row ? rowToRecord(row) : null
+    },
+
+    async getByIds(ids) {
+      if (ids.length === 0) return []
+      const placeholders = ids.map(() => '?').join(', ')
+      const result = await db
+        .prepare(`SELECT * FROM challenges WHERE id IN (${placeholders})`)
+        .bind(...ids)
+        .all<ChallengeRow>()
+      return (result.results ?? []).map(rowToRecord)
     },
   }
 }
@@ -94,6 +147,7 @@ export interface ChallengeAttemptRepository {
     createdAt: number,
     attemptNumber: number,
     result: 'win' | 'lose',
+    decidedBy: ChallengeDecidedBy,
     input: CreateChallengeAttemptInput,
   ): Promise<ChallengeAttemptRecord>
   /**
@@ -104,6 +158,14 @@ export interface ChallengeAttemptRepository {
    * DBの行自体は一切削除しないため、将来DOPA PASSでlimitを外すだけで全履歴表示に拡張できる。
    */
   list(challengeId: string, options: { playerId?: string; limit: number }): Promise<{ rows: ChallengeAttemptRecord[]; totalCount: number }>
+  /**
+   * Ver.6 Phase 5.3（送った挑戦状一覧）: 複数challengeIdぶんの挑戦者数・総attempt数・突破者数を
+   * 一括集計する（N+1回避。GROUP BYで1回のクエリにまとめる）。見つからないchallengeIdは
+   * 結果に含めない（0件として扱われる＝未挑戦と同じ表示になる）。
+   */
+  getAggregatesByChallengeIds(
+    challengeIds: string[],
+  ): Promise<Record<string, { challengerCount: number; attemptCount: number; clearedCount: number }>>
 }
 
 interface ChallengeAttemptRow {
@@ -118,6 +180,23 @@ interface ChallengeAttemptRow {
   result: string
   attempt_number: number
   created_at: number
+  performance_final_dopa_percent: number | null
+  performance_base_dopa_percent: number | null
+  performance_accuracy: number | null
+  performance_max_combo: number | null
+  performance_median_reaction_ms: number | null
+  decided_by: string | null
+}
+
+function attemptRowToPerformance(row: ChallengeAttemptRow): ChallengePerformance | null {
+  if (row.performance_final_dopa_percent === null) return null
+  return {
+    finalDopaPercent: row.performance_final_dopa_percent,
+    baseDopaPercent: row.performance_base_dopa_percent ?? row.performance_final_dopa_percent,
+    accuracy: row.performance_accuracy ?? 0,
+    maxCombo: row.performance_max_combo ?? 0,
+    medianCorrectReactionMs: row.performance_median_reaction_ms,
+  }
 }
 
 function attemptRowToRecord(row: ChallengeAttemptRow): ChallengeAttemptRecord {
@@ -133,6 +212,8 @@ function attemptRowToRecord(row: ChallengeAttemptRow): ChallengeAttemptRecord {
     result: row.result as 'win' | 'lose',
     attemptNumber: row.attempt_number,
     createdAt: row.created_at,
+    performance: attemptRowToPerformance(row),
+    decidedBy: row.decided_by as ChallengeDecidedBy | null,
   }
 }
 
@@ -146,12 +227,14 @@ export function createD1ChallengeAttemptRepository(db: D1Database): ChallengeAtt
       return row?.cnt ?? 0
     },
 
-    async create(id, createdAt, attemptNumber, result, input) {
+    async create(id, createdAt, attemptNumber, result, decidedBy, input) {
       await db
         .prepare(
           `INSERT INTO challenge_attempts
-            (id, challenge_id, player_id, nickname, icon_kind, icon_value, equipped_title, score, result, attempt_number, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, challenge_id, player_id, nickname, icon_kind, icon_value, equipped_title, score, result, attempt_number, created_at,
+             performance_final_dopa_percent, performance_base_dopa_percent, performance_accuracy,
+             performance_max_combo, performance_median_reaction_ms, decided_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           id,
@@ -165,10 +248,16 @@ export function createD1ChallengeAttemptRepository(db: D1Database): ChallengeAtt
           result,
           attemptNumber,
           createdAt,
+          input.performance.finalDopaPercent,
+          input.performance.baseDopaPercent,
+          input.performance.accuracy,
+          input.performance.maxCombo,
+          input.performance.medianCorrectReactionMs,
+          decidedBy,
         )
         .run()
 
-      return { id, createdAt, attemptNumber, result, ...input }
+      return { id, createdAt, attemptNumber, result, decidedBy, ...input }
     },
 
     async list(challengeId, options) {
@@ -192,6 +281,33 @@ export function createD1ChallengeAttemptRepository(db: D1Database): ChallengeAtt
         .all<ChallengeAttemptRow>()
 
       return { rows: (result.results ?? []).map(attemptRowToRecord), totalCount }
+    },
+
+    async getAggregatesByChallengeIds(challengeIds) {
+      if (challengeIds.length === 0) return {}
+      const placeholders = challengeIds.map(() => '?').join(', ')
+      const result = await db
+        .prepare(
+          `SELECT challenge_id,
+             COUNT(DISTINCT player_id) as challenger_count,
+             COUNT(*) as attempt_count,
+             COUNT(DISTINCT CASE WHEN result = 'win' THEN player_id END) as cleared_count
+           FROM challenge_attempts
+           WHERE challenge_id IN (${placeholders})
+           GROUP BY challenge_id`,
+        )
+        .bind(...challengeIds)
+        .all<{ challenge_id: string; challenger_count: number; attempt_count: number; cleared_count: number }>()
+
+      const aggregates: Record<string, { challengerCount: number; attemptCount: number; clearedCount: number }> = {}
+      for (const row of result.results ?? []) {
+        aggregates[row.challenge_id] = {
+          challengerCount: row.challenger_count,
+          attemptCount: row.attempt_count,
+          clearedCount: row.cleared_count,
+        }
+      }
+      return aggregates
     },
   }
 }

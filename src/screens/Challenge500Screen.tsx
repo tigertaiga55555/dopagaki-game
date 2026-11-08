@@ -15,6 +15,7 @@ import { CHALLENGE500_CONFIG, tierForPercent } from '../config/challenge500Confi
 import { getChallenge500Theme } from '../config/challenge500Theme'
 import type { Challenge500State } from '../engine/challenge500Engine'
 import { useChallenge500 } from '../engine/useChallenge500'
+import type { Challenge500PerformanceStats } from '../engine/useChallenge500'
 import { CHALLENGE500_QUESTION_MODULES } from '../questions/challenge500'
 import type { Challenge500QuestionResult } from '../questions/challenge500/types'
 import { duckAudio, duckBgm } from '../utils/audioContext'
@@ -26,8 +27,10 @@ interface Props {
   /**
    * Ver.6 Phase 5.2（Challenge機能完成）: 第2引数は、このプレイで実際に出題された問題列
    * （Challenge作成に使う。呼び出し元が不要なら無視してよい）。
+   * Ver.6 Phase 5.3（Challenge勝敗判定強化）: 第3引数は、このプレイのChallenge用
+   * performance集計（useChallenge500.getPerformanceStats()をそのまま渡す）。
    */
-  onFinish: (state: Challenge500State, recordedProblemSet: ChallengeProblemSetItem[]) => void
+  onFinish: (state: Challenge500State, recordedProblemSet: ChallengeProblemSetItem[], performanceStats: Challenge500PerformanceStats) => void
   onQuit: () => void
   /**
    * Preview専用のQA補助モード（既定false）。__DOPAGAKI_PREVIEW_ENABLED__
@@ -136,7 +139,7 @@ type ClearBeat = 'first' | 'blackout' | 'second' | null
  */
 export function Challenge500Screen({ onFinish, onQuit, qaMode = false, replayQuestions }: Props) {
   const [finalState, setFinalState] = useState<Challenge500State | null>(null)
-  const { snapshot, start, handleResult, jumpTo, getRecordedProblemSet } = useChallenge500((state) => setFinalState(state), {
+  const { snapshot, start, handleResult, jumpTo, getRecordedProblemSet, getPerformanceStats } = useChallenge500((state) => setFinalState(state), {
     qaMode,
     replayQuestions,
   })
@@ -323,7 +326,7 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false, replayQue
       // チャレンジ終了（MISS）：常駐ハートビートはここで止め、結果画面まで持ち越さない。
       setChallenge500Mode(false)
       stopBgm()
-      finishTimerRef.current = setTimeout(() => onFinish(finalState, getRecordedProblemSet()), END_FLASH_MS)
+      finishTimerRef.current = setTimeout(() => onFinish(finalState, getRecordedProblemSet(), getPerformanceStats()), END_FLASH_MS)
       return () => {
         if (finishTimerRef.current) clearTimeout(finishTimerRef.current)
       }
@@ -349,7 +352,7 @@ export function Challenge500Screen({ onFinish, onQuit, qaMode = false, replayQue
         },
         CLEAR500_SILENCE_MS + CLEAR_FIRST_BEAT_MS + CLEAR_BLACKOUT_MS,
       ),
-      setTimeout(() => onFinish(finalState, getRecordedProblemSet()), CLEAR500_SILENCE_MS + CLEAR_FLASH_MS),
+      setTimeout(() => onFinish(finalState, getRecordedProblemSet(), getPerformanceStats()), CLEAR500_SILENCE_MS + CLEAR_FLASH_MS),
     )
     return () => {
       clearTimersRef.current.forEach(clearTimeout)

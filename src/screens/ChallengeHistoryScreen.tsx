@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { resolveAvatarEmoji } from '../config/profileConfig'
 import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSource'
+import { describeDecidedBy, formatAccuracyPercent, formatReactionSeconds } from '../challenge/formatPerformance'
+import { trackChallengeHistoryView } from '../utils/analytics'
 import { getOrCreatePlayerId } from '../utils/profileStorage'
 import type { ChallengeApiError, ChallengeAttemptRecord, ChallengeRecord } from '../challenge/types'
 
@@ -33,6 +35,11 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const viewerPlayerId = getOrCreatePlayerId()
   const isCreator = viewerPlayerId === challenge.creatorPlayerId
+
+  useEffect(() => {
+    trackChallengeHistoryView(challenge.mode)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -98,6 +105,19 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
       </div>
 
       <div className="flex flex-1 flex-col items-center gap-3 px-5 py-4">
+        {isCreator && challenge.performance && (
+          <div className="w-full max-w-sm space-y-1 rounded-2xl bg-white/5 px-4 py-3 text-xs">
+            <p className="mb-1 text-[10px] font-black tracking-widest text-white/40">あなたの基準記録</p>
+            <div className="grid grid-cols-5 gap-1 text-center">
+              <BaselineStat label="最終%" value={`${challenge.performance.finalDopaPercent}`} />
+              <BaselineStat label="通常%" value={`${challenge.performance.baseDopaPercent}`} />
+              <BaselineStat label="正答率" value={formatAccuracyPercent(challenge.performance.accuracy)} />
+              <BaselineStat label="COMBO" value={`${challenge.performance.maxCombo}`} />
+              <BaselineStat label="反応" value={formatReactionSeconds(challenge.performance.medianCorrectReactionMs)} />
+            </div>
+          </div>
+        )}
+
         {attempts.length === 0 && <p className="mt-10 text-sm font-bold text-white/40">まだ挑戦記録がありません</p>}
 
         {isCreator && groups && (
@@ -121,6 +141,11 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
                     挑戦{group.rows.length}回 ・{' '}
                     {group.rows.map((r) => RESULT_LABEL[r.result]).join(' → ')}
                   </p>
+                  <div className="mt-2 flex flex-col gap-1.5 border-t border-white/5 pt-2">
+                    {group.rows.map((r, i) => (
+                      <AttemptDetailRow key={r.id} attempt={r} index={i + 1} />
+                    ))}
+                  </div>
                 </div>
               )
             })}
@@ -130,12 +155,8 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
         {!isCreator && (
           <div className="flex w-full max-w-sm flex-col gap-2">
             {attempts.map((row) => (
-              <div key={row.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                <span className="text-xs font-bold text-white/50">{row.attemptNumber}回目</span>
-                <span className="text-sm font-bold tabular-nums text-white">{row.score}％</span>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${row.result === 'win' ? 'bg-amber-400/20 text-amber-300' : 'bg-white/10 text-white/50'}`}>
-                  {RESULT_LABEL[row.result]}
-                </span>
+              <div key={row.id} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                <AttemptDetailRow attempt={row} index={row.attemptNumber} />
               </div>
             ))}
           </div>
@@ -143,6 +164,51 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
 
         {truncated && <p className="mt-2 text-[10px] font-bold text-white/30">直近10件のみ表示しています（DOPA PASSで全履歴表示予定）</p>}
       </div>
+    </div>
+  )
+}
+
+function BaselineStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col items-center">
+      <span className="text-[9px] font-bold text-white/40">{label}</span>
+      <span className="font-bold tabular-nums text-white">{value}</span>
+    </div>
+  )
+}
+
+/**
+ * Ver.6 Phase 5.3（Challenge勝敗判定強化）: 1回ぶんのattemptの詳細（WIN/LOSE・5指標・
+ * 勝敗理由）。作成者視点（グループ内の各行）・挑戦者本人視点（自分の履歴）の両方で
+ * 同じコンポーネントを使う（item 14: 「挑戦者本人の履歴でも、同じ詳細を見られて構いません」）。
+ * performance/decidedByが無い（このmigration以前のattempt）場合は、score・resultだけの
+ * 簡易表示にフォールバックする。
+ */
+function AttemptDetailRow({ attempt, index }: { attempt: ChallengeAttemptRecord; index: number }) {
+  const resultClass = attempt.result === 'win' ? 'text-amber-300' : 'text-white/50'
+
+  if (!attempt.performance || !attempt.decidedBy) {
+    return (
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-white/50">{index}回目</span>
+        <span className="font-bold tabular-nums text-white">{attempt.score}％</span>
+        <span className={`font-black ${resultClass}`}>{RESULT_LABEL[attempt.result]}</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="text-xs">
+      <div className="flex items-center justify-between">
+        <span className="text-white/50">{index}回目</span>
+        <span className={`font-black ${resultClass}`}>{RESULT_LABEL[attempt.result]}</span>
+      </div>
+      <p className="mt-0.5 text-[10px] text-white/40">
+        最終{attempt.performance.finalDopaPercent}% ・ 通常{attempt.performance.baseDopaPercent}% ・{' '}
+        {formatAccuracyPercent(attempt.performance.accuracy)} ・ COMBO{attempt.performance.maxCombo} ・{' '}
+        {formatReactionSeconds(attempt.performance.medianCorrectReactionMs)}
+      </p>
+      <p className="mt-0.5 text-[10px] font-bold text-amber-200/80">{describeDecidedBy(attempt.decidedBy, attempt.result)}</p>
     </div>
   )
 }

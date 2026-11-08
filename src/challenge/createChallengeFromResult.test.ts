@@ -38,6 +38,7 @@ function baseResult(overrides: Partial<FinalResultV4> = {}): FinalResultV4 {
     isNewBest: false,
     bestPercent: 87,
     playCount: 3,
+    challengePerformance: { finalDopaPercent: 87, baseDopaPercent: 80, accuracy: 0.9, maxCombo: 5, medianCorrectReactionMs: 400 },
     ...overrides,
   }
 }
@@ -70,6 +71,21 @@ describe('buildCreateChallengeInput (Ver.6 Phase 5.2: Profile snapshot)', () => 
   it('recordedProblemSetが無ければnullを返す（挑戦状を送れない）', () => {
     expect(buildCreateChallengeInput(baseResult())).toBeNull()
     expect(buildCreateChallengeInput(baseResult({ recordedProblemSet: [] }))).toBeNull()
+  })
+
+  it('Ver.6 Phase 5.3: challengePerformanceが無ければnullを返す（推測値で埋めて送信しない）', () => {
+    const result = baseResult({
+      recordedProblemSet: [{ type: 'color', targetTimeMs: 900, data: {} }],
+      challengePerformance: undefined,
+    })
+    expect(buildCreateChallengeInput(result)).toBeNull()
+  })
+
+  it('Ver.6 Phase 5.3: result.challengePerformanceがそのままCreateChallengeInput.performanceになる', () => {
+    const performance = { finalDopaPercent: 95, baseDopaPercent: 85, accuracy: 0.8, maxCombo: 12, medianCorrectReactionMs: 420 }
+    const result = baseResult({ recordedProblemSet: [{ type: 'color', targetTimeMs: 900, data: {} }], challengePerformance: performance })
+    const input = buildCreateChallengeInput(result)
+    expect(input?.performance).toEqual(performance)
   })
 
   it('現在のProfile（player_id/nickname/avatar/equippedTitleId）をそのままスナップショットする', () => {

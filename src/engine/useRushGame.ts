@@ -229,6 +229,7 @@ export function createStats(): PlayStats {
     shortVideoSamples: [],
     colorWordFooledCount: 0,
     notifRushSamples: [],
+    bonusGainRaw: 0,
   }
 }
 
@@ -609,7 +610,11 @@ export function useRushGame(
       if (isBonusTime) {
         // 「1タップ=1%」のような直接変換はせず、通常問題1〜2問ぶん相当を上限とする
         // firmly cappedなボーナス（COMBO・MOMENTUM倍率は適用しない＝連打の速さそのものだけで評価する）。
-        rawScoreRef.current += computeBonusGain(result.meta?.bonusTapCount ?? 0)
+        const bonusGain = computeBonusGain(result.meta?.bonusTapCount ?? 0)
+        rawScoreRef.current += bonusGain
+        // Ver.6 Phase 5.3: Challenge用「通常獲得DOPA%」算出のため、ボーナス加算量だけを別途記録する
+        // （rawScoreRef自体への加算・既存の最終DOPA%計算には一切影響しない）。
+        stats.bonusGainRaw += bonusGain
       } else {
         const qualityTier = tier as 'PERFECT' | 'GREAT' | 'GOOD'
         // DOPA MOMENTUM。今回の加点にはこの正解「より前」の蓄積分（直近の質の高さ）を

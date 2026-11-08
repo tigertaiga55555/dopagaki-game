@@ -3,6 +3,7 @@ import { TITLE_DEFS } from '../config/titles'
 import type {
   ChallengeConditions,
   ChallengeMode,
+  ChallengePerformance,
   ChallengeProblemSet,
   ChallengeProblemSetItem,
   CreateChallengeAttemptInput,
@@ -84,6 +85,23 @@ function validateConditions(value: unknown, mode: ChallengeMode): value is Chall
   return conditions.mode === mode
 }
 
+/**
+ * Ver.6 Phase 5.3（Challenge勝敗判定強化）: ChallengePerformanceの検証。
+ * 比較用の数値を使うため、各フィールドが有限・妥当な範囲の値であることを厳格に確認する
+ * （クライアントが勝敗を操作できる余地を一切残さない——特にmaxCombo・accuracy等を
+ * 不当に大きい/小さい値へ偽装しても、ここで弾かれる）。
+ */
+function validateChallengePerformance(value: unknown): value is ChallengePerformance {
+  if (typeof value !== 'object' || value === null) return false
+  const perf = value as Partial<ChallengePerformance>
+  if (!isFiniteNumberInRange(perf.finalDopaPercent, 0, MAX_SCORE)) return false
+  if (!isFiniteNumberInRange(perf.baseDopaPercent, 0, MAX_SCORE)) return false
+  if (!isFiniteNumberInRange(perf.accuracy, 0, 1)) return false
+  if (!isFiniteNumberInRange(perf.maxCombo, 0, MAX_SCORE)) return false
+  if (perf.medianCorrectReactionMs !== null && !isFiniteNumberInRange(perf.medianCorrectReactionMs, 0, 600_000)) return false
+  return true
+}
+
 /** null（未装備）、または実在するTitleDef.idのいずれかだけを許可する（任意の文字列を信用しない）。 */
 function isValidEquippedTitle(value: unknown): value is string | null {
   if (value === null) return true
@@ -126,6 +144,9 @@ export function validateCreateChallengeInput(raw: unknown): ValidationResult {
   if (!isFiniteNumberInRange(input.creatorScore, 0, MAX_SCORE)) {
     return { ok: false, message: 'creatorScore is invalid' }
   }
+  if (!validateChallengePerformance(input.performance)) {
+    return { ok: false, message: 'performance is invalid' }
+  }
 
   return {
     ok: true,
@@ -138,6 +159,7 @@ export function validateCreateChallengeInput(raw: unknown): ValidationResult {
       problemSet: input.problemSet as ChallengeProblemSet,
       conditions: input.conditions as ChallengeConditions,
       creatorScore: input.creatorScore as number,
+      performance: input.performance,
     },
   }
 }
@@ -181,6 +203,9 @@ export function validateCreateChallengeAttemptInput(raw: unknown, challengeId: s
   if (!isFiniteNumberInRange(input.score, 0, MAX_SCORE)) {
     return { ok: false, message: 'score is invalid' }
   }
+  if (!validateChallengePerformance(input.performance)) {
+    return { ok: false, message: 'performance is invalid' }
+  }
 
   return {
     ok: true,
@@ -191,6 +216,7 @@ export function validateCreateChallengeAttemptInput(raw: unknown, challengeId: s
       avatar: input.avatar as AvatarRef,
       equippedTitle: input.equippedTitle ?? null,
       score: input.score as number,
+      performance: input.performance,
     },
   }
 }

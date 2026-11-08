@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { resolveAvatarEmoji } from '../config/profileConfig'
 import { buildChallengeUrl } from '../challenge/url'
+import { formatAccuracyPercent, formatReactionSeconds } from '../challenge/formatPerformance'
 import type { ChallengeRecord } from '../challenge/types'
 
 interface Props {
@@ -61,6 +62,19 @@ export function ChallengeSentScreen({ challenge, onDone }: Props) {
         <p className="text-3xl font-black tabular-nums text-amber-300">{challenge.creatorScore}％</p>
       </div>
 
+      {challenge.performance && (
+        <div className="w-full max-w-xs space-y-1.5 rounded-2xl bg-white/5 px-4 py-4 text-sm">
+          <p className="mb-1 text-center text-[10px] font-black tracking-widest text-amber-200/80">
+            この記録が挑戦者の比較対象になります
+          </p>
+          <PerformanceRow label="最終DOPA%" value={`${challenge.performance.finalDopaPercent}%`} />
+          <PerformanceRow label="通常獲得DOPA%" value={`${challenge.performance.baseDopaPercent}%`} />
+          <PerformanceRow label="正答率" value={formatAccuracyPercent(challenge.performance.accuracy)} />
+          <PerformanceRow label="最大COMBO" value={`${challenge.performance.maxCombo}`} />
+          <PerformanceRow label="反応速度中央値" value={formatReactionSeconds(challenge.performance.medianCorrectReactionMs)} />
+        </div>
+      )}
+
       <p className="w-full max-w-xs break-all rounded-2xl bg-white/5 px-4 py-3 text-[11px] text-white/50">{url}</p>
 
       <div className="flex w-full max-w-xs flex-col gap-3">
@@ -77,6 +91,15 @@ export function ChallengeSentScreen({ challenge, onDone }: Props) {
           ホームへ戻る
         </button>
       </div>
+    </div>
+  )
+}
+
+function PerformanceRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-white/60">{label}</span>
+      <span className="font-bold tabular-nums text-white">{value}</span>
     </div>
   )
 }

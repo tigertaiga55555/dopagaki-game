@@ -1,6 +1,17 @@
 import { createD1ChallengeAttemptRepository, createD1ChallengeRepository } from './challengeRepository'
+import { compareChallengePerformance } from '../challenge/performance'
 import { isValidChallengeId, validateCreateChallengeAttemptInput, validateCreateChallengeInput } from './validation'
-import type { ChallengeApiResult, ChallengeAttemptListResult, ChallengeAttemptRecord, ChallengeRecord } from '../challenge/types'
+import type {
+  ChallengeApiResult,
+  ChallengeAttemptListResult,
+  ChallengeAttemptRecord,
+  ChallengeDecidedBy,
+  ChallengeRecord,
+  ChallengeSummary,
+} from '../challenge/types'
+
+/** Ver.6 Phase 5.3（送った挑戦状一覧）: 一括取得できるChallenge件数の上限（クライアントは直近10件しか送らない想定だが、サーバー側でも念のため上限を設ける）。 */
+const MAX_SUMMARY_IDS = 50
 
 /** Ver.6 Phase 5.2: 無料ユーザー向けの履歴表示件数（DOPA PASS未実装のため、将来ここだけ変える想定）。 */
 const FREE_TIER_ATTEMPT_LIMIT = 10
@@ -110,15 +121,82 @@ async function handleCreateAttempt(request: Request, challengeId: string, db: D1
 
     const attemptRepo = createD1ChallengeAttemptRepository(db)
     const input = validation.value
-    // 作成者スコアを超えた→WIN、同点または下回った→LOSE（ユーザー指示どおりのシンプルな比較）。
-    const result: 'win' | 'lose' = input.score > challenge.creatorScore ? 'win' : 'lose'
+
+    // Ver.6 Phase 5.3（Challenge勝敗判定強化）: 勝敗は必ずサーバー側でChallengePerformance同士を
+    // 比較して確定する（クライアントのwin/lose自己申告は一切信用しない。そもそも入力自体に
+    // win/loseという項目は存在しない——validation.ts参照）。作成者のChallengeがこのmigration
+    // 以前に作られたもの（performance=null）の場合だけ、creatorScoreだけを使った旧ルールへ
+    // フォールバックする（既存データにないperformance値を推測で埋めない）。
+    let result: 'win' | 'lose'
+    let decidedBy: ChallengeDecidedBy
+    if (challenge.performance) {
+      const comparison = compareChallengePerformance(challenge.performance, input.performance)
+      result = comparison.result
+      decidedBy = comparison.decidedBy
+    } else {
+      result = input.score > challenge.creatorScore ? 'win' : 'lose'
+      decidedBy = 'legacyScoreOnly'
+    }
+
     const previousAttempts = await attemptRepo.countForPlayer(challengeId, input.playerId)
     const attemptNumber = previousAttempts + 1
 
-    const record = await attemptRepo.create(crypto.randomUUID(), Date.now(), attemptNumber, result, input)
+    const record = await attemptRepo.create(crypto.randomUUID(), Date.now(), attemptNumber, result, decidedBy, input)
     return json({ ok: true, value: record } satisfies ChallengeApiResult<ChallengeAttemptRecord>, 201)
   } catch {
     return errorResponse({ ok: false, error: 'internal_error', message: 'failed to create attempt' })
+  }
+}
+
+/**
+ * Ver.6 Phase 5.3（送った挑戦状一覧）: POST /api/challenges/summaries。
+ * createdChallengeIds（クライアントのlocalStorage）に対応するChallengeの要約
+ * （基準記録・挑戦者数・総attempt数・突破者数）を一括取得する。N+1を避けるため、
+ * challenges・challenge_attemptsそれぞれに対して1回のクエリで済ませる
+ * （challengeRepository.getByIds / getAggregatesByChallengeIds参照）。
+ *
+ * playerIdによる公開検索は行わない（ログイン未実装の現段階でそれを許すと、他人の
+ * player_idが分かれば一覧を覗けてしまう）。ここで要求できるのは、クライアントが
+ * 既に知っているChallenge IDの集合だけ——GET /api/challenges/:idと同じ「IDを知っている
+ * 人だけが見られる」信頼モデルをそのまま拡張しただけで、新しい権限上の懸念は生まれない。
+ */
+async function handleGetSummaries(request: Request, db: D1Database): Promise<Response> {
+  let raw: unknown
+  try {
+    raw = await request.json()
+  } catch {
+    return errorResponse({ ok: false, error: 'invalid_input', message: 'request body must be valid JSON' })
+  }
+
+  const body = raw as Partial<{ ids: unknown }>
+  if (!Array.isArray(body.ids) || body.ids.length === 0 || !body.ids.every((id) => typeof id === 'string')) {
+    return errorResponse({ ok: false, error: 'invalid_input', message: 'ids must be a non-empty array of strings' })
+  }
+  const ids = (body.ids as string[]).filter(isValidChallengeId).slice(0, MAX_SUMMARY_IDS)
+  if (ids.length === 0) {
+    return json({ ok: true, value: [] } satisfies ChallengeApiResult<ChallengeSummary[]>, 200)
+  }
+
+  try {
+    const challengeRepo = createD1ChallengeRepository(db)
+    const attemptRepo = createD1ChallengeAttemptRepository(db)
+    const [challenges, aggregates] = await Promise.all([challengeRepo.getByIds(ids), attemptRepo.getAggregatesByChallengeIds(ids)])
+
+    const summaries: ChallengeSummary[] = challenges.map((challenge) => {
+      const aggregate = aggregates[challenge.id] ?? { challengerCount: 0, attemptCount: 0, clearedCount: 0 }
+      return {
+        id: challenge.id,
+        mode: challenge.mode,
+        creatorScore: challenge.creatorScore,
+        createdAt: challenge.createdAt,
+        challengerCount: aggregate.challengerCount,
+        attemptCount: aggregate.attemptCount,
+        clearedCount: aggregate.clearedCount,
+      }
+    })
+    return json({ ok: true, value: summaries } satisfies ChallengeApiResult<ChallengeSummary[]>, 200)
+  } catch {
+    return errorResponse({ ok: false, error: 'internal_error', message: 'failed to fetch summaries' })
   }
 }
 
@@ -168,6 +246,10 @@ export default {
 
     if (url.pathname === '/api/challenges' && request.method === 'POST') {
       return handleCreateChallenge(request, env.CHALLENGE_DB)
+    }
+
+    if (url.pathname === '/api/challenges/summaries' && request.method === 'POST') {
+      return handleGetSummaries(request, env.CHALLENGE_DB)
     }
 
     const attemptsMatch = /^\/api\/challenges\/([^/]+)\/attempts$/.exec(url.pathname)

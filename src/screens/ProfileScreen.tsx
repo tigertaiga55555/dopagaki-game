@@ -12,6 +12,8 @@ interface Props {
   onEdit: () => void
   onAchievements: () => void
   onRanking: () => void
+  /** Ver.6 Phase 5.3（送った挑戦状一覧）: 自分が作成したChallengeの一覧を開く。 */
+  onSentChallenges: () => void
 }
 
 /**
@@ -22,7 +24,7 @@ interface Props {
  * ため、偽の0として主要Statsに表示しない（PlayerStatsがそもそもこの2値を持たない —
  * utils/playerStatsRepository.ts参照）。
  */
-export function ProfileScreen({ onBack, onEdit, onAchievements, onRanking }: Props) {
+export function ProfileScreen({ onBack, onEdit, onAchievements, onRanking, onSentChallenges }: Props) {
   const profile = getProfile()
   const stats = localPlayerStatsRepository.getPlayerStats()
   const equippedTitle = profile.equippedTitleId ? TITLE_DEFS_BY_ID[profile.equippedTitleId] : null
@@ -75,6 +77,12 @@ export function ProfileScreen({ onBack, onEdit, onAchievements, onRanking }: Pro
             className="w-full rounded-2xl border border-white/15 bg-white/5 py-3 text-base font-black tracking-widest text-white/80 active:scale-95"
           >
             RANKING
+          </button>
+          <button
+            onClick={onSentChallenges}
+            className="w-full rounded-2xl border border-white/15 bg-white/5 py-3 text-sm font-bold text-white/70 active:scale-95"
+          >
+            送った挑戦状
           </button>
         </div>
       </div>

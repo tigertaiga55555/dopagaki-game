@@ -70,8 +70,8 @@ export function ChallengePlayScreen({ challenge, onFinish, onQuit }: Props) {
     <Challenge500Screen
       onQuit={onQuit}
       replayQuestions={challenge.problemSet.items}
-      onFinish={(state: Challenge500State, recordedProblemSet) => {
-        onFinish(computeChallenge500Result(state, challenge500BaseResult, true, recordedProblemSet))
+      onFinish={(state: Challenge500State, recordedProblemSet, performanceStats) => {
+        onFinish(computeChallenge500Result(state, challenge500BaseResult, true, recordedProblemSet, performanceStats))
       }}
     />
   )

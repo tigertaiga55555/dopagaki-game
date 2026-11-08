@@ -16,6 +16,7 @@ export type ScreenName =
   | 'challengePlaying'
   | 'challengeResult'
   | 'challengeHistory'
+  | 'challengeSentList'
 
 /**
  * Ver.6 Phase 4: Endlessモードの難易度。既存通常ゲームの問題難易度システム
@@ -205,6 +206,14 @@ export interface PlayStats {
   colorWordFooledCount: number
   /** Ver.4.5: 「通知ラッシュ」で規定数の赤を消すのにかかった時間（直近10件） */
   notifRushSamples: { count: number; ms: number }[]
+  /**
+   * Ver.6 Phase 5.3（Challenge勝敗判定強化）: DOPA BONUS TIME（bonusTime問題）で
+   * rawScoreへ加算された量の合計（通常は1ゲーム1回ぶんのみ）。Challenge用の
+   * 「通常獲得DOPA%」（最終DOPA%からボーナスタイム分を除いた値）を正確に算出するために
+   * 追加した。既存の最終DOPA%（finalPercent/percent）の計算には一切影響しない
+   * （rawScoreRef自体への加算ロジックは無変更、この値は別途記録するだけ）。
+   */
+  bonusGainRaw: number
 }
 
 export interface FinalResultV4 {
@@ -237,6 +246,40 @@ export interface FinalResultV4 {
    * （未定義または空配列なら「挑戦状を送る」ボタン自体を表示しない）。
    */
   recordedProblemSet?: ChallengeProblemSetItem[]
+  /**
+   * Ver.6 Phase 5.3（Challenge勝敗判定強化）: Challengeの作成・挑戦のどちらでも使う
+   * 比較用performance。recordedProblemSetと同じく、未定義なら「挑戦状を送る」ボタンは
+   * 表示されない（createChallengeFromResult.ts参照）。通常結果画面（screens/
+   * ResultScreen.tsx）はこのフィールドを一切読まないため、表示内容に影響しない。
+   */
+  challengePerformance?: ChallengePerformance
+}
+
+/**
+ * Ver.6 Phase 5.3（Challenge勝敗判定強化）: Challengeの勝敗を「最終DOPA%が同じなら即LOSE」
+ * ではなく、複数指標の優先順位で決める——その比較に使う1プレイぶんの記録。
+ * Challenge作成時（作成者の基準記録）・attempt送信時（挑戦者自身の記録）の両方で
+ * このインターフェースをそのまま使う。
+ */
+export interface ChallengePerformance {
+  /** 最終DOPA%（既存のFinalResultV4.percentと同じ値）。 */
+  finalDopaPercent: number
+  /**
+   * 通常獲得DOPA%。最終DOPA%からボーナスタイム等で追加された分を除いた値。
+   * 通常プレイ（0〜120%）はPlayStats.bonusGainRawを除いた値、FINAL DOPA TRIAL・
+   * 限界突破チャレンジにはボーナス機構自体が存在しないため最終DOPA%と同値になる
+   * （engine/resultEngineV4.ts参照）。
+   */
+  baseDopaPercent: number
+  /** 正答率（0〜1）。 */
+  accuracy: number
+  /** 最大COMBO（連続正解数）。 */
+  maxCombo: number
+  /**
+   * 正解した問題だけのreaction time（ms）一覧の中央値。比較可能な正解サンプルが
+   * 一度も無かった場合はnull（例: 1問も答えずに終了した等の極端なケース）。
+   */
+  medianCorrectReactionMs: number | null
 }
 
 /**

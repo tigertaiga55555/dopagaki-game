@@ -1,4 +1,4 @@
-import type { AvatarRef, ChallengeProblemSetItem } from '../types'
+import type { AvatarRef, ChallengePerformance, ChallengeProblemSetItem } from '../types'
 
 /**
  * Ver.6 Phase 5.1（Challengeバックエンド基盤）: クライアント（Worker API呼び出し側）と
@@ -12,7 +12,7 @@ import type { AvatarRef, ChallengeProblemSetItem } from '../types'
  * 定義し、ここではそれを再エクスポートするだけにする（循環import回避のため、
  * types.ts→challenge/types.tsの一方向依存に統一する）。
  */
-export type { ChallengeProblemSetItem }
+export type { ChallengeProblemSetItem, ChallengePerformance }
 
 /** Challengeの元になったプレイモード。既存のFinalResultV4が持つ3つの経路に対応する。 */
 export type ChallengeMode = 'normal' | 'finalTrial' | 'challenge500'
@@ -39,9 +39,28 @@ export interface ChallengeRecord {
   conditions: ChallengeConditions
   creatorScore: number
   createdAt: number
+  /**
+   * Ver.6 Phase 5.3（Challenge勝敗判定強化）: 作成者の基準performance。
+   * このmigration以前に作成された既存Challengeにはnull（推測で埋めない）。
+   * nullの場合、挑戦の勝敗判定はcreatorScoreだけを使った旧ルールにフォールバックする
+   * （src/worker/index.ts参照）。
+   */
+  performance: ChallengePerformance | null
 }
 
-export type CreateChallengeInput = Omit<ChallengeRecord, 'id' | 'createdAt'>
+/** 新規作成時は必ずperformanceを持つ（nullを許可しない）。 */
+export type CreateChallengeInput = Omit<ChallengeRecord, 'id' | 'createdAt' | 'performance'> & {
+  performance: ChallengePerformance
+}
+
+/**
+ * Ver.6 Phase 5.3（Challenge勝敗判定強化）: 勝敗を決めた比較項目。優先順位どおりに
+ * finalDopaPercent→baseDopaPercent→accuracy→maxCombo→medianCorrectReactionMsで
+ * 必ず比較し、ここまで全て同値なら'exactTie'（挑戦者LOSE＝作成者防衛）。
+ * 'legacyScoreOnly'は、作成者のChallengeがこのmigration以前のものでperformanceを
+ * 持たない場合のみ使う、creatorScoreだけを使った旧ルールへのフォールバック。
+ */
+export type ChallengeDecidedBy = 'finalDopaPercent' | 'baseDopaPercent' | 'accuracy' | 'maxCombo' | 'medianCorrectReactionMs' | 'exactTie' | 'legacyScoreOnly'
 
 export type ChallengeApiError = 'invalid_input' | 'not_found' | 'not_configured' | 'internal_error'
 
@@ -64,9 +83,23 @@ export interface ChallengeAttemptRecord {
   result: 'win' | 'lose'
   attemptNumber: number
   createdAt: number
+  /**
+   * Ver.6 Phase 5.3: 挑戦者自身のperformance。クライアントの自己申告をサーバーが検証した
+   * うえで保存する。このmigration以前に作成された既存attemptにはnull。
+   */
+  performance: ChallengePerformance | null
+  /**
+   * Ver.6 Phase 5.3: この挑戦の勝敗を決めた比較項目（サーバー側のcompareChallengePerformanceが
+   * 確定）。既存attemptにはnull。
+   */
+  decidedBy: ChallengeDecidedBy | null
 }
 
-export type CreateChallengeAttemptInput = Omit<ChallengeAttemptRecord, 'id' | 'createdAt' | 'attemptNumber' | 'result'>
+/** 新規submit時は必ずperformanceを持つ（nullを許可しない。result/decidedByはサーバーが確定するため入力に含めない）。 */
+export type CreateChallengeAttemptInput = Omit<
+  ChallengeAttemptRecord,
+  'id' | 'createdAt' | 'attemptNumber' | 'result' | 'decidedBy' | 'performance'
+> & { performance: ChallengePerformance }
 
 /**
  * 履歴一覧の1件。GET /api/challenges/:id/attemptsが返す形。
@@ -94,4 +127,27 @@ export interface ChallengeDataSource {
   createAttempt(challengeId: string, input: CreateChallengeAttemptInput): Promise<ChallengeApiResult<ChallengeAttemptRecord>>
   /** limitを渡さない場合、サーバー既定（無料ユーザー相当の直近10件）で返る。 */
   getAttempts(challengeId: string, options?: { playerId?: string; limit?: number }): Promise<ChallengeApiResult<ChallengeAttemptListResult>>
+  /**
+   * Ver.6 Phase 5.3（送った挑戦状一覧）: 複数のChallenge IDの要約を一括取得する
+   * （utils/createdChallengesStorage.tsが保持するcreatedChallengeIds向け）。
+   */
+  getSummaries(ids: string[]): Promise<ChallengeApiResult<ChallengeSummary[]>>
+}
+
+/**
+ * Ver.6 Phase 5.3（送った挑戦状一覧）: POST /api/challenges/summariesが返す1件ぶんの要約。
+ * ホストが「送った挑戦状」一覧で表示する最低限の情報（基準記録・挑戦者数・総attempt数・
+ * 突破者数）だけを持つ、ChallengeRecordより軽量な形。
+ */
+export interface ChallengeSummary {
+  id: string
+  mode: ChallengeMode
+  creatorScore: number
+  createdAt: number
+  /** 挑戦したユニークプレイヤー数。 */
+  challengerCount: number
+  /** 総attempt数（同一プレイヤーの複数回挑戦も全てカウント）。 */
+  attemptCount: number
+  /** 一度でもWINした（突破した）ユニークプレイヤー数。 */
+  clearedCount: number
 }

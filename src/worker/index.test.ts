@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import worker from './index'
 import { createFakeD1Database } from './testFakeD1'
-import type { ChallengeApiResult, ChallengeAttemptListResult, ChallengeAttemptRecord, ChallengeRecord } from '../challenge/types'
+import type { ChallengeApiResult, ChallengeAttemptListResult, ChallengeAttemptRecord, ChallengePerformance, ChallengeRecord } from '../challenge/types'
 
-function sampleCreateBody() {
+function samplePerformance(overrides: Partial<ChallengePerformance> = {}): ChallengePerformance {
+  return { finalDopaPercent: 420, baseDopaPercent: 400, accuracy: 0.72, maxCombo: 18, medianCorrectReactionMs: 540, ...overrides }
+}
+
+function sampleCreateBody(overrides: { performance?: Partial<ChallengePerformance> } & Record<string, unknown> = {}) {
+  const { performance, ...rest } = overrides
   return {
     creatorPlayerId: 'pid-abc123',
     creatorNickname: 'ドパ太郎',
@@ -13,31 +18,56 @@ function sampleCreateBody() {
     problemSet: { version: 1, items: [{ type: 'numberPick', data: { answer: 3 } }] },
     conditions: { mode: 'challenge500' },
     creatorScore: 420,
+    performance: samplePerformance(performance),
+    ...rest,
   }
 }
 
-function sampleAttemptBody(overrides: Record<string, unknown> = {}) {
+function sampleAttemptBody(overrides: { performance?: Partial<ChallengePerformance> } & Record<string, unknown> = {}) {
+  const { performance, ...rest } = overrides
   return {
     playerId: 'pid-challenger-1',
     nickname: '挑戦者太郎',
     avatar: { kind: 'preset', iconId: 'star' },
     equippedTitle: null,
     score: 350,
-    ...overrides,
+    performance: samplePerformance(performance),
+    ...rest,
   }
 }
 
-async function createSampleChallenge(env: { CHALLENGE_DB: never }): Promise<ChallengeRecord> {
+async function createSampleChallenge(
+  env: { CHALLENGE_DB: never },
+  overrides: { performance?: Partial<ChallengePerformance> } & Record<string, unknown> = {},
+): Promise<ChallengeRecord> {
   const res = await worker.fetch(
     new Request('https://example.com/api/challenges', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(sampleCreateBody()),
+      body: JSON.stringify(sampleCreateBody(overrides)),
     }),
     env,
   )
   const body = (await res.json()) as ChallengeApiResult<ChallengeRecord>
   if (!body.ok) throw new Error('expected create to succeed')
+  return body.value
+}
+
+async function postAttempt(
+  env: { CHALLENGE_DB: never },
+  challengeId: string,
+  overrides: { performance?: Partial<ChallengePerformance> } & Record<string, unknown> = {},
+): Promise<ChallengeAttemptRecord> {
+  const res = await worker.fetch(
+    new Request(`https://example.com/api/challenges/${challengeId}/attempts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(sampleAttemptBody(overrides)),
+    }),
+    env,
+  )
+  const body = (await res.json()) as ChallengeApiResult<ChallengeAttemptRecord>
+  if (!body.ok) throw new Error(`expected attempt create to succeed, got: ${JSON.stringify(body)}`)
   return body.value
 }
 
@@ -81,6 +111,7 @@ describe('worker fetch handler (Ver.6 Phase 5.1: Challenge API routing)', () => 
     expect(fetched.ok).toBe(true)
     if (!fetched.ok) throw new Error('expected fetch to succeed')
     expect(fetched.value).toEqual(created.value)
+    expect(fetched.value.performance).toEqual(samplePerformance())
   })
 
   it('POST /api/challenges に不正な入力を送ると400 invalid_inputを返し、D1へは書き込まれない', async () => {
@@ -97,6 +128,23 @@ describe('worker fetch handler (Ver.6 Phase 5.1: Challenge API routing)', () => 
     )
     expect(res.status).toBe(400)
     expect(db._rows.size).toBe(0)
+  })
+
+  it('Ver.6 Phase 5.3: POST /api/challenges はperformanceが欠けていると400 invalid_inputを返す', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const { performance, ...bodyWithoutPerformance } = sampleCreateBody()
+    void performance
+
+    const res = await worker.fetch(
+      new Request('https://example.com/api/challenges', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(bodyWithoutPerformance),
+      }),
+      env,
+    )
+    expect(res.status).toBe(400)
   })
 
   it('GET /api/challenges/:id で存在しないIDは404 not_foundを返す', async () => {
@@ -121,54 +169,116 @@ describe('worker fetch handler (Ver.6 Phase 5.1: Challenge API routing)', () => 
   })
 })
 
-describe('worker fetch handler: challenge_attempts API (Ver.6 Phase 5.2: Challenge機能完成)', () => {
-  it('WIN判定: creatorScore(420)を超えるscoreで挑戦するとresult=winが返る', async () => {
+describe('worker fetch handler: challenge_attempts API (Ver.6 Phase 5.2/5.3: Challenge機能完成・勝敗判定強化)', () => {
+  it('WIN判定: finalDopaPercent(420)を超える値で挑戦するとresult=win、decidedBy=finalDopaPercentが返る', async () => {
     const db = createFakeD1Database()
     const env = { CHALLENGE_DB: db as never }
     const challenge = await createSampleChallenge(env)
 
-    const res = await worker.fetch(
-      new Request(`https://example.com/api/challenges/${challenge.id}/attempts`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(sampleAttemptBody({ score: 450 })),
-      }),
-      env,
-    )
-    expect(res.status).toBe(201)
-    const body = (await res.json()) as ChallengeApiResult<ChallengeAttemptRecord>
-    expect(body.ok).toBe(true)
-    if (!body.ok) throw new Error('expected attempt create to succeed')
-    expect(body.value.result).toBe('win')
-    expect(body.value.attemptNumber).toBe(1)
+    const attempt = await postAttempt(env, challenge.id, { score: 450, performance: { finalDopaPercent: 450 } })
+    expect(attempt.result).toBe('win')
+    expect(attempt.decidedBy).toBe('finalDopaPercent')
+    expect(attempt.attemptNumber).toBe(1)
   })
 
-  it('LOSE判定: creatorScore(420)以下のscoreで挑戦するとresult=loseが返る（同点もLOSE）', async () => {
+  it('LOSE判定: finalDopaPercent(420)未満、および同値（exactTie）はどちらもLOSEになる', async () => {
     const db = createFakeD1Database()
     const env = { CHALLENGE_DB: db as never }
     const challenge = await createSampleChallenge(env)
 
-    const loseRes = await worker.fetch(
-      new Request(`https://example.com/api/challenges/${challenge.id}/attempts`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(sampleAttemptBody({ score: 400 })),
-      }),
-      env,
-    )
-    const loseBody = (await loseRes.json()) as ChallengeApiResult<ChallengeAttemptRecord>
-    expect(loseBody.ok && loseBody.value.result).toBe('lose')
+    const loseAttempt = await postAttempt(env, challenge.id, { score: 400, performance: { finalDopaPercent: 400 } })
+    expect(loseAttempt.result).toBe('lose')
+    expect(loseAttempt.decidedBy).toBe('finalDopaPercent')
 
-    const tieRes = await worker.fetch(
-      new Request(`https://example.com/api/challenges/${challenge.id}/attempts`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(sampleAttemptBody({ score: 420 })),
-      }),
-      env,
-    )
-    const tieBody = (await tieRes.json()) as ChallengeApiResult<ChallengeAttemptRecord>
-    expect(tieBody.ok && tieBody.value.result).toBe('lose')
+    // 作成者とperformanceが完全に同値 → exactTie → challenger LOSE（ホスト防衛）。
+    const tieAttempt = await postAttempt(env, challenge.id, {})
+    expect(tieAttempt.result).toBe('lose')
+    expect(tieAttempt.decidedBy).toBe('exactTie')
+  })
+
+  it('タイブレーク: finalDopaPercentが同値ならbaseDopaPercentで決まる', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createSampleChallenge(env) // finalDopaPercent=420, baseDopaPercent=400
+
+    const win = await postAttempt(env, challenge.id, { performance: { baseDopaPercent: 410 } })
+    expect(win.result).toBe('win')
+    expect(win.decidedBy).toBe('baseDopaPercent')
+
+    const lose = await postAttempt(env, challenge.id, { performance: { baseDopaPercent: 390 } })
+    expect(lose.result).toBe('lose')
+    expect(lose.decidedBy).toBe('baseDopaPercent')
+  })
+
+  it('タイブレーク: finalDopaPercent/baseDopaPercentが同値ならaccuracyで決まる（UI表示と同じ%精度で比較する）', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createSampleChallenge(env) // accuracy=0.72 → 表示上72%
+
+    const win = await postAttempt(env, challenge.id, { performance: { accuracy: 0.8 } })
+    expect(win.result).toBe('win')
+    expect(win.decidedBy).toBe('accuracy')
+
+    // 0.721は丸めると72%で創作者と同じ表示になるため、ここでは決着せず次の項目（maxCombo）へ進む。
+    const tieRoundedAccuracy = await postAttempt(env, challenge.id, { performance: { accuracy: 0.721, maxCombo: 30 } })
+    expect(tieRoundedAccuracy.decidedBy).toBe('maxCombo')
+  })
+
+  it('タイブレーク: ここまで同値ならmaxComboで決まる', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createSampleChallenge(env) // maxCombo=18
+
+    const win = await postAttempt(env, challenge.id, { performance: { maxCombo: 25 } })
+    expect(win.result).toBe('win')
+    expect(win.decidedBy).toBe('maxCombo')
+  })
+
+  it('タイブレーク: ここまで同値ならmedianCorrectReactionMsで決まる（速い方が勝ち）', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createSampleChallenge(env) // medianCorrectReactionMs=540
+
+    const win = await postAttempt(env, challenge.id, { performance: { medianCorrectReactionMs: 300 } })
+    expect(win.result).toBe('win')
+    expect(win.decidedBy).toBe('medianCorrectReactionMs')
+
+    const lose = await postAttempt(env, challenge.id, { performance: { medianCorrectReactionMs: 900 } })
+    expect(lose.result).toBe('lose')
+    expect(lose.decidedBy).toBe('medianCorrectReactionMs')
+  })
+
+  it('完全同値（5項目すべて一致）はchallenger LOSE・decidedBy=exactTie', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createSampleChallenge(env)
+    const attempt = await postAttempt(env, challenge.id, {})
+    expect(attempt.result).toBe('lose')
+    expect(attempt.decidedBy).toBe('exactTie')
+  })
+
+  it('Ver.6 Phase 5.3: 既存Challenge（performance無し）への挑戦はcreatorScoreだけの旧ルールへフォールバックし、decidedBy=legacyScoreOnlyになる', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createSampleChallenge(env)
+
+    // このmigration以前のレコードを模すため、performance列だけをnullへ書き換える
+    // （実際のmigration直後の既存行と同じ状態。推測で埋めずnullのまま扱う）。
+    const row = db._rows.get(challenge.id)
+    if (!row) throw new Error('row not found')
+    row.performance_final_dopa_percent = null
+    row.performance_base_dopa_percent = null
+    row.performance_accuracy = null
+    row.performance_max_combo = null
+    row.performance_median_reaction_ms = null
+
+    const winAttempt = await postAttempt(env, challenge.id, { score: 500, performance: { finalDopaPercent: 500 } })
+    expect(winAttempt.result).toBe('win')
+    expect(winAttempt.decidedBy).toBe('legacyScoreOnly')
+
+    const loseAttempt = await postAttempt(env, challenge.id, { score: 420, performance: { finalDopaPercent: 420 } })
+    expect(loseAttempt.result).toBe('lose')
+    expect(loseAttempt.decidedBy).toBe('legacyScoreOnly')
   })
 
   it('attemptNumber increment: 同一playerIdが同じChallengeへ何度挑戦しても保存され、回数が増える（例: LOSE→LOSE→WIN）', async () => {
@@ -176,30 +286,16 @@ describe('worker fetch handler: challenge_attempts API (Ver.6 Phase 5.2: Challen
     const env = { CHALLENGE_DB: db as never }
     const challenge = await createSampleChallenge(env)
 
-    async function attempt(score: number) {
-      const res = await worker.fetch(
-        new Request(`https://example.com/api/challenges/${challenge.id}/attempts`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(sampleAttemptBody({ score })),
-        }),
-        env,
-      )
-      const body = (await res.json()) as ChallengeApiResult<ChallengeAttemptRecord>
-      if (!body.ok) throw new Error('expected attempt to succeed')
-      return body.value
-    }
-
-    const first = await attempt(300)
-    const second = await attempt(350)
-    const third = await attempt(500)
+    const first = await postAttempt(env, challenge.id, { performance: { finalDopaPercent: 100 } })
+    const second = await postAttempt(env, challenge.id, { performance: { finalDopaPercent: 200 } })
+    const third = await postAttempt(env, challenge.id, { performance: { finalDopaPercent: 500 } })
 
     expect([first.attemptNumber, first.result]).toEqual([1, 'lose'])
     expect([second.attemptNumber, second.result]).toEqual([2, 'lose'])
     expect([third.attemptNumber, third.result]).toEqual([3, 'win'])
   })
 
-  it('クライアントがresultやattemptNumberを自己申告しても無視される（サーバー側だけが確定する）', async () => {
+  it('クライアントがresultやattemptNumber、decidedByを自己申告しても無視される（サーバー側だけが確定する）', async () => {
     const db = createFakeD1Database()
     const env = { CHALLENGE_DB: db as never }
     const challenge = await createSampleChallenge(env)
@@ -208,15 +304,21 @@ describe('worker fetch handler: challenge_attempts API (Ver.6 Phase 5.2: Challen
       new Request(`https://example.com/api/challenges/${challenge.id}/attempts`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...sampleAttemptBody({ score: 10 }), result: 'win', attemptNumber: 999 }),
+        body: JSON.stringify({
+          ...sampleAttemptBody({ score: 10, performance: { finalDopaPercent: 10 } }),
+          result: 'win',
+          attemptNumber: 999,
+          decidedBy: 'maxCombo',
+        }),
       }),
       env,
     )
     const body = (await res.json()) as ChallengeApiResult<ChallengeAttemptRecord>
     expect(body.ok).toBe(true)
     if (!body.ok) throw new Error('expected attempt to succeed')
-    // score(10) < creatorScore(420)なので、クライアントが'win'を自己申告してもサーバーは'lose'と判定する。
+    // finalDopaPercent(10) < creatorの420なので、クライアントが'win'/'maxCombo'を自己申告してもサーバーは正しく判定する。
     expect(body.value.result).toBe('lose')
+    expect(body.value.decidedBy).toBe('finalDopaPercent')
     expect(body.value.attemptNumber).toBe(1)
   })
 
@@ -249,27 +351,30 @@ describe('worker fetch handler: challenge_attempts API (Ver.6 Phase 5.2: Challen
     expect(res.status).toBe(400)
   })
 
+  it('POST attempts: performanceが欠けていると400 invalid_inputを返す', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createSampleChallenge(env)
+    const { performance, ...bodyWithoutPerformance } = sampleAttemptBody()
+    void performance
+    const res = await worker.fetch(
+      new Request(`https://example.com/api/challenges/${challenge.id}/attempts`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(bodyWithoutPerformance),
+      }),
+      env,
+    )
+    expect(res.status).toBe(400)
+  })
+
   it('GET attempts: playerId指定で自分自身の履歴だけを新しい順に取得できる', async () => {
     const db = createFakeD1Database()
     const env = { CHALLENGE_DB: db as never }
     const challenge = await createSampleChallenge(env)
 
-    await worker.fetch(
-      new Request(`https://example.com/api/challenges/${challenge.id}/attempts`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(sampleAttemptBody({ playerId: 'pid-a', score: 100 })),
-      }),
-      env,
-    )
-    await worker.fetch(
-      new Request(`https://example.com/api/challenges/${challenge.id}/attempts`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(sampleAttemptBody({ playerId: 'pid-b', score: 500 })),
-      }),
-      env,
-    )
+    await postAttempt(env, challenge.id, { playerId: 'pid-a', score: 100 })
+    await postAttempt(env, challenge.id, { playerId: 'pid-b', score: 500 })
 
     const res = await worker.fetch(
       new Request(`https://example.com/api/challenges/${challenge.id}/attempts?playerId=pid-a`, { method: 'GET' }),
@@ -289,14 +394,7 @@ describe('worker fetch handler: challenge_attempts API (Ver.6 Phase 5.2: Challen
     const challenge = await createSampleChallenge(env)
 
     for (let i = 0; i < 15; i++) {
-      await worker.fetch(
-        new Request(`https://example.com/api/challenges/${challenge.id}/attempts`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(sampleAttemptBody({ playerId: 'pid-a', score: 100 + i })),
-        }),
-        env,
-      )
+      await postAttempt(env, challenge.id, { playerId: 'pid-a', score: 100 + i })
     }
 
     const res = await worker.fetch(
@@ -315,5 +413,79 @@ describe('worker fetch handler: challenge_attempts API (Ver.6 Phase 5.2: Challen
     const env = { CHALLENGE_DB: db as never }
     const res = await worker.fetch(new Request('https://example.com/api/challenges/does-not-exist/attempts', { method: 'GET' }), env)
     expect(res.status).toBe(404)
+  })
+})
+
+describe('worker fetch handler: POST /api/challenges/summaries (Ver.6 Phase 5.3: 送った挑戦状一覧)', () => {
+  it('複数idぶんの要約（基準記録・挑戦者数・総attempt数・突破者数）を一括取得できる', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challengeA = await createSampleChallenge(env, { creatorScore: 100 })
+    const challengeB = await createSampleChallenge(env, { creatorScore: 200 })
+
+    await postAttempt(env, challengeA.id, { playerId: 'pid-a', performance: { finalDopaPercent: 50 } })
+    await postAttempt(env, challengeA.id, { playerId: 'pid-a', performance: { finalDopaPercent: 500 } })
+    await postAttempt(env, challengeA.id, { playerId: 'pid-b', performance: { finalDopaPercent: 10 } })
+
+    const res = await worker.fetch(
+      new Request('https://example.com/api/challenges/summaries', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids: [challengeA.id, challengeB.id, 'does-not-exist'] }),
+      }),
+      env,
+    )
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as ChallengeApiResult<
+      { id: string; creatorScore: number; challengerCount: number; attemptCount: number; clearedCount: number }[]
+    >
+    expect(body.ok).toBe(true)
+    if (!body.ok) throw new Error('expected summaries fetch to succeed')
+    const summaryA = body.value.find((s) => s.id === challengeA.id)
+    const summaryB = body.value.find((s) => s.id === challengeB.id)
+    expect(summaryA).toEqual({
+      id: challengeA.id,
+      mode: 'challenge500',
+      creatorScore: 100,
+      createdAt: challengeA.createdAt,
+      challengerCount: 2,
+      attemptCount: 3,
+      clearedCount: 1,
+    })
+    expect(summaryB).toEqual({
+      id: challengeB.id,
+      mode: 'challenge500',
+      creatorScore: 200,
+      createdAt: challengeB.createdAt,
+      challengerCount: 0,
+      attemptCount: 0,
+      clearedCount: 0,
+    })
+    expect(body.value.find((s) => s.id === 'does-not-exist')).toBeUndefined()
+  })
+
+  it('idsが空配列・非配列・非文字列混入のいずれも400 invalid_inputを返す', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+
+    const empty = await worker.fetch(
+      new Request('https://example.com/api/challenges/summaries', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids: [] }),
+      }),
+      env,
+    )
+    expect(empty.status).toBe(400)
+
+    const notArray = await worker.fetch(
+      new Request('https://example.com/api/challenges/summaries', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids: 'not-an-array' }),
+      }),
+      env,
+    )
+    expect(notArray.status).toBe(400)
   })
 })

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { isValidChallengeId, validateCreateChallengeInput } from './validation'
+import { isValidChallengeId, validateCreateChallengeAttemptInput, validateCreateChallengeInput } from './validation'
+
+function validPerformance() {
+  return { finalDopaPercent: 420, baseDopaPercent: 400, accuracy: 0.72, maxCombo: 18, medianCorrectReactionMs: 540 }
+}
 
 function validInput() {
   return {
@@ -14,6 +18,7 @@ function validInput() {
     },
     conditions: { mode: 'challenge500' },
     creatorScore: 420,
+    performance: validPerformance(),
   }
 }
 
@@ -95,6 +100,73 @@ describe('validateCreateChallengeInput (Ver.6 Phase 5.1: Challenge作成入力�
   it('creatorNicknameが異常に長い場合はinvalid（クライアント側clampを信用せず、サーバーでも独立して検証する）', () => {
     const result = validateCreateChallengeInput({ ...validInput(), creatorNickname: 'あ'.repeat(1000) })
     expect(result.ok).toBe(false)
+  })
+
+  it('Ver.6 Phase 5.3: performanceが欠けていればinvalid', () => {
+    const { performance, ...rest } = validInput()
+    void performance
+    expect(validateCreateChallengeInput(rest).ok).toBe(false)
+  })
+
+  it('Ver.6 Phase 5.3: performance.accuracyが0〜1の範囲外ならinvalid', () => {
+    expect(validateCreateChallengeInput({ ...validInput(), performance: { ...validPerformance(), accuracy: 1.5 } }).ok).toBe(false)
+    expect(validateCreateChallengeInput({ ...validInput(), performance: { ...validPerformance(), accuracy: -0.1 } }).ok).toBe(false)
+  })
+
+  it('Ver.6 Phase 5.3: performance.medianCorrectReactionMsはnull、または0以上の有限数のみ許容する', () => {
+    expect(validateCreateChallengeInput({ ...validInput(), performance: { ...validPerformance(), medianCorrectReactionMs: null } }).ok).toBe(
+      true,
+    )
+    expect(
+      validateCreateChallengeInput({ ...validInput(), performance: { ...validPerformance(), medianCorrectReactionMs: -1 } }).ok,
+    ).toBe(false)
+  })
+
+  it('Ver.6 Phase 5.3: performance.maxComboが負値ならinvalid', () => {
+    expect(validateCreateChallengeInput({ ...validInput(), performance: { ...validPerformance(), maxCombo: -1 } }).ok).toBe(false)
+  })
+})
+
+describe('validateCreateChallengeAttemptInput (Ver.6 Phase 5.2/5.3: attempt入力の検証)', () => {
+  function validAttemptInput() {
+    return {
+      playerId: 'pid-challenger-1',
+      nickname: '挑戦者太郎',
+      avatar: { kind: 'preset', iconId: 'star' },
+      equippedTitle: null,
+      score: 350,
+      performance: validPerformance(),
+    }
+  }
+
+  it('正常な入力はokで通る', () => {
+    const result = validateCreateChallengeAttemptInput(validAttemptInput(), 'challenge-1')
+    expect(result.ok).toBe(true)
+    expect(result.value?.performance).toEqual(validPerformance())
+  })
+
+  it('performanceが欠けていればinvalid', () => {
+    const { performance, ...rest } = validAttemptInput()
+    void performance
+    expect(validateCreateChallengeAttemptInput(rest, 'challenge-1').ok).toBe(false)
+  })
+
+  it('performance.accuracyが範囲外ならinvalid', () => {
+    const result = validateCreateChallengeAttemptInput(
+      { ...validAttemptInput(), performance: { ...validPerformance(), accuracy: 2 } },
+      'challenge-1',
+    )
+    expect(result.ok).toBe(false)
+  })
+
+  it('クライアントがresult/decidedByを含めても入力には一切反映されない（そもそも読み取らない）', () => {
+    const result = validateCreateChallengeAttemptInput(
+      { ...validAttemptInput(), result: 'win', decidedBy: 'maxCombo' },
+      'challenge-1',
+    )
+    expect(result.ok).toBe(true)
+    expect(result.value).not.toHaveProperty('result')
+    expect(result.value).not.toHaveProperty('decidedBy')
   })
 })
 

@@ -94,6 +94,12 @@ export function ChallengeReceiveScreen({ challengeId, onAccept, onHome, onViewHi
 
       <p className="text-lg font-black tracking-widest text-amber-300">この記録を超えろ</p>
 
+      {challenge.performance && (
+        <p className="w-full max-w-xs text-[10px] font-bold leading-relaxed text-white/40">
+          最終DOPA%が同じ場合、通常獲得DOPA%→正答率→最大COMBO→反応速度中央値の順で判定します
+        </p>
+      )}
+
       <div className="flex w-full max-w-xs flex-col gap-3">
         <button
           onClick={() => onAccept(challenge)}

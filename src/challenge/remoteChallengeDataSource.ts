@@ -4,6 +4,7 @@ import type {
   ChallengeAttemptRecord,
   ChallengeDataSource,
   ChallengeRecord,
+  ChallengeSummary,
   CreateChallengeAttemptInput,
   CreateChallengeInput,
 } from './types'
@@ -73,6 +74,19 @@ export const remoteChallengeDataSource: ChallengeDataSource = {
       return parseJsonResponse<ChallengeAttemptListResult>(response)
     } catch {
       return { ok: false, error: 'internal_error', message: 'network error while fetching attempts' }
+    }
+  },
+
+  async getSummaries(ids: string[]): Promise<ChallengeApiResult<ChallengeSummary[]>> {
+    try {
+      const response = await fetch('/api/challenges/summaries', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+      return parseJsonResponse<ChallengeSummary[]>(response)
+    } catch {
+      return { ok: false, error: 'internal_error', message: 'network error while fetching summaries' }
     }
   },
 }

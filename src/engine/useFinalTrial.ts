@@ -81,6 +81,16 @@ export interface FinalTrialFinishPayload {
   /** 成功したFINAL問題数（0〜16）。MISSで終了した場合はその時点までの成功数。 */
   trialsCleared: number
   cleared200: boolean
+  /**
+   * Ver.6 Phase 5.3（Challenge勝敗判定強化）: Challenge用performance計測。
+   * FINAL DOPA TRIALは常にQ1から始まり、MISSした瞬間に即終了する一方通行の進行のため、
+   * maxCombo・accuracyはtrialsCleared/cleared200からそのまま導出できる
+   * （別のCOMBOトラッキングを新設する必要がない）。reactionMsListだけは既存のどこにも
+   * 蓄積されていなかったため新規に追加した（FinalQuestionResult.reactionMsをそのまま
+   * 正解時だけ記録する）。既存の表示用stats（最大COMBO・正答率・最速反応）は
+   * 一切変更しない、Challenge専用の追加データ。
+   */
+  trialPerformance: { maxCombo: number; accuracy: number; reactionMsList: number[] }
 }
 
 /**
@@ -121,6 +131,8 @@ export function useFinalTrial(
   const replayQuestionsRef = useRef(options?.replayQuestions)
   const replayIndexRef = useRef(0)
   const recordedRef = useRef<ChallengeProblemSetItem[]>([])
+  /** Ver.6 Phase 5.3（Challenge勝敗判定強化）: 正解した問題のreaction time一覧（Challenge用）。 */
+  const reactionMsListRef = useRef<number[]>([])
 
   const [snapshot, setSnapshot] = useState<FinalTrialSnapshot>({
     questionNumber: initialQuestionNumber,
@@ -273,11 +285,18 @@ export function useFinalTrial(
       const trialsCleared = questionNumberRef.current - 1
       setSnapshot((s) => ({ ...s, phase: 'failed', currentSpec: null, judgementKey: judgementKeyRef.current }))
       endTimerRef.current = setTimeout(() => {
-        onFinish({ finalPercent: percentRef.current, trialsCleared, cleared200: false })
+        onFinish({
+          finalPercent: percentRef.current,
+          trialsCleared,
+          cleared200: false,
+          // MISSで終了＝正解trialsCleared問＋今回のMISS1問の合計が総回答数。
+          trialPerformance: { maxCombo: trialsCleared, accuracy: trialsCleared / (trialsCleared + 1), reactionMsList: reactionMsListRef.current },
+        })
       }, FAIL_TRANSITION_MS)
       return
     }
 
+    reactionMsListRef.current.push(result.reactionMs)
     const clearedNumber = questionNumberRef.current
     percentRef.current += FINAL_TRIAL_CONFIG.percentPerCorrect
     judgementKeyRef.current += 1
@@ -299,6 +318,8 @@ export function useFinalTrial(
           finalPercent: FINAL_TRIAL_CONFIG.clearPercent,
           trialsCleared: FINAL_TRIAL_CONFIG.totalQuestions,
           cleared200: true,
+          // 全問正解＝accuracy 1、maxCombo=totalQuestions。
+          trialPerformance: { maxCombo: FINAL_TRIAL_CONFIG.totalQuestions, accuracy: 1, reactionMsList: reactionMsListRef.current },
         })
       }, CLEAR200_TRANSITION_MS)
       return

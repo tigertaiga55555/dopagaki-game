@@ -18,6 +18,14 @@ export function problemSetItemToSpec(item: ChallengeProblemSetItem): Challenge50
   return { instanceId: `challenge500-replay-${replaySpecCounter}`, type: item.type, data: item.data }
 }
 
+/** Ver.6 Phase 5.3（Challenge勝敗判定強化）: Challenge用performance集計の形。getPerformanceStats()の戻り値。 */
+export interface Challenge500PerformanceStats {
+  totalAnswered: number
+  correctCount: number
+  maxCombo: number
+  reactionMsList: number[]
+}
+
 export interface Challenge500Snapshot {
   state: Challenge500State
   currentSpec: Challenge500QuestionSpec | null
@@ -63,6 +71,21 @@ export function useChallenge500(onFinish: (state: Challenge500State) => void, op
   const reached500Ref = useRef(false)
   const replayIndexRef = useRef(0)
   const recordedRef = useRef<ChallengeProblemSetItem[]>([])
+  /**
+   * Ver.6 Phase 5.3（Challenge勝敗判定強化）: Challenge用performance計測。
+   * Challenge500QuestionResultはcorrectしか持たず（反応速度の概念を持ち込まない設計、
+   * questions/challenge500/types.ts参照）、既存のstate（percent/floor）もMISSペナルティで
+   * 変動するため「何問答えたか」をそこから逆算できない。そのため、ここで独立に
+   * 正答数・総回答数・最大COMBO・反応速度（問題が表示された時刻からonResultまでの
+   * 画面レベルの計測）を新規に記録する。既存のChallenge500State・画面の演出・
+   * スコア遷移ロジックには一切影響しない、完全に並行した追加トラッキング。
+   */
+  const correctCountRef = useRef(0)
+  const totalAnsweredRef = useRef(0)
+  const comboRef = useRef(0)
+  const maxComboRef = useRef(0)
+  const reactionMsListRef = useRef<number[]>([])
+  const questionShownAtRef = useRef(0)
 
   function buildNext(): Challenge500QuestionSpec {
     const replayQuestions = replayQuestionsRef.current
@@ -77,7 +100,19 @@ export function useChallenge500(onFinish: (state: Challenge500State) => void, op
     if (recordedRef.current.length < MAX_RECORDED_PROBLEMS) {
       recordedRef.current = [...recordedRef.current, specToProblemSetItem(spec)]
     }
+    // Ver.6 Phase 5.3: この問題が実際に表示された時刻を記録する（反応速度計測の基準点）。
+    questionShownAtRef.current = performance.now()
     return spec
+  }
+
+  /** Ver.6 Phase 5.3（Challenge勝敗判定強化）: このプレイのChallenge用performance集計。 */
+  function getPerformanceStats(): Challenge500PerformanceStats {
+    return {
+      totalAnswered: totalAnsweredRef.current,
+      correctCount: correctCountRef.current,
+      maxCombo: maxComboRef.current,
+      reactionMsList: reactionMsListRef.current,
+    }
   }
 
   /**
@@ -113,6 +148,19 @@ export function useChallenge500(onFinish: (state: Challenge500State) => void, op
   }
 
   function handleResult(result: Challenge500QuestionResult) {
+    // Ver.6 Phase 5.3: 既存のstate遷移（applyCorrect/applyMiss）より前に、Challenge用の
+    // performance計測だけを独立して更新する（既存ロジックの入出力には一切影響しない）。
+    const reactionMs = performance.now() - questionShownAtRef.current
+    totalAnsweredRef.current += 1
+    if (result.correct) {
+      correctCountRef.current += 1
+      comboRef.current += 1
+      maxComboRef.current = Math.max(maxComboRef.current, comboRef.current)
+      reactionMsListRef.current.push(reactionMs)
+    } else {
+      comboRef.current = 0
+    }
+
     const next = result.correct ? applyCorrect(stateRef.current) : applyMiss(stateRef.current)
     stateRef.current = next
     checkMilestones(next)
@@ -143,5 +191,5 @@ export function useChallenge500(onFinish: (state: Challenge500State) => void, op
     setSnapshot({ state: next, currentSpec: spec })
   }
 
-  return { snapshot, start, handleResult, jumpTo, getRecordedProblemSet }
+  return { snapshot, start, handleResult, jumpTo, getRecordedProblemSet, getPerformanceStats }
 }

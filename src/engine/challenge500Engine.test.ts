@@ -123,7 +123,10 @@ describe('challenge500Engine', () => {
       s = Math.random() < 0.6 ? correct(s) : miss(s)
       expect(s.floor).toBeGreaterThanOrEqual(prevFloor)
       prevFloor = s.floor
-      if (s.ended) s = createChallenge500State()
+      if (s.ended) {
+        s = createChallenge500State()
+        prevFloor = s.floor
+      }
     }
   })
 

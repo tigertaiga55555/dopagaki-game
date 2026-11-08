@@ -22,7 +22,9 @@ export function deriveChallengeMode(result: FinalResultV4): ChallengeMode {
  */
 export function buildCreateChallengeInput(result: FinalResultV4): CreateChallengeInput | null {
   const problemSet = result.recordedProblemSet
-  if (!problemSet || problemSet.length === 0) return null
+  // Ver.6 Phase 5.3（Challenge勝敗判定強化）: challengePerformanceが無い場合も
+  // 「挑戦状を送る」自体を成立させない（推測値で埋めて送信することは絶対にしない）。
+  if (!problemSet || problemSet.length === 0 || !result.challengePerformance) return null
 
   const profile = getProfile()
   const mode = deriveChallengeMode(result)
@@ -36,5 +38,6 @@ export function buildCreateChallengeInput(result: FinalResultV4): CreateChalleng
     problemSet: { version: 1, items: problemSet },
     conditions: { mode },
     creatorScore: result.percent,
+    performance: result.challengePerformance,
   }
 }

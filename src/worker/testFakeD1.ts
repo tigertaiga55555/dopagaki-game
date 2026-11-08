@@ -1,8 +1,9 @@
 /**
- * Ver.6 Phase 5.1/5.2（Challengeバックエンド基盤→機能完成）: テスト専用の最小限D1フェイク。
+ * Ver.6 Phase 5.1/5.2/5.3（Challengeバックエンド基盤→機能完成→勝敗判定強化）: テスト専用の
+ * 最小限D1フェイク。
  *
  * 本物のD1 SQLパーサは実装せず、challengeRepository.tsが実際に発行するクエリ
- * （challenges / challenge_attemptsそれぞれのINSERT・SELECT）だけを認識するごく単純な
+ * （challenges / challenge_attemptsそれぞれのINSERT・SELECT・集計）だけを認識するごく単純な
  * インメモリstoreとして振る舞う。D1Database自体はabstract classのため、テストでは
  * このフェイクをD1Databaseとして直接castして使う（Cloudflareの実D1を起動せずに
  * Workerのルーティング・リポジトリ層を検証するため）。
@@ -32,6 +33,11 @@ export function createFakeD1Database() {
             conditions,
             creator_score,
             created_at,
+            performance_final_dopa_percent,
+            performance_base_dopa_percent,
+            performance_accuracy,
+            performance_max_combo,
+            performance_median_reaction_ms,
           ] = boundValues
           rows.set(id as string, {
             id,
@@ -45,12 +51,34 @@ export function createFakeD1Database() {
             conditions,
             creator_score,
             created_at,
+            performance_final_dopa_percent,
+            performance_base_dopa_percent,
+            performance_accuracy,
+            performance_max_combo,
+            performance_median_reaction_ms,
           })
           return { success: true, meta: {} }
         }
         if (query.startsWith('INSERT INTO challenge_attempts')) {
-          const [id, challenge_id, player_id, nickname, icon_kind, icon_value, equipped_title, score, result, attempt_number, created_at] =
-            boundValues
+          const [
+            id,
+            challenge_id,
+            player_id,
+            nickname,
+            icon_kind,
+            icon_value,
+            equipped_title,
+            score,
+            result,
+            attempt_number,
+            created_at,
+            performance_final_dopa_percent,
+            performance_base_dopa_percent,
+            performance_accuracy,
+            performance_max_combo,
+            performance_median_reaction_ms,
+            decided_by,
+          ] = boundValues
           attemptRows.push({
             id,
             challenge_id,
@@ -63,6 +91,12 @@ export function createFakeD1Database() {
             result,
             attempt_number,
             created_at,
+            performance_final_dopa_percent,
+            performance_base_dopa_percent,
+            performance_accuracy,
+            performance_max_combo,
+            performance_median_reaction_ms,
+            decided_by,
           })
           return { success: true, meta: {} }
         }
@@ -86,6 +120,11 @@ export function createFakeD1Database() {
         throw new Error(`fake D1: unsupported first() query: ${query}`)
       },
       async all<T>() {
+        if (query.startsWith('SELECT * FROM challenges WHERE id IN')) {
+          const ids = boundValues as string[]
+          const results = ids.map((id) => rows.get(id)).filter((row): row is Record<string, unknown> => row !== undefined)
+          return { results: results as T[], success: true, meta: {} }
+        }
         if (query.startsWith('SELECT * FROM challenge_attempts WHERE challenge_id = ? AND player_id = ? ORDER BY created_at DESC LIMIT ?')) {
           const [challengeId, playerId, limit] = boundValues as [string, string, number]
           const results = attemptRows
@@ -101,6 +140,22 @@ export function createFakeD1Database() {
             .sort((a, b) => (b.created_at as number) - (a.created_at as number))
             .slice(0, limit)
           return { results: results as T[], success: true, meta: {} }
+        }
+        if (query.includes('FROM challenge_attempts') && query.includes('GROUP BY challenge_id')) {
+          const ids = boundValues as string[]
+          const results = ids.map((challengeId) => {
+            const rowsForChallenge = attemptRows.filter((r) => r.challenge_id === challengeId)
+            const challengerCount = new Set(rowsForChallenge.map((r) => r.player_id)).size
+            const clearedPlayers = new Set(rowsForChallenge.filter((r) => r.result === 'win').map((r) => r.player_id))
+            return {
+              challenge_id: challengeId,
+              challenger_count: challengerCount,
+              attempt_count: rowsForChallenge.length,
+              cleared_count: clearedPlayers.size,
+            }
+          })
+          // 本物のGROUP BYと同じく、1件もattemptが無いchallengeIdは結果に含めない。
+          return { results: results.filter((r) => r.attempt_count > 0) as T[], success: true, meta: {} }
         }
         throw new Error(`fake D1: unsupported all() query: ${query}`)
       },
