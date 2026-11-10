@@ -489,3 +489,96 @@ describe('worker fetch handler: POST /api/challenges/summaries (Ver.6 Phase 5.3:
     expect(notArray.status).toBe(400)
   })
 })
+
+describe('worker fetch handler: POST /api/challenges/participated-summaries (Ver.6 Phase 5.4: 参加したChallenge一覧)', () => {
+  it('指定したplayerIdの挑戦だけを対象に、ホスト情報・ホスト基準記録・自分の挑戦回数・最新resultを返す（挑戦者視点のまま、反転しない）', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challengeA = await createSampleChallenge(env, { creatorNickname: 'ホストA', creatorScore: 100 })
+    const challengeB = await createSampleChallenge(env, { creatorNickname: 'ホストB', creatorScore: 999 })
+
+    // pid-meはchallengeAへ2回挑戦（LOSE→WIN）。pid-otherの挑戦は自分の集計に混ざらないこと。
+    await postAttempt(env, challengeA.id, { playerId: 'pid-me', performance: { finalDopaPercent: 10 } })
+    await postAttempt(env, challengeA.id, { playerId: 'pid-me', performance: { finalDopaPercent: 500 } })
+    await postAttempt(env, challengeA.id, { playerId: 'pid-other', performance: { finalDopaPercent: 500 } })
+    // challengeBはpid-meが未挑戦（一覧に含まれないこと）。
+
+    const res = await worker.fetch(
+      new Request('https://example.com/api/challenges/participated-summaries', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids: [challengeA.id, challengeB.id, 'does-not-exist'], playerId: 'pid-me' }),
+      }),
+      env,
+    )
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as ChallengeApiResult<
+      {
+        id: string
+        creatorNickname: string
+        creatorScore: number
+        myAttemptCount: number
+        myLatestResult: 'win' | 'lose'
+        hostPerformance: ChallengePerformance | null
+      }[]
+    >
+    expect(body.ok).toBe(true)
+    if (!body.ok) throw new Error('expected participated-summaries fetch to succeed')
+    expect(body.value.length).toBe(1)
+    expect(body.value[0]).toMatchObject({
+      id: challengeA.id,
+      creatorNickname: 'ホストA',
+      creatorScore: 100,
+      myAttemptCount: 2,
+      myLatestResult: 'win',
+    })
+    expect(body.value[0].hostPerformance).toEqual(challengeA.performance)
+    // challengeB（未挑戦）・存在しないidはどちらも結果に含まれない。
+    expect(body.value.find((s) => s.id === challengeB.id)).toBeUndefined()
+  })
+
+  it('DB上のresultは常に挑戦者視点のまま返る（ホスト視点への反転はクライアント側の表示専用ロジックの責務）', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createSampleChallenge(env, { creatorScore: 100 })
+    // 挑戦者が意図的にホストより低い記録でLOSEする。
+    await postAttempt(env, challenge.id, { playerId: 'pid-me', performance: { finalDopaPercent: 1 } })
+
+    const res = await worker.fetch(
+      new Request('https://example.com/api/challenges/participated-summaries', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids: [challenge.id], playerId: 'pid-me' }),
+      }),
+      env,
+    )
+    const body = (await res.json()) as ChallengeApiResult<{ myLatestResult: 'win' | 'lose' }[]>
+    if (!body.ok) throw new Error('expected fetch to succeed')
+    expect(body.value[0].myLatestResult).toBe('lose')
+  })
+
+  it('idsが空配列・playerId欠落のいずれも400 invalid_inputを返す', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+
+    const noPlayerId = await worker.fetch(
+      new Request('https://example.com/api/challenges/participated-summaries', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids: ['some-id'] }),
+      }),
+      env,
+    )
+    expect(noPlayerId.status).toBe(400)
+
+    const emptyIds = await worker.fetch(
+      new Request('https://example.com/api/challenges/participated-summaries', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids: [], playerId: 'pid-me' }),
+      }),
+      env,
+    )
+    expect(emptyIds.status).toBe(400)
+  })
+})

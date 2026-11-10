@@ -21,6 +21,7 @@ import { ChallengeSentScreen } from './screens/ChallengeSentScreen'
 import { EndlessPlayScreen } from './screens/EndlessPlayScreen'
 import { EndlessResultScreen } from './screens/EndlessResultScreen'
 import { EndlessSelectScreen } from './screens/EndlessSelectScreen'
+import { ParticipatedChallengesScreen } from './screens/ParticipatedChallengesScreen'
 import { PlayScreen } from './screens/PlayScreen'
 import { ProfileEditScreen } from './screens/ProfileEditScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
@@ -187,6 +188,7 @@ export default function App() {
   const openAchievements = useCallback(() => setScreen('achievements'), [])
   const openRanking = useCallback(() => setScreen('ranking'), [])
   const openSentChallenges = useCallback(() => setScreen('challengeSentList'), [])
+  const openParticipatedChallenges = useCallback(() => setScreen('challengeParticipatedList'), [])
 
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-[430px] overflow-hidden bg-[#0b0620]">
@@ -245,6 +247,7 @@ export default function App() {
               onAchievements={openAchievements}
               onRanking={openRanking}
               onSentChallenges={openSentChallenges}
+              onParticipatedChallenges={openParticipatedChallenges}
             />
           )}
           {screen === 'profileEdit' && <ProfileEditScreen onDone={openProfile} />}
@@ -275,6 +278,9 @@ export default function App() {
             <ChallengeHistoryScreen challenge={activeChallenge} onBack={quitToHome} />
           )}
           {screen === 'challengeSentList' && <SentChallengesScreen onBack={quitToHome} onOpenHistory={openChallengeHistory} />}
+          {screen === 'challengeParticipatedList' && (
+            <ParticipatedChallengesScreen onBack={quitToHome} onOpenHistory={openChallengeHistory} />
+          )}
         </>
       )}
     </div>

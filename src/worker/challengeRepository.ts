@@ -166,6 +166,16 @@ export interface ChallengeAttemptRepository {
   getAggregatesByChallengeIds(
     challengeIds: string[],
   ): Promise<Record<string, { challengerCount: number; attemptCount: number; clearedCount: number }>>
+  /**
+   * Ver.6 Phase 5.4（実機QA最終修正）: 「参加したChallenge」一覧向け。複数challengeIdのうち、
+   * 指定したplayerId自身の挑戦回数・最新attemptのresult（挑戦者視点のまま）を一括取得する
+   * （N+1回避。1回のクエリで済ませ、JS側で昇順→最後の行を「最新」として畳み込む）。
+   * 1件も挑戦していないchallengeIdは結果に含めない。
+   */
+  getMyAggregatesByChallengeIds(
+    challengeIds: string[],
+    playerId: string,
+  ): Promise<Record<string, { attemptCount: number; latestResult: 'win' | 'lose' }>>
 }
 
 interface ChallengeAttemptRow {
@@ -305,6 +315,31 @@ export function createD1ChallengeAttemptRepository(db: D1Database): ChallengeAtt
           challengerCount: row.challenger_count,
           attemptCount: row.attempt_count,
           clearedCount: row.cleared_count,
+        }
+      }
+      return aggregates
+    },
+
+    async getMyAggregatesByChallengeIds(challengeIds, playerId) {
+      if (challengeIds.length === 0) return {}
+      const placeholders = challengeIds.map(() => '?').join(', ')
+      const result = await db
+        .prepare(
+          `SELECT challenge_id, result, created_at FROM challenge_attempts
+           WHERE player_id = ? AND challenge_id IN (${placeholders})
+           ORDER BY created_at ASC`,
+        )
+        .bind(playerId, ...challengeIds)
+        .all<{ challenge_id: string; result: string; created_at: number }>()
+
+      // created_at昇順で畳み込むため、各challenge_idについて最後に上書きされたresultが
+      // 自動的に「最新」になる（ウィンドウ関数を使わずに1クエリで済ませるための方針）。
+      const aggregates: Record<string, { attemptCount: number; latestResult: 'win' | 'lose' }> = {}
+      for (const row of result.results ?? []) {
+        const existing = aggregates[row.challenge_id]
+        aggregates[row.challenge_id] = {
+          attemptCount: (existing?.attemptCount ?? 0) + 1,
+          latestResult: row.result as 'win' | 'lose',
         }
       }
       return aggregates

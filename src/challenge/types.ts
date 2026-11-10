@@ -132,6 +132,12 @@ export interface ChallengeDataSource {
    * （utils/createdChallengesStorage.tsが保持するcreatedChallengeIds向け）。
    */
   getSummaries(ids: string[]): Promise<ChallengeApiResult<ChallengeSummary[]>>
+  /**
+   * Ver.6 Phase 5.4（実機QA最終修正）: 複数のChallenge IDについて、playerId視点の
+   * 要約（ホスト情報＋自分の挑戦結果）を一括取得する（utils/participatedChallengesStorage.tsが
+   * 保持するparticipatedChallengeIds向け）。
+   */
+  getParticipatedSummaries(ids: string[], playerId: string): Promise<ChallengeApiResult<ParticipatedChallengeSummary[]>>
 }
 
 /**
@@ -150,4 +156,26 @@ export interface ChallengeSummary {
   attemptCount: number
   /** 一度でもWINした（突破した）ユニークプレイヤー数。 */
   clearedCount: number
+}
+
+/**
+ * Ver.6 Phase 5.4（実機QA最終修正）: POST /api/challenges/participated-summariesが返す1件ぶんの要約。
+ * 「参加したChallenge」一覧（utils/participatedChallengesStorage.tsが保持する
+ * participatedChallengeIds向け）で、自分が挑戦した相手（ホスト）の情報と、自分自身の
+ * 挑戦結果（挑戦者視点のまま・反転しない）だけを持つ軽量な形。
+ */
+export interface ParticipatedChallengeSummary {
+  id: string
+  mode: ChallengeMode
+  createdAt: number
+  creatorNickname: string
+  creatorIcon: AvatarRef
+  creatorEquippedTitle: string | null
+  creatorScore: number
+  /** ホストの基準performance。このmigration以前のChallengeにはnull。 */
+  hostPerformance: ChallengePerformance | null
+  /** このChallengeへの自分の挑戦回数。 */
+  myAttemptCount: number
+  /** 自分の最新attemptのresult（挑戦者視点のまま）。 */
+  myLatestResult: 'win' | 'lose'
 }

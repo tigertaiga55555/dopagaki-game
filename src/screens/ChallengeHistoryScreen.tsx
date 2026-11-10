@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react'
 import { resolveAvatarEmoji } from '../config/profileConfig'
 import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSource'
-import { describeDecidedBy, formatAccuracyPercent, formatReactionSeconds } from '../challenge/formatPerformance'
+import {
+  BASE_DOPA_PERCENT_NOTE,
+  describeDecidedBy,
+  formatAccuracyPercent,
+  formatReactionSeconds,
+  resultForViewer,
+  type ChallengeViewerPerspective,
+} from '../challenge/formatPerformance'
 import { trackChallengeHistoryView } from '../utils/analytics'
 import { getOrCreatePlayerId } from '../utils/profileStorage'
 import type { ChallengeApiError, ChallengeAttemptRecord, ChallengeRecord } from '../challenge/types'
@@ -35,6 +42,9 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const viewerPlayerId = getOrCreatePlayerId()
   const isCreator = viewerPlayerId === challenge.creatorPlayerId
+  // Ver.6 Phase 5.4（実機QA最終修正）: D1上のattempt.resultは常に挑戦者視点で保存されている。
+  // 作成者（ホスト）がこの画面を開いた場合だけ、表示直前に反転する（DBの値は書き換えない）。
+  const perspective: ChallengeViewerPerspective = isCreator ? 'host' : 'challenger'
 
   useEffect(() => {
     trackChallengeHistoryView(challenge.mode)
@@ -105,9 +115,11 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
       </div>
 
       <div className="flex flex-1 flex-col items-center gap-3 px-5 py-4">
-        {isCreator && challenge.performance && (
+        {challenge.performance && (
           <div className="w-full max-w-sm space-y-1 rounded-2xl bg-white/5 px-4 py-3 text-xs">
-            <p className="mb-1 text-[10px] font-black tracking-widest text-white/40">あなたの基準記録</p>
+            <p className="mb-1 text-[10px] font-black tracking-widest text-white/40">
+              {isCreator ? 'あなたの基準記録' : 'ホストの基準記録'}
+            </p>
             <div className="grid grid-cols-5 gap-1 text-center">
               <BaselineStat label="最終%" value={`${challenge.performance.finalDopaPercent}`} />
               <BaselineStat label="通常%" value={`${challenge.performance.baseDopaPercent}`} />
@@ -115,6 +127,7 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
               <BaselineStat label="COMBO" value={`${challenge.performance.maxCombo}`} />
               <BaselineStat label="反応" value={formatReactionSeconds(challenge.performance.medianCorrectReactionMs)} />
             </div>
+            <p className="pt-0.5 text-center text-[9px] text-white/30">{BASE_DOPA_PERCENT_NOTE}</p>
           </div>
         )}
 
@@ -124,6 +137,7 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
           <div className="flex w-full max-w-sm flex-col gap-3">
             {groups.map((group) => {
               const latest = group.rows[group.rows.length - 1]
+              const latestForHost = resultForViewer(latest.result, perspective)
               return (
                 <div key={latest.playerId} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
                   <div className="flex items-center gap-2">
@@ -131,19 +145,19 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
                     <p className="flex-1 truncate text-sm font-black text-white">{group.nickname}</p>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
-                        latest.result === 'win' ? 'bg-amber-400/20 text-amber-300' : 'bg-white/10 text-white/50'
+                        latestForHost === 'win' ? 'bg-amber-400/20 text-amber-300' : 'bg-white/10 text-white/50'
                       }`}
                     >
-                      最新: {RESULT_LABEL[latest.result]}
+                      最新: {RESULT_LABEL[latestForHost]}
                     </span>
                   </div>
                   <p className="mt-1.5 text-[11px] text-white/40">
                     挑戦{group.rows.length}回 ・{' '}
-                    {group.rows.map((r) => RESULT_LABEL[r.result]).join(' → ')}
+                    {group.rows.map((r) => RESULT_LABEL[resultForViewer(r.result, perspective)]).join(' → ')}
                   </p>
                   <div className="mt-2 flex flex-col gap-1.5 border-t border-white/5 pt-2">
                     {group.rows.map((r, i) => (
-                      <AttemptDetailRow key={r.id} attempt={r} index={i + 1} />
+                      <AttemptDetailRow key={r.id} attempt={r} index={i + 1} perspective={perspective} />
                     ))}
                   </div>
                 </div>
@@ -156,7 +170,7 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
           <div className="flex w-full max-w-sm flex-col gap-2">
             {attempts.map((row) => (
               <div key={row.id} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                <AttemptDetailRow attempt={row} index={row.attemptNumber} />
+                <AttemptDetailRow attempt={row} index={row.attemptNumber} perspective={perspective} />
               </div>
             ))}
           </div>
@@ -183,16 +197,28 @@ function BaselineStat({ label, value }: { label: string; value: string }) {
  * 同じコンポーネントを使う（item 14: 「挑戦者本人の履歴でも、同じ詳細を見られて構いません」）。
  * performance/decidedByが無い（このmigration以前のattempt）場合は、score・resultだけの
  * 簡易表示にフォールバックする。
+ *
+ * Ver.6 Phase 5.4（実機QA最終修正）: attempt.result自体は常に挑戦者視点（DBの値を書き換えない）
+ * ため、perspectiveに応じて表示直前にだけ反転する（resultForViewer/describeDecidedBy参照）。
  */
-function AttemptDetailRow({ attempt, index }: { attempt: ChallengeAttemptRecord; index: number }) {
-  const resultClass = attempt.result === 'win' ? 'text-amber-300' : 'text-white/50'
+function AttemptDetailRow({
+  attempt,
+  index,
+  perspective,
+}: {
+  attempt: ChallengeAttemptRecord
+  index: number
+  perspective: ChallengeViewerPerspective
+}) {
+  const viewerResult = resultForViewer(attempt.result, perspective)
+  const resultClass = viewerResult === 'win' ? 'text-amber-300' : 'text-white/50'
 
   if (!attempt.performance || !attempt.decidedBy) {
     return (
       <div className="flex items-center justify-between text-xs">
         <span className="text-white/50">{index}回目</span>
         <span className="font-bold tabular-nums text-white">{attempt.score}％</span>
-        <span className={`font-black ${resultClass}`}>{RESULT_LABEL[attempt.result]}</span>
+        <span className={`font-black ${resultClass}`}>{RESULT_LABEL[viewerResult]}</span>
       </div>
     )
   }
@@ -201,14 +227,16 @@ function AttemptDetailRow({ attempt, index }: { attempt: ChallengeAttemptRecord;
     <div className="text-xs">
       <div className="flex items-center justify-between">
         <span className="text-white/50">{index}回目</span>
-        <span className={`font-black ${resultClass}`}>{RESULT_LABEL[attempt.result]}</span>
+        <span className={`font-black ${resultClass}`}>{RESULT_LABEL[viewerResult]}</span>
       </div>
       <p className="mt-0.5 text-[10px] text-white/40">
         最終{attempt.performance.finalDopaPercent}% ・ 通常{attempt.performance.baseDopaPercent}% ・{' '}
         {formatAccuracyPercent(attempt.performance.accuracy)} ・ COMBO{attempt.performance.maxCombo} ・{' '}
         {formatReactionSeconds(attempt.performance.medianCorrectReactionMs)}
       </p>
-      <p className="mt-0.5 text-[10px] font-bold text-amber-200/80">{describeDecidedBy(attempt.decidedBy, attempt.result)}</p>
+      <p className="mt-0.5 text-[10px] font-bold text-amber-200/80">
+        {describeDecidedBy(attempt.decidedBy, attempt.result, perspective)}
+      </p>
     </div>
   )
 }

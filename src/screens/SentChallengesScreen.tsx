@@ -67,13 +67,13 @@ export function SentChallengesScreen({ onBack, onOpenHistory }: Props) {
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
       <BackButton onBack={onBack} label="ホーム" />
 
-      <p className="relative z-10 mt-2 text-center text-sm font-black tracking-widest text-white/80">送った挑戦状</p>
+      <p className="relative z-10 mt-2 text-center text-sm font-black tracking-widest text-white/80">作成したChallenge</p>
 
       <div className="flex flex-1 flex-col items-center gap-3 px-5 py-4">
         {state.status === 'loading' && <p className="mt-10 text-sm font-bold text-white/50">読み込み中…</p>}
 
         {state.status === 'empty' && (
-          <p className="mt-10 text-sm font-bold text-white/40">まだ送った挑戦状はありません</p>
+          <p className="mt-10 text-sm font-bold text-white/40">まだ作成したChallengeはありません</p>
         )}
 
         {state.status === 'error' && <p className="mt-10 text-sm font-bold text-white/60">一覧の読み込みに失敗しました。</p>}

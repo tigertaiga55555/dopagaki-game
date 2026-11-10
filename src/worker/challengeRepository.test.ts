@@ -215,4 +215,28 @@ describe('createD1ChallengeAttemptRepository (Ver.6 Phase 5.2/5.3: challenge_att
     const repo = createD1ChallengeAttemptRepository(db as never)
     expect(await repo.getAggregatesByChallengeIds([])).toEqual({})
   })
+
+  it('Ver.6 Phase 5.4（参加したChallenge一覧）: getMyAggregatesByChallengeIdsは指定playerIdの挑戦回数・最新resultだけを一括取得する', async () => {
+    const db = createFakeD1Database()
+    const repo = createD1ChallengeAttemptRepository(db as never)
+    // challenge-x: pid-me が LOSE→LOSE→WIN（3回挑戦、最新はWIN）。pid-other（別プレイヤー）の挑戦は無視されること。
+    await repo.create('a1', 1700000001000, 1, 'lose', 'finalDopaPercent', sampleAttemptInput({ challengeId: 'challenge-x', playerId: 'pid-me' }))
+    await repo.create('a2', 1700000002000, 2, 'lose', 'finalDopaPercent', sampleAttemptInput({ challengeId: 'challenge-x', playerId: 'pid-me' }))
+    await repo.create('a3', 1700000003000, 3, 'win', 'finalDopaPercent', sampleAttemptInput({ challengeId: 'challenge-x', playerId: 'pid-me' }))
+    await repo.create('a4', 1700000004000, 1, 'win', 'finalDopaPercent', sampleAttemptInput({ challengeId: 'challenge-x', playerId: 'pid-other' }))
+    // challenge-y: pid-meが1回だけLOSE。
+    await repo.create('a5', 1700000005000, 1, 'lose', 'accuracy', sampleAttemptInput({ challengeId: 'challenge-y', playerId: 'pid-me' }))
+    // challenge-z: pid-meは未挑戦（結果に含まれないこと）。
+
+    const aggregates = await repo.getMyAggregatesByChallengeIds(['challenge-x', 'challenge-y', 'challenge-z'], 'pid-me')
+    expect(aggregates['challenge-x']).toEqual({ attemptCount: 3, latestResult: 'win' })
+    expect(aggregates['challenge-y']).toEqual({ attemptCount: 1, latestResult: 'lose' })
+    expect(aggregates['challenge-z']).toBeUndefined()
+  })
+
+  it('getMyAggregatesByChallengeIds: 空配列を渡すと空オブジェクトを返す', async () => {
+    const db = createFakeD1Database()
+    const repo = createD1ChallengeAttemptRepository(db as never)
+    expect(await repo.getMyAggregatesByChallengeIds([], 'pid-me')).toEqual({})
+  })
 })

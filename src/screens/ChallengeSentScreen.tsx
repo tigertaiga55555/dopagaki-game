@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { resolveAvatarEmoji } from '../config/profileConfig'
 import { buildChallengeUrl } from '../challenge/url'
-import { formatAccuracyPercent, formatReactionSeconds } from '../challenge/formatPerformance'
+import { BASE_DOPA_PERCENT_NOTE, formatAccuracyPercent, formatReactionSeconds } from '../challenge/formatPerformance'
 import type { ChallengeRecord } from '../challenge/types'
 
 interface Props {
@@ -72,6 +72,7 @@ export function ChallengeSentScreen({ challenge, onDone }: Props) {
           <PerformanceRow label="正答率" value={formatAccuracyPercent(challenge.performance.accuracy)} />
           <PerformanceRow label="最大COMBO" value={`${challenge.performance.maxCombo}`} />
           <PerformanceRow label="反応速度中央値" value={formatReactionSeconds(challenge.performance.medianCorrectReactionMs)} />
+          <p className="pt-0.5 text-center text-[9px] text-white/30">{BASE_DOPA_PERCENT_NOTE}</p>
         </div>
       )}
 

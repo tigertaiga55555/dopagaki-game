@@ -181,3 +181,8 @@ export function trackChallengeHistoryView(mode: string): void {
 export function trackChallengeSentListView(): void {
   trackEvent('challenge_sent_list_view')
 }
+
+/** Ver.6 Phase 5.4（実機QA最終修正）: 「参加したChallenge」一覧画面を表示した回数。識別情報は送信しない。 */
+export function trackChallengeParticipatedListView(): void {
+  trackEvent('challenge_participated_list_view')
+}

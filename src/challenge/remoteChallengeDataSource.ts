@@ -7,6 +7,7 @@ import type {
   ChallengeSummary,
   CreateChallengeAttemptInput,
   CreateChallengeInput,
+  ParticipatedChallengeSummary,
 } from './types'
 
 /**
@@ -87,6 +88,19 @@ export const remoteChallengeDataSource: ChallengeDataSource = {
       return parseJsonResponse<ChallengeSummary[]>(response)
     } catch {
       return { ok: false, error: 'internal_error', message: 'network error while fetching summaries' }
+    }
+  },
+
+  async getParticipatedSummaries(ids: string[], playerId: string): Promise<ChallengeApiResult<ParticipatedChallengeSummary[]>> {
+    try {
+      const response = await fetch('/api/challenges/participated-summaries', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids, playerId }),
+      })
+      return parseJsonResponse<ParticipatedChallengeSummary[]>(response)
+    } catch {
+      return { ok: false, error: 'internal_error', message: 'network error while fetching participated summaries' }
     }
   },
 }

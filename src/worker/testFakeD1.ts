@@ -141,6 +141,14 @@ export function createFakeD1Database() {
             .slice(0, limit)
           return { results: results as T[], success: true, meta: {} }
         }
+        if (query.startsWith('SELECT challenge_id, result, created_at FROM challenge_attempts')) {
+          const [playerId, ...ids] = boundValues as [string, ...string[]]
+          const results = attemptRows
+            .filter((r) => r.player_id === playerId && ids.includes(r.challenge_id as string))
+            .sort((a, b) => (a.created_at as number) - (b.created_at as number))
+            .map((r) => ({ challenge_id: r.challenge_id, result: r.result, created_at: r.created_at }))
+          return { results: results as T[], success: true, meta: {} }
+        }
         if (query.includes('FROM challenge_attempts') && query.includes('GROUP BY challenge_id')) {
           const ids = boundValues as string[]
           const results = ids.map((challengeId) => {

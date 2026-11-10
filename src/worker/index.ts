@@ -8,6 +8,7 @@ import type {
   ChallengeDecidedBy,
   ChallengeRecord,
   ChallengeSummary,
+  ParticipatedChallengeSummary,
 } from '../challenge/types'
 
 /** Ver.6 Phase 5.3（送った挑戦状一覧）: 一括取得できるChallenge件数の上限（クライアントは直近10件しか送らない想定だが、サーバー側でも念のため上限を設ける）。 */
@@ -201,6 +202,67 @@ async function handleGetSummaries(request: Request, db: D1Database): Promise<Res
 }
 
 /**
+ * Ver.6 Phase 5.4（実機QA最終修正）: POST /api/challenges/participated-summaries。
+ * participatedChallengeIds（クライアントのlocalStorage）に対応するChallengeのうち、
+ * 自分（playerId）が実際に挑戦済みのものだけを対象に、ホスト情報・ホストの基準記録・
+ * 自分の挑戦回数・自分の最新result（挑戦者視点のまま）を一括取得する。
+ * handleGetSummariesと同じくN+1を避け、challenges・challenge_attemptsそれぞれ
+ * 1回のクエリで済ませる。playerIdによる公開検索ではなく、クライアントが既に知っている
+ * Challenge ID集合＋自分自身のplayerIdに対する問い合わせなので、新しい権限上の懸念はない。
+ */
+async function handleGetParticipatedSummaries(request: Request, db: D1Database): Promise<Response> {
+  let raw: unknown
+  try {
+    raw = await request.json()
+  } catch {
+    return errorResponse({ ok: false, error: 'invalid_input', message: 'request body must be valid JSON' })
+  }
+
+  const body = raw as Partial<{ ids: unknown; playerId: unknown }>
+  if (!Array.isArray(body.ids) || body.ids.length === 0 || !body.ids.every((id) => typeof id === 'string')) {
+    return errorResponse({ ok: false, error: 'invalid_input', message: 'ids must be a non-empty array of strings' })
+  }
+  if (typeof body.playerId !== 'string' || body.playerId.length === 0) {
+    return errorResponse({ ok: false, error: 'invalid_input', message: 'playerId is required' })
+  }
+  const playerId = body.playerId
+  const ids = (body.ids as string[]).filter(isValidChallengeId).slice(0, MAX_SUMMARY_IDS)
+  if (ids.length === 0) {
+    return json({ ok: true, value: [] } satisfies ChallengeApiResult<ParticipatedChallengeSummary[]>, 200)
+  }
+
+  try {
+    const challengeRepo = createD1ChallengeRepository(db)
+    const attemptRepo = createD1ChallengeAttemptRepository(db)
+    const [challenges, myAggregates] = await Promise.all([
+      challengeRepo.getByIds(ids),
+      attemptRepo.getMyAggregatesByChallengeIds(ids, playerId),
+    ])
+
+    const summaries: ParticipatedChallengeSummary[] = challenges
+      .filter((challenge) => myAggregates[challenge.id] !== undefined)
+      .map((challenge) => {
+        const aggregate = myAggregates[challenge.id]
+        return {
+          id: challenge.id,
+          mode: challenge.mode,
+          createdAt: challenge.createdAt,
+          creatorNickname: challenge.creatorNickname,
+          creatorIcon: challenge.creatorIcon,
+          creatorEquippedTitle: challenge.creatorEquippedTitle,
+          creatorScore: challenge.creatorScore,
+          hostPerformance: challenge.performance,
+          myAttemptCount: aggregate.attemptCount,
+          myLatestResult: aggregate.latestResult,
+        }
+      })
+    return json({ ok: true, value: summaries } satisfies ChallengeApiResult<ParticipatedChallengeSummary[]>, 200)
+  } catch {
+    return errorResponse({ ok: false, error: 'internal_error', message: 'failed to fetch participated summaries' })
+  }
+}
+
+/**
  * GET /api/challenges/:id/attempts?playerId=...&limit=...
  * playerIdを渡すとその挑戦者自身の履歴だけ、省略すると（Challenge作成者向けの概観として）
  * 全挑戦者ぶんの最新行を返す。limitは常に無料ユーザー既定（10）〜上限（50）でクランプし、
@@ -250,6 +312,10 @@ export default {
 
     if (url.pathname === '/api/challenges/summaries' && request.method === 'POST') {
       return handleGetSummaries(request, env.CHALLENGE_DB)
+    }
+
+    if (url.pathname === '/api/challenges/participated-summaries' && request.method === 'POST') {
+      return handleGetParticipatedSummaries(request, env.CHALLENGE_DB)
     }
 
     const attemptsMatch = /^\/api\/challenges\/([^/]+)\/attempts$/.exec(url.pathname)

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSource'
-import { describeDecidedBy, formatAccuracyPercent, formatReactionSeconds } from '../challenge/formatPerformance'
+import { BASE_DOPA_PERCENT_NOTE, describeDecidedBy, formatAccuracyPercent, formatReactionSeconds } from '../challenge/formatPerformance'
+import { addParticipatedChallengeId } from '../challenge/participatedChallengesStorage'
 import { trackChallengeWin } from '../utils/analytics'
 import { getProfile } from '../utils/profileStorage'
 import type { ChallengeApiError, ChallengeAttemptRecord, ChallengeDecidedBy, ChallengePerformance, ChallengeRecord } from '../challenge/types'
@@ -53,6 +54,9 @@ export function ChallengeResultScreen({ challenge, myResult, onRetry, onHome, on
       if (cancelled) return
       if (res.ok) {
         setState({ status: 'done', attempt: res.value })
+        // Ver.6 Phase 5.4（実機QA最終修正）: 参加したChallenge一覧向け。Challenge本体・attempt
+        // 情報は保存せず、IDだけを記録する（createdChallengeIdsと同じ方針）。
+        addParticipatedChallengeId(challenge.id)
         if (res.value.result === 'win') trackChallengeWin(challenge.mode)
       } else {
         setState({ status: 'error', error: res.error })
@@ -210,7 +214,8 @@ function PerformanceComparisonTable({ creatorNickname, creator, challenger, deci
           )
         })}
       </div>
-      <p className="text-sm font-black text-amber-200">{describeDecidedBy(decidedBy, result)}</p>
+      <p className="text-sm font-black text-amber-200">{describeDecidedBy(decidedBy, result, 'challenger')}</p>
+      <p className="text-center text-[9px] text-white/30">{BASE_DOPA_PERCENT_NOTE}</p>
     </div>
   )
 }
