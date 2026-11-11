@@ -27,3 +27,28 @@ run_worker_first = ["/api/*"]
 # binding = "CHALLENGE_DB"
 # database_name = "dopagaki-challenges-preview"
 # database_id = "<CI実行時にCloudflare D1 REST APIから取得した値>"
+
+# Ver.6 Phase 6（1対1リアルタイム対戦）: Durable Object（Matchmaker・BattleRoom）。
+# D1と異なりCloudflare API経由での事前作成は不要（class_nameをexportしてmigrationsタグを
+# 付けるだけで、wrangler preview/deploy時に自動的にプロビジョニングされる）。
+# ただし[previews]テーブルが存在する場合、トップレベルのbindingはここでも継承されない
+# （D1と同じ既知の挙動）ため、previews.durable_objects.bindingsにも明示的に複製する。
+[[durable_objects.bindings]]
+name = "MATCHMAKER"
+class_name = "Matchmaker"
+
+[[durable_objects.bindings]]
+name = "BATTLE_ROOM"
+class_name = "BattleRoom"
+
+[[previews.durable_objects.bindings]]
+name = "MATCHMAKER"
+class_name = "Matchmaker"
+
+[[previews.durable_objects.bindings]]
+name = "BATTLE_ROOM"
+class_name = "BattleRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Matchmaker", "BattleRoom"]

@@ -1,6 +1,12 @@
 import { createD1ChallengeAttemptRepository, createD1ChallengeRepository } from './challengeRepository'
 import { compareChallengePerformance } from '../challenge/performance'
 import { isValidChallengeId, validateCreateChallengeAttemptInput, validateCreateChallengeInput } from './validation'
+import { createD1BattleRepository } from './battleRepository'
+import { generateBattleProblemSet } from '../battle/battleProblemSet'
+import { generateRoomCode, isValidRoomCode } from '../battle/roomCode'
+import { Matchmaker } from './durableObjects/matchmaker'
+import { BattleRoom } from './durableObjects/battleRoom'
+import type { CreateRoomResponse, RoomStatusResponse } from '../battle/types'
 import type {
   ChallengeApiResult,
   ChallengeAttemptListResult,
@@ -10,6 +16,8 @@ import type {
   ChallengeSummary,
   ParticipatedChallengeSummary,
 } from '../challenge/types'
+
+export { Matchmaker, BattleRoom }
 
 /** Ver.6 Phase 5.3（送った挑戦状一覧）: 一括取得できるChallenge件数の上限（クライアントは直近10件しか送らない想定だが、サーバー側でも念のため上限を設ける）。 */
 const MAX_SUMMARY_IDS = 50
@@ -294,12 +302,91 @@ async function handleGetAttempts(request: Request, challengeId: string, db: D1Da
   }
 }
 
+/**
+ * Ver.6 Phase 6（1対1リアルタイム対戦）: POST /api/battles/rooms。フレンド対戦の
+ * ルーム作成。ProblemSetはここでサーバー側が1回だけ確定し、ホスト・ゲストの両方へ
+ * 同一の配列が配布される（item 4: クライアントごとの別々生成は禁止）。
+ */
+async function handleCreateBattleRoom(env: Env): Promise<Response> {
+  const roomCode = generateRoomCode()
+  const problemSet = generateBattleProblemSet()
+  const stub = env.BATTLE_ROOM!.get(env.BATTLE_ROOM!.idFromName(roomCode))
+  await stub.fetch('https://battle-room.internal/internal/create', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ mode: 'friend', roomCode, problemSet, players: [] }),
+  })
+  return json({ ok: true, value: { roomCode, matchId: roomCode } satisfies CreateRoomResponse }, 201)
+}
+
+/** GET /api/battles/rooms/:roomCode。参加前の事前チェック（存在しない/満員/終了済み）。 */
+async function handleBattleRoomStatus(roomCode: string, env: Env): Promise<Response> {
+  if (!isValidRoomCode(roomCode)) {
+    return json({ ok: false, reason: 'not_found' } satisfies RoomStatusResponse, 200)
+  }
+  const stub = env.BATTLE_ROOM!.get(env.BATTLE_ROOM!.idFromName(roomCode))
+  const res = await stub.fetch('https://battle-room.internal/internal/status')
+  const body = (await res.json()) as RoomStatusResponse
+  return json(body, 200)
+}
+
+/** GET /api/battles/stats/:playerId。世界対戦の累計戦績（将来のserver rankingでもこのまま使える形）。 */
+async function handleGetBattleStats(playerId: string, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB) {
+    return errorResponse({ ok: false, error: 'not_configured', message: 'Battle backend is not configured on this environment yet' })
+  }
+  const repo = createD1BattleRepository(env.CHALLENGE_DB)
+  const stats = await repo.getStats(playerId)
+  return json({ ok: true, value: stats ?? { wins: 0, losses: 0, draws: 0, currentStreak: 0, maxStreak: 0 } }, 200)
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
 
     if (!url.pathname.startsWith('/api/')) {
       return json({ ok: false, error: 'not_found', message: 'unknown endpoint' } satisfies ChallengeApiResult<never>, 404)
+    }
+
+    // Ver.6 Phase 6: Battle関連ルートはCHALLENGE_DBの有無に関係なく処理する
+    // （リアルタイム対戦自体はD1を使わない。世界対戦の正式戦績保存だけがCHALLENGE_DBを使う、
+    // というユーザー指示をルーティング層でも徹底する）。
+    if (url.pathname === '/api/battles/queue/ws') {
+      if (!env.MATCHMAKER) {
+        return errorResponse({ ok: false, error: 'not_configured', message: 'Battle backend is not configured on this environment yet' })
+      }
+      const stub = env.MATCHMAKER.get(env.MATCHMAKER.idFromName('global'))
+      return stub.fetch(request)
+    }
+
+    if (url.pathname === '/api/battles/rooms' && request.method === 'POST') {
+      if (!env.BATTLE_ROOM) {
+        return errorResponse({ ok: false, error: 'not_configured', message: 'Battle backend is not configured on this environment yet' })
+      }
+      return handleCreateBattleRoom(env)
+    }
+
+    const roomStatusMatch = /^\/api\/battles\/rooms\/([^/]+)$/.exec(url.pathname)
+    if (roomStatusMatch && request.method === 'GET') {
+      if (!env.BATTLE_ROOM) {
+        return errorResponse({ ok: false, error: 'not_configured', message: 'Battle backend is not configured on this environment yet' })
+      }
+      return handleBattleRoomStatus(decodeURIComponent(roomStatusMatch[1]), env)
+    }
+
+    const battleWsMatch = /^\/api\/battles\/room\/([^/]+)\/ws$/.exec(url.pathname)
+    if (battleWsMatch) {
+      if (!env.BATTLE_ROOM) {
+        return errorResponse({ ok: false, error: 'not_configured', message: 'Battle backend is not configured on this environment yet' })
+      }
+      const matchId = decodeURIComponent(battleWsMatch[1])
+      const stub = env.BATTLE_ROOM.get(env.BATTLE_ROOM.idFromName(matchId))
+      return stub.fetch(request)
+    }
+
+    const battleStatsMatch = /^\/api\/battles\/stats\/([^/]+)$/.exec(url.pathname)
+    if (battleStatsMatch && request.method === 'GET') {
+      return handleGetBattleStats(decodeURIComponent(battleStatsMatch[1]), env)
     }
 
     if (!env.CHALLENGE_DB) {

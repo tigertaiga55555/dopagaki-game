@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { checkDopaPercentAchievements } from './achievementStorage'
+import { recordWorldBattleOutcome } from './battleStatsStorage'
 import { localPlayerStatsRepository } from './playerStatsRepository'
 import { updateEndlessBest } from './storage'
 import { updateBestPercent } from './storage'
@@ -49,10 +50,14 @@ describe('playerStatsRepository (Ver.6 Phase 5: 既存storageを二重管理し�
     expect(localPlayerStatsRepository.getPlayerStats().achievementCount).toBe(6)
   })
 
-  it('worldBattleWins/worldBattleMaxStreakは未実装のため常にundefined（偽の0を持たない）', () => {
+  it('Ver.6 Phase 6（リアルタイム対戦実装後）: worldBattleWins/worldBattleMaxStreakはbattleStatsStorageの値を反映する', () => {
+    expect(localPlayerStatsRepository.getPlayerStats().worldBattleWins).toBe(0)
+    expect(localPlayerStatsRepository.getPlayerStats().worldBattleMaxStreak).toBe(0)
+
+    recordWorldBattleOutcome('win')
     const stats = localPlayerStatsRepository.getPlayerStats()
-    expect(stats.worldBattleWins).toBeUndefined()
-    expect(stats.worldBattleMaxStreak).toBeUndefined()
+    expect(stats.worldBattleWins).toBe(1)
+    expect(stats.worldBattleMaxStreak).toBe(1)
   })
 
   it('何も記録がない新規ユーザーはすべて0（未実装の世界対戦フィールドを除く）', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compareChallengePerformance, computeMedian } from './performance'
+import { compareChallengePerformance, compareDopaPerformance, computeMedian } from './performance'
 import type { ChallengePerformance } from './types'
 
 function perf(overrides: Partial<ChallengePerformance> = {}): ChallengePerformance {
@@ -93,5 +93,32 @@ describe('compareChallengePerformance (Ver.6 Phase 5.3: Challenge勝敗判定強
     const creator = perf()
     const challenger = perf()
     expect(compareChallengePerformance(creator, challenger)).toEqual({ result: 'lose', decidedBy: 'exactTie' })
+  })
+})
+
+/**
+ * Ver.6 Phase 6（1対1リアルタイム対戦）: compareDopaPerformanceはcompareChallengePerformance
+ * と同じ比較ロジックを共有する中立版（a/b/draw）。Battle機能がdraw判定にそのまま使う。
+ */
+describe('compareDopaPerformance (Ver.6 Phase 6: a/b/draw共有比較ロジック)', () => {
+  it('aが優位ならwinner=a、bが優位ならwinner=b', () => {
+    const base = perf()
+    expect(compareDopaPerformance(base, perf({ finalDopaPercent: 430 }))).toEqual({ winner: 'b', decidedBy: 'finalDopaPercent' })
+    expect(compareDopaPerformance(perf({ finalDopaPercent: 430 }), base)).toEqual({ winner: 'a', decidedBy: 'finalDopaPercent' })
+  })
+
+  it('5項目すべて完全同値ならwinner=draw・decidedBy=exactTie（Challengeのホスト防衛とは異なり、ここではどちらのLOSEでもない）', () => {
+    const a = perf()
+    const b = perf()
+    expect(compareDopaPerformance(a, b)).toEqual({ winner: 'draw', decidedBy: 'exactTie' })
+  })
+
+  it('compareChallengePerformanceはcompareDopaPerformance(creator, challenger)のwinner=bをwin、draw/aをloseへ変換するだけの薄いラッパー', () => {
+    const creator = perf()
+    const challenger = perf({ finalDopaPercent: 430 })
+    const neutral = compareDopaPerformance(creator, challenger)
+    const legacy = compareChallengePerformance(creator, challenger)
+    expect(neutral.winner).toBe('b')
+    expect(legacy).toEqual({ result: 'win', decidedBy: neutral.decidedBy })
   })
 })

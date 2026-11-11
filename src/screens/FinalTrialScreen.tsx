@@ -55,6 +55,13 @@ interface Props {
    * この配列を順番に出題する（mode='finalTrial'のChallenge挑戦時に使う）。
    */
   replayQuestions?: ChallengeProblemSetItem[]
+  /**
+   * Ver.6 Phase 6（1対1リアルタイム対戦）: 指定すると、現在のDOPA%が変化するたび
+   * （=1問ごとの判定確定のたび）に呼ばれる。既存のuseFinalTrial/演出ロジックには
+   * 一切手を入れず、既に公開されているsnapshot.percentをそのまま外部へ伝えるだけの
+   * 追加フック（単機プレイの既存呼び出し元は渡さないため挙動は変わらない）。
+   */
+  onProgress?: (percent: number) => void
 }
 
 /**
@@ -110,6 +117,7 @@ export function FinalTrialScreen({
   showForceCorrect = false,
   autoForceCorrectDelayMs,
   replayQuestions,
+  onProgress,
 }: Props) {
   const [entryDone, setEntryDone] = useState(startAtQuestion >= FINAL_TRIAL_CONFIG.totalQuestions)
   const [muted, setMutedState] = useState(isMuted())
@@ -134,6 +142,11 @@ export function FinalTrialScreen({
     startAtQuestion,
     { replayQuestions },
   )
+
+  useEffect(() => {
+    onProgress?.(snapshot.percent)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot.percent])
 
   // 突入演出の各ビート
   const [showCrack, setShowCrack] = useState(false)

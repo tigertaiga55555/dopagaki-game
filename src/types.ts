@@ -18,6 +18,10 @@ export type ScreenName =
   | 'challengeHistory'
   | 'challengeSentList'
   | 'challengeParticipatedList'
+  | 'battleHome'
+  | 'battleWorldMatching'
+  | 'battleFriend'
+  | 'battleMatch'
 
 /**
  * Ver.6 Phase 4: Endlessモードの難易度。既存通常ゲームの問題難易度システム

@@ -27,8 +27,8 @@ export const RANKING_CATEGORIES: RankingCategoryDef[] = [
   { id: 'endlessBeginner', label: 'Endless 初級', unit: 'STREAK', comingSoon: false },
   { id: 'endlessIntermediate', label: 'Endless 中級', unit: 'STREAK', comingSoon: false },
   { id: 'endlessAdvanced', label: 'Endless 上級', unit: 'STREAK', comingSoon: false },
-  { id: 'worldBattleWins', label: '世界対戦 累計勝利数', unit: '勝', comingSoon: true },
-  { id: 'worldBattleMaxStreak', label: '世界対戦 最大連勝', unit: '連勝', comingSoon: true },
+  { id: 'worldBattleWins', label: '世界対戦 累計勝利数', unit: '勝', comingSoon: false },
+  { id: 'worldBattleMaxStreak', label: '世界対戦 最大連勝', unit: '連勝', comingSoon: false },
 ]
 
 export interface RankingDataSource {
@@ -50,9 +50,9 @@ function createLocalRankingDataSource(statsRepository: PlayerStatsRepository): R
         case 'endlessAdvanced':
           return stats.endlessAdvancedBest
         case 'worldBattleWins':
+          return stats.worldBattleWins ?? 0
         case 'worldBattleMaxStreak':
-          // 世界対戦は未実装。偽の0を返さず、常に「データなし」を表すnullを返す。
-          return null
+          return stats.worldBattleMaxStreak ?? 0
       }
     },
   }

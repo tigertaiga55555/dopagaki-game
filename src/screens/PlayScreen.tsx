@@ -18,6 +18,17 @@ interface Props {
    * この配列を順番に出題する（Challenge挑戦時、作成者と完全に同じ問題で再生するため）。
    */
   replayQuestions?: ChallengeProblemSetItem[]
+  /**
+   * Ver.6 Phase 6（1対1リアルタイム対戦）: 1問ごとの判定確定を外部へ伝える追加フック
+   * （useRushGameのonQuestionResolvedをそのまま橋渡しするだけ）。単機プレイの既存呼び出し元は
+   * 渡さないため挙動は変わらない。
+   */
+  onQuestionResolved?: (info: { correct: boolean; reactionMs: number; scoreDelta: number; bonusGainDelta: number }) => void
+  /**
+   * Ver.6 Phase 6: 120%到達後、内部でFinalTrialScreenへ引き継がれた後の進捗
+   * （FinalTrialScreen自身のonProgressと同じ形）。
+   */
+  onFinalTrialProgress?: (percent: number) => void
 }
 
 const JUDGEMENT_COLOR: Record<string, string> = {
@@ -29,12 +40,12 @@ const JUDGEMENT_COLOR: Record<string, string> = {
 
 const PARTICLE_POSITIONS = Array.from({ length: 8 }).map((_, i) => ({ x: (i * 12.5) % 100, delay: i * 0.2 }))
 
-export function PlayScreen({ onFinish, onQuit, replayQuestions }: Props) {
+export function PlayScreen({ onFinish, onQuit, replayQuestions, onQuestionResolved, onFinalTrialProgress }: Props) {
   const [finalEntryStats, setFinalEntryStats] = useState<PlayStats | null>(null)
-  const { snapshot, handleQuestionResult, getRecordedProblemSet } = useRushGame(
+  const { snapshot, handleQuestionResult, getRecordedProblemSet, replayIndex } = useRushGame(
     (payload) => onFinish(computeFinalResult(payload, getRecordedProblemSet())),
     (stats) => setFinalEntryStats(stats),
-    { replayQuestions },
+    { replayQuestions, onQuestionResolved },
   )
   const [muted, setMutedState] = useState(isMuted())
   const shakeWrapperRef = useRef<HTMLDivElement>(null)
@@ -75,7 +86,15 @@ export function PlayScreen({ onFinish, onQuit, replayQuestions }: Props) {
   // （PlayScreenを再マウントさせない＝Question subtreeのkey不変則には抵触しない。
   // 通常ゲームは既にcurrentSpecがnullで問題を表示していないため、切り替えの影響を受けない）。
   if (finalEntryStats) {
-    return <FinalTrialScreen initialStats={finalEntryStats} onFinish={onFinish} onQuit={onQuit} />
+    return (
+      <FinalTrialScreen
+        initialStats={finalEntryStats}
+        onFinish={onFinish}
+        onQuit={onQuit}
+        onProgress={onFinalTrialProgress}
+        replayQuestions={replayQuestions?.slice(replayIndex)}
+      />
+    )
   }
 
   const overdriveTier = getOverdriveTier(snapshot.displayPercent)

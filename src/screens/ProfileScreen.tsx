@@ -65,6 +65,8 @@ export function ProfileScreen({ onBack, onEdit, onAchievements, onRanking, onSen
           <StatRow label="Endless 中級 BEST" value={`${stats.endlessIntermediateBest} STREAK`} />
           <StatRow label="Endless 上級 BEST" value={`${stats.endlessAdvancedBest} STREAK`} />
           <StatRow label="実績解除数" value={`${stats.achievementCount} / ${ACHIEVEMENT_DEFS.length}`} />
+          <StatRow label="世界対戦 累計勝利数" value={`${stats.worldBattleWins ?? 0}勝`} />
+          <StatRow label="世界対戦 最大連勝" value={`${stats.worldBattleMaxStreak ?? 0}連勝`} />
         </div>
 
         <div className="flex w-full max-w-xs flex-col gap-3">

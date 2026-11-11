@@ -64,3 +64,15 @@ export function describeDecidedBy(
  * 比較表の可読性を優先し、呼び出し側では必ず小さく・薄い色で表示する。
  */
 export const BASE_DOPA_PERCENT_NOTE = '※通常獲得DOPA%は、ボーナス加算分を除いた値です'
+
+/**
+ * Ver.6 Phase 6（1対1リアルタイム対戦）: Battle（WIN/LOSE/DRAWの3択）向けの理由文。
+ * decidedByの語彙（DECIDED_BY_LABEL）はChallengeと完全に共有し、Battle専用に
+ * 別の名称を作らない。exactTie（全項目完全同値）はChallengeの「ホスト防衛」ではなく
+ * 中立な「DRAW」として扱う。
+ */
+export function describeBattleDecidedBy(decidedBy: ChallengeDecidedBy, outcome: 'win' | 'lose' | 'draw'): string {
+  if (decidedBy === 'exactTie') return '全項目同値のためDRAW'
+  if (outcome === 'draw') return `${DECIDED_BY_LABEL[decidedBy]}は同値`
+  return `${DECIDED_BY_LABEL[decidedBy]}で${outcome === 'win' ? 'WIN' : 'LOSE'}`
+}

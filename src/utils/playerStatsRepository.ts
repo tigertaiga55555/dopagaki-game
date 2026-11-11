@@ -1,4 +1,5 @@
 import { getAchievementCount } from './achievementStorage'
+import { getWorldBattleStats } from './battleStatsStorage'
 import { getBestPercent, getEndlessBest } from './storage'
 import type { PlayerStats } from '../types'
 
@@ -8,9 +9,9 @@ import type { PlayerStats } from '../types'
  * 読み取り専用のビュー。保存先を増やさないことで「既存ユーザーの記録を失わない」
  * ことを構造的に保証する。
  *
- * worldBattleWins/worldBattleMaxStreakは意図的にフィールド自体を省略する
- * （=undefined）。リアルタイム対戦は未実装のため、偽の0をPlayerStatsにもUIにも
- * 一切持ち込まない。
+ * Ver.6 Phase 6（1対1リアルタイム対戦）: worldBattleWins/worldBattleMaxStreakは
+ * battleStatsStorage.ts（サーバー確定済みのbattle_finishを受けた直後にだけ更新される
+ * ローカルミラー）から読む。
  */
 export interface PlayerStatsRepository {
   getPlayerStats(): PlayerStats
@@ -18,13 +19,15 @@ export interface PlayerStatsRepository {
 
 export const localPlayerStatsRepository: PlayerStatsRepository = {
   getPlayerStats(): PlayerStats {
+    const battleStats = getWorldBattleStats()
     return {
       maxDopaPercent: getBestPercent(),
       endlessBeginnerBest: getEndlessBest('beginner'),
       endlessIntermediateBest: getEndlessBest('intermediate'),
       endlessAdvancedBest: getEndlessBest('advanced'),
       achievementCount: getAchievementCount(),
-      // worldBattleWins / worldBattleMaxStreak: 今回は実装しないため省略する。
+      worldBattleWins: battleStats.wins,
+      worldBattleMaxStreak: battleStats.maxStreak,
     }
   },
 }

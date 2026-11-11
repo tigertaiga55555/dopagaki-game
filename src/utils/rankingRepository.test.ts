@@ -39,9 +39,9 @@ describe('rankingRepository (Ver.6 Phase 5: Ranking data adapter, local-first)',
     expect(localRankingDataSource.getMyValue('endlessAdvanced')).toBe(9)
   })
 
-  it('世界対戦2カテゴリは未実装のためnull（偽の0ではない）を返す', () => {
-    expect(localRankingDataSource.getMyValue('worldBattleWins')).toBeNull()
-    expect(localRankingDataSource.getMyValue('worldBattleMaxStreak')).toBeNull()
+  it('Ver.6 Phase 6（リアルタイム対戦実装後）: 世界対戦2カテゴリも実データ（未対戦なら0）を返す', () => {
+    expect(localRankingDataSource.getMyValue('worldBattleWins')).toBe(0)
+    expect(localRankingDataSource.getMyValue('worldBattleMaxStreak')).toBe(0)
   })
 
   it('RANKING_CATEGORIESは6種類（Elo/rating/勝率ランキングは含まれない）', () => {
@@ -52,9 +52,9 @@ describe('rankingRepository (Ver.6 Phase 5: Ranking data adapter, local-first)',
     )
   })
 
-  it('世界対戦2カテゴリだけがcomingSoon=trueとしてマークされている', () => {
+  it('Ver.6 Phase 6（リアルタイム対戦実装後）: 全6カテゴリともcomingSoon=falseになる', () => {
     const comingSoonIds = RANKING_CATEGORIES.filter((c) => c.comingSoon).map((c) => c.id)
-    expect(new Set(comingSoonIds)).toEqual(new Set(['worldBattleWins', 'worldBattleMaxStreak']))
+    expect(comingSoonIds).toEqual([])
   })
 
   it('何も記録がない新規ユーザーの4カテゴリは0（nullではない、データ自体は存在する）', () => {

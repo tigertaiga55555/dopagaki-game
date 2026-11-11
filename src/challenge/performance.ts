@@ -33,41 +33,61 @@ function roundedReactionMs(ms: number): number {
   return Math.round(ms / 10) * 10
 }
 
+export interface DopaComparisonResult {
+  winner: 'a' | 'b' | 'draw'
+  decidedBy: ChallengeDecidedBy
+}
+
 /**
- * challenger視点でのWIN/LOSE判定。ユーザー指示の優先順位
+ * Ver.6 Phase 6（1対1リアルタイム対戦）: a/b対称のDOPA%比較。ユーザー指示の優先順位
  * （finalDopaPercent→baseDopaPercent→accuracy→maxCombo→medianCorrectReactionMs→
- * 完全同値=challenger LOSE）で必ず比較し、途中の項目で差が出た時点で確定する。
- * medianCorrectReactionMsがnull（比較可能な正解サンプルが無い）の場合は
- * 「最も遅い」扱いにする（Infinity扱い）——反応速度で勝ちを主張するにはデータが必要、
- * というルール。
+ * 完全同値）で必ず比較し、途中の項目で差が出た時点で確定する。medianCorrectReactionMsが
+ * null（比較可能な正解サンプルが無い）の場合は「最も遅い」扱いにする（Infinity扱い）。
+ *
+ * Challenge（compareChallengePerformance）・Battle（compareDopaPerformance経由）の
+ * どちらも、この1つの比較ロジックだけを共有する（同じ概念を2回実装しない）。
+ * 完全同値時の意味づけ（Challengeはホスト防衛=challenger lose、Battleはdraw）は
+ * 呼び出し側でだけ分岐させ、この関数自体は「どちらが勝っているか／完全同値か」
+ * という中立な事実だけを返す。
+ */
+export function compareDopaPerformance(a: ChallengePerformance, b: ChallengePerformance): DopaComparisonResult {
+  if (a.finalDopaPercent !== b.finalDopaPercent) {
+    return { winner: a.finalDopaPercent > b.finalDopaPercent ? 'a' : 'b', decidedBy: 'finalDopaPercent' }
+  }
+  if (a.baseDopaPercent !== b.baseDopaPercent) {
+    return { winner: a.baseDopaPercent > b.baseDopaPercent ? 'a' : 'b', decidedBy: 'baseDopaPercent' }
+  }
+
+  const aAccuracyPct = roundedAccuracyPercent(a.accuracy)
+  const bAccuracyPct = roundedAccuracyPercent(b.accuracy)
+  if (aAccuracyPct !== bAccuracyPct) {
+    return { winner: aAccuracyPct > bAccuracyPct ? 'a' : 'b', decidedBy: 'accuracy' }
+  }
+
+  if (a.maxCombo !== b.maxCombo) {
+    return { winner: a.maxCombo > b.maxCombo ? 'a' : 'b', decidedBy: 'maxCombo' }
+  }
+
+  const aReactionMs = a.medianCorrectReactionMs === null ? Infinity : roundedReactionMs(a.medianCorrectReactionMs)
+  const bReactionMs = b.medianCorrectReactionMs === null ? Infinity : roundedReactionMs(b.medianCorrectReactionMs)
+  if (aReactionMs !== bReactionMs) {
+    // 反応速度は小さい方が速い＝勝ち。
+    return { winner: aReactionMs < bReactionMs ? 'a' : 'b', decidedBy: 'medianCorrectReactionMs' }
+  }
+
+  return { winner: 'draw', decidedBy: 'exactTie' }
+}
+
+/**
+ * challenger視点でのWIN/LOSE判定。compareDopaPerformance(creator, challenger)の結果を
+ * Challenge固有の意味づけ（完全同値=ホスト防衛=challenger LOSE）へ変換するだけの
+ * 薄いラッパー。既存の挙動（この関数のシグネチャ・戻り値）は一切変更していない。
  */
 export function compareChallengePerformance(
   creator: ChallengePerformance,
   challenger: ChallengePerformance,
 ): ChallengeComparisonResult {
-  if (challenger.finalDopaPercent !== creator.finalDopaPercent) {
-    return { result: challenger.finalDopaPercent > creator.finalDopaPercent ? 'win' : 'lose', decidedBy: 'finalDopaPercent' }
-  }
-  if (challenger.baseDopaPercent !== creator.baseDopaPercent) {
-    return { result: challenger.baseDopaPercent > creator.baseDopaPercent ? 'win' : 'lose', decidedBy: 'baseDopaPercent' }
-  }
-
-  const creatorAccuracyPct = roundedAccuracyPercent(creator.accuracy)
-  const challengerAccuracyPct = roundedAccuracyPercent(challenger.accuracy)
-  if (challengerAccuracyPct !== creatorAccuracyPct) {
-    return { result: challengerAccuracyPct > creatorAccuracyPct ? 'win' : 'lose', decidedBy: 'accuracy' }
-  }
-
-  if (challenger.maxCombo !== creator.maxCombo) {
-    return { result: challenger.maxCombo > creator.maxCombo ? 'win' : 'lose', decidedBy: 'maxCombo' }
-  }
-
-  const creatorReactionMs = creator.medianCorrectReactionMs === null ? Infinity : roundedReactionMs(creator.medianCorrectReactionMs)
-  const challengerReactionMs = challenger.medianCorrectReactionMs === null ? Infinity : roundedReactionMs(challenger.medianCorrectReactionMs)
-  if (challengerReactionMs !== creatorReactionMs) {
-    // 反応速度は小さい方が速い＝勝ち。
-    return { result: challengerReactionMs < creatorReactionMs ? 'win' : 'lose', decidedBy: 'medianCorrectReactionMs' }
-  }
-
-  return { result: 'lose', decidedBy: 'exactTie' }
+  const { winner, decidedBy } = compareDopaPerformance(creator, challenger)
+  // winner='a'（creatorが上）→challengerはlose、'b'（challengerが上）→win、'draw'→ホスト防衛でlose。
+  return { result: winner === 'b' ? 'win' : 'lose', decidedBy }
 }

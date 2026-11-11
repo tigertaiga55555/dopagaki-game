@@ -10,6 +10,10 @@
 declare global {
   interface Env {
     CHALLENGE_DB?: D1Database
+    /** Ver.6 Phase 6（1対1リアルタイム対戦）: 世界対戦の待機列を管理する単一のDurable Object。 */
+    MATCHMAKER?: DurableObjectNamespace
+    /** Ver.6 Phase 6: 1試合ぶんのリアルタイム状態を管理するDurable Object（世界対戦・フレンド対戦共通）。 */
+    BATTLE_ROOM?: DurableObjectNamespace
   }
 }
 

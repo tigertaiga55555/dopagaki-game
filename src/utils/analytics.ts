@@ -186,3 +186,43 @@ export function trackChallengeSentListView(): void {
 export function trackChallengeParticipatedListView(): void {
   trackEvent('challenge_participated_list_view')
 }
+
+/**
+ * Ver.6 Phase 6（1対1リアルタイム対戦）: Battle機能のイベント。playerId・matchId・
+ * roomCode・nicknameは一切送信しない（個人を特定できる情報を含めない既存方針）。
+ */
+export function trackBattleMatchmakingStart(): void {
+  trackEvent('battle_matchmaking_start')
+}
+
+export function trackBattleMatchmakingTimeout(): void {
+  trackEvent('battle_matchmaking_timeout')
+}
+
+export function trackBattleMatchmakingCancel(): void {
+  trackEvent('battle_matchmaking_cancel')
+}
+
+export function trackBattleFriendRoomCreated(): void {
+  trackEvent('battle_friend_room_created')
+}
+
+export function trackBattleFriendRoomJoined(): void {
+  trackEvent('battle_friend_room_joined')
+}
+
+export function trackBattleMatchStart(mode: string): void {
+  trackEvent('battle_match_start', { mode })
+}
+
+export function trackBattleMatchEnd(mode: string, finishReason: string): void {
+  trackEvent('battle_match_end', { mode, finish_reason: finishReason })
+}
+
+export function trackBattleDisconnect(): void {
+  trackEvent('battle_disconnect')
+}
+
+export function trackBattleForfeit(): void {
+  trackEvent('battle_forfeit')
+}

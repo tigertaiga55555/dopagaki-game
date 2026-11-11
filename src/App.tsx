@@ -28,22 +28,35 @@ import { ProfileScreen } from './screens/ProfileScreen'
 import { RankingScreen } from './screens/RankingScreen'
 import { ResultScreen } from './screens/ResultScreen'
 import { SentChallengesScreen } from './screens/SentChallengesScreen'
+import { BattleHomeScreen } from './screens/battle/BattleHomeScreen'
+import { BattleMatchScreen } from './screens/battle/BattleMatchScreen'
+import { FriendBattleScreen } from './screens/battle/FriendBattleScreen'
+import { WorldMatchingScreen } from './screens/battle/WorldMatchingScreen'
 import { TitleScreen } from './screens/TitleScreen'
 import { addCreatedChallengeId } from './challenge/createdChallengesStorage'
 import { extractChallengeIdFromLocation } from './challenge/url'
+import { extractRoomCodeFromLocation } from './battle/battleUrl'
 import { trackChallengePlayed, trackGameStart, trackReplayStart } from './utils/analytics'
 import { unlockAudio } from './utils/audioContext'
 import { runMigrationsOnce } from './utils/migrations'
-import { getOrCreatePlayerId } from './utils/profileStorage'
+import { getOrCreatePlayerId, getProfile } from './utils/profileStorage'
 import { sfx } from './utils/sound'
+import type { BattleMode, BattleOpponentProfile } from './battle/types'
 import type { ChallengeRecord } from './challenge/types'
 import type { EndlessDifficulty, FinalResultV4, ScreenName } from './types'
+
+function toBattleProfile(profile: ReturnType<typeof getProfile>): BattleOpponentProfile {
+  return { nickname: profile.nickname, avatar: profile.avatar, equippedTitleId: profile.equippedTitleId }
+}
 
 export default function App() {
   // Ver.6 Phase 5.2（Challenge機能完成）: Challenge URLを直接開いた場合（別端末で
   // 共有されたURLを開く場合を含む）、タイトル画面を経由せず直接Challenge受信画面へ
-  // 入る。それ以外は常に従来どおりtitleから始まる。
-  const [screen, setScreen] = useState<ScreenName>(() => (extractChallengeIdFromLocation() ? 'challengeReceive' : 'title'))
+  // 入る。Ver.6 Phase 6: /battle/:roomCodeも同様にフレンド対戦の合流画面へ直接入る。
+  // それ以外は常に従来どおりtitleから始まる。
+  const [screen, setScreen] = useState<ScreenName>(() =>
+    extractChallengeIdFromLocation() ? 'challengeReceive' : extractRoomCodeFromLocation() ? 'battleFriend' : 'title',
+  )
   const [result, setResult] = useState<FinalResultV4 | null>(null)
   const [playKey, setPlayKey] = useState(0)
   // Ver.6 Phase 5.2: Challenge専用の状態。通常ゲーム・Endlessとは完全に独立させる。
@@ -51,6 +64,12 @@ export default function App() {
   const [activeChallenge, setActiveChallenge] = useState<ChallengeRecord | null>(null)
   const [challengeResult, setChallengeResult] = useState<FinalResultV4 | null>(null)
   const [challengePlayKey, setChallengePlayKey] = useState(0)
+  // Ver.6 Phase 6（1対1リアルタイム対戦）: Battle専用の状態。通常ゲーム・Challengeとは
+  // 完全に独立させる。初期roomCodeは/battle/:roomCodeを直接開いた場合だけ使う。
+  const [initialBattleRoomCode] = useState(() => extractRoomCodeFromLocation())
+  const [battleMatch, setBattleMatch] = useState<{ matchId: string; mode: BattleMode; roomCode: string | null; opponent: BattleOpponentProfile | null } | null>(
+    null,
+  )
   // Ver.6 Phase 4: Endless専用の状態。通常ゲーム（screen/result/playKey）とは
   // 完全に独立させており、互いの画面遷移には一切影響しない。
   const [endlessDifficulty, setEndlessDifficulty] = useState<EndlessDifficulty>('beginner')
@@ -190,6 +209,31 @@ export default function App() {
   const openSentChallenges = useCallback(() => setScreen('challengeSentList'), [])
   const openParticipatedChallenges = useCallback(() => setScreen('challengeParticipatedList'), [])
 
+  /**
+   * Ver.6 Phase 6（1対1リアルタイム対戦）: BATTLE（世界対戦・フレンド対戦）の画面遷移。
+   * 他のモードと同じフラットな遷移モデル。マッチング成立／ルーム合流が決まった時点で
+   * battleMatchを確定し、以後はBattleMatchScreenが1つのWebSocket接続のまま
+   * countdown→playing→resultを内部で遷移する。
+   */
+  const openBattleHome = useCallback(() => setScreen('battleHome'), [])
+  const openWorldMatching = useCallback(() => setScreen('battleWorldMatching'), [])
+  const openFriendBattle = useCallback(() => setScreen('battleFriend'), [])
+
+  const handleWorldMatchFound = useCallback((matchId: string, opponent: BattleOpponentProfile) => {
+    setBattleMatch({ matchId, mode: 'world', roomCode: null, opponent })
+    setScreen('battleMatch')
+  }, [])
+
+  const handleEnterFriendRoom = useCallback((roomCode: string) => {
+    setBattleMatch({ matchId: roomCode, mode: 'friend', roomCode, opponent: null })
+    setScreen('battleMatch')
+  }, [])
+
+  const exitBattle = useCallback(() => {
+    setBattleMatch(null)
+    setScreen('title')
+  }, [])
+
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-[430px] overflow-hidden bg-[#0b0620]">
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
@@ -215,6 +259,7 @@ export default function App() {
             <TitleScreen
               onStart={() => startPlay('title')}
               onStartEndless={openEndlessSelect}
+              onStartBattle={openBattleHome}
               onOpenProfile={openProfile}
               onOpenAchievements={openAchievements}
               onOpenRanking={openRanking}
@@ -280,6 +325,31 @@ export default function App() {
           {screen === 'challengeSentList' && <SentChallengesScreen onBack={quitToHome} onOpenHistory={openChallengeHistory} />}
           {screen === 'challengeParticipatedList' && (
             <ParticipatedChallengesScreen onBack={quitToHome} onOpenHistory={openChallengeHistory} />
+          )}
+          {screen === 'battleHome' && (
+            <BattleHomeScreen onBack={quitToHome} onWorldBattle={openWorldMatching} onFriendBattle={openFriendBattle} />
+          )}
+          {screen === 'battleWorldMatching' && (
+            <WorldMatchingScreen
+              playerId={getOrCreatePlayerId()}
+              profile={toBattleProfile(getProfile())}
+              onBack={openBattleHome}
+              onMatchFound={handleWorldMatchFound}
+            />
+          )}
+          {screen === 'battleFriend' && (
+            <FriendBattleScreen onBack={openBattleHome} onEnterRoom={handleEnterFriendRoom} initialRoomCode={initialBattleRoomCode} />
+          )}
+          {screen === 'battleMatch' && battleMatch && (
+            <BattleMatchScreen
+              matchId={battleMatch.matchId}
+              mode={battleMatch.mode}
+              roomCode={battleMatch.roomCode}
+              playerId={getOrCreatePlayerId()}
+              myProfile={toBattleProfile(getProfile())}
+              initialOpponent={battleMatch.opponent}
+              onExit={exitBattle}
+            />
           )}
         </>
       )}

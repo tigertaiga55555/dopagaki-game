@@ -256,6 +256,14 @@ export interface UseRushGameOptions {
    * （挑戦者自身の反応速度・正誤だけがスコアを左右する、という既存の公平性は保つ）。
    */
   replayQuestions?: ChallengeProblemSetItem[]
+  /**
+   * Ver.6 Phase 6（1対1リアルタイム対戦）: 1問の判定が確定した直後（tween演出が
+   * 始まる前）に呼ばれる。rawScoreRef（表示用のdisplayPercentとは違い、アニメーションの
+   * 影響を受けない実際のスコア）への加減算量をそのまま渡すだけで、既存の判定・
+   * タイマー・COMBO・OVERDRIVEロジックには一切手を入れない（単機プレイの既存呼び出し元は
+   * 渡さないため挙動は変わらない）。Battle機能がこれをサーバーへのanswerイベント送信に使う。
+   */
+  onQuestionResolved?: (info: { correct: boolean; reactionMs: number; scoreDelta: number; bonusGainDelta: number }) => void
 }
 
 export function useRushGame(
@@ -263,6 +271,8 @@ export function useRushGame(
   onEnterFinal: (stats: PlayStats) => void,
   options?: UseRushGameOptions,
 ) {
+  const onQuestionResolvedRef = useRef(options?.onQuestionResolved)
+  onQuestionResolvedRef.current = options?.onQuestionResolved
   const replayQuestionsRef = useRef(options?.replayQuestions)
   const replayIndexRef = useRef(0)
   const recordedRef = useRef<ChallengeProblemSetItem[]>([])
@@ -543,6 +553,7 @@ export function useRushGame(
     stats.typeStats[spec.type] = typeEntry
 
     const isBonusTime = spec.type === 'bonusTime'
+    const scoreBeforeResolve = rawScoreRef.current
 
     let comboBrokenFrom = 0
     let comboBreakBig = false
@@ -634,6 +645,16 @@ export function useRushGame(
         rawScoreRef.current += gain
         momentumRef.current = nextMomentum(momentumRef.current, qualityTier)
       }
+    }
+
+    if (onQuestionResolvedRef.current) {
+      const delta = rawScoreRef.current - scoreBeforeResolve
+      onQuestionResolvedRef.current({
+        correct: tier !== 'MISS',
+        reactionMs: result.reactionMs,
+        scoreDelta: isBonusTime ? 0 : delta,
+        bonusGainDelta: isBonusTime ? delta : 0,
+      })
     }
 
     const { crossingHundred, crossingFinalEntry } = setPercentTarget()
@@ -820,5 +841,16 @@ export function useRushGame(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return { snapshot, handleQuestionResult, getRecordedProblemSet }
+  return {
+    snapshot,
+    handleQuestionResult,
+    getRecordedProblemSet,
+    /**
+     * Ver.6 Phase 6（1対1リアルタイム対戦）: replayQuestionsのうち、ここまでに消費した件数。
+     * 120%到達でFinalTrialScreenへ引き継ぐ際、呼び出し側がreplayQuestions.slice(replayIndex)で
+     * 残りを渡せば、FinalTrial側も同じ共有ProblemSetの続きを消費できる
+     * （既存のreplayQuestions未使用の呼び出し元には影響しない）。
+     */
+    replayIndex: replayIndexRef.current,
+  }
 }
