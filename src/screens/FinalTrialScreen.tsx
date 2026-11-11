@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import {
   Clear200ImpactOverlay,
   Clear200SlamOverlay,
@@ -62,6 +63,11 @@ interface Props {
    * 追加フック（単機プレイの既存呼び出し元は渡さないため挙動は変わらない）。
    */
   onProgress?: (percent: number) => void
+  /**
+   * Ver.6 Phase 6（1対1リアルタイム対戦UI調整）: BattleのRIVAL%表示をQuitButtonの帯に
+   * 差し込むためのスロット。単機プレイの既存呼び出し元は渡さないため挙動は変わらない。
+   */
+  battleHud?: ReactNode
 }
 
 /**
@@ -118,6 +124,7 @@ export function FinalTrialScreen({
   autoForceCorrectDelayMs,
   replayQuestions,
   onProgress,
+  battleHud,
 }: Props) {
   const [entryDone, setEntryDone] = useState(startAtQuestion >= FINAL_TRIAL_CONFIG.totalQuestions)
   const [muted, setMutedState] = useState(isMuted())
@@ -411,7 +418,7 @@ export function FinalTrialScreen({
   if (!entryDone) {
     return (
       <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
-        <QuitButton onQuit={onQuit} />
+        <QuitButton onQuit={onQuit} leftSlot={battleHud} />
         {/*
           演出本体（FinalWorldAmbience等）は全てabsolute inset-0で画面全体を覆う。
           このラッパー自体にはpositionを指定しない（static のまま）ことで、
@@ -435,7 +442,7 @@ export function FinalTrialScreen({
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
-      <QuitButton onQuit={onQuit} />
+      <QuitButton onQuit={onQuit} leftSlot={battleHud} />
       {showUltimateWorld ? <UltimateWorldAmbience /> : <FinalWorldAmbience />}
 
       <div className="relative z-30 flex items-start justify-between px-5 pt-3 pb-1">

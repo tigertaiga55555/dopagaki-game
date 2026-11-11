@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { getOverdriveFrameClass, getOverdriveTier, LimitErrorOverlay, OverdriveAmbience, OverdriveRevealOverlay } from '../components/OverdriveFx'
 import { QuitButton } from '../components/QuitButton'
 import { getVisualLevelDef } from '../config/visualConfig'
@@ -29,6 +30,12 @@ interface Props {
    * （FinalTrialScreen自身のonProgressと同じ形）。
    */
   onFinalTrialProgress?: (percent: number) => void
+  /**
+   * Ver.6 Phase 6（1対1リアルタイム対戦UI調整）: BattleのRIVAL%表示をQuitButtonの帯に
+   * 差し込むためのスロット。単機プレイ・Endless・Challengeの既存呼び出し元は渡さないため
+   * 挙動は変わらない。
+   */
+  battleHud?: ReactNode
 }
 
 const JUDGEMENT_COLOR: Record<string, string> = {
@@ -40,7 +47,7 @@ const JUDGEMENT_COLOR: Record<string, string> = {
 
 const PARTICLE_POSITIONS = Array.from({ length: 8 }).map((_, i) => ({ x: (i * 12.5) % 100, delay: i * 0.2 }))
 
-export function PlayScreen({ onFinish, onQuit, replayQuestions, onQuestionResolved, onFinalTrialProgress }: Props) {
+export function PlayScreen({ onFinish, onQuit, replayQuestions, onQuestionResolved, onFinalTrialProgress, battleHud }: Props) {
   const [finalEntryStats, setFinalEntryStats] = useState<PlayStats | null>(null)
   const { snapshot, handleQuestionResult, getRecordedProblemSet, replayIndex } = useRushGame(
     (payload) => onFinish(computeFinalResult(payload, getRecordedProblemSet())),
@@ -93,6 +100,7 @@ export function PlayScreen({ onFinish, onQuit, replayQuestions, onQuestionResolv
         onQuit={onQuit}
         onProgress={onFinalTrialProgress}
         replayQuestions={replayQuestions?.slice(replayIndex)}
+        battleHud={battleHud}
       />
     )
   }
@@ -113,7 +121,7 @@ export function PlayScreen({ onFinish, onQuit, replayQuestions, onQuestionResolv
 
   return (
     <div className={`relative flex min-h-dvh flex-col overflow-hidden ${frameClass}`}>
-      <QuitButton onQuit={onQuit} />
+      <QuitButton onQuit={onQuit} leftSlot={battleHud} />
       {visual.particles && (
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           {PARTICLE_POSITIONS.map((p, i) => (

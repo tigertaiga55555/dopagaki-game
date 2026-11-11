@@ -36,7 +36,7 @@ export function BattleMatchScreen({ matchId, mode, roomCode, playerId, myProfile
   const [iAmReady, setIAmReady] = useState(mode === 'world')
   const [problemSet, setProblemSet] = useState<ChallengeProblemSetItem[] | null>(null)
   const [startAt, setStartAt] = useState<number | null>(null)
-  const [countdownLabel, setCountdownLabel] = useState('3')
+  const [readyFlash, setReadyFlash] = useState(false)
   const [myPercent, setMyPercent] = useState(0)
   const [opponentPercent, setOpponentPercent] = useState(0)
   const [opponentUnstable, setOpponentUnstable] = useState(false)
@@ -89,36 +89,32 @@ export function BattleMatchScreen({ matchId, mode, roomCode, playerId, myProfile
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchId])
 
-  // item 11: サーバーが確定したstartAtだけを基準に3→2→1→STARTを表示する
-  // （各端末が個別にタイマーを開始する方式は禁止）。
+  // item 11: サーバーが確定したstartAtだけを基準に試合開始を同期する（各端末が個別に
+  // タイマーを開始する方式は禁止）。実機QAでの指摘により、Battle側では数字の
+  // カウントダウン（3→2→1→START）を独自に表示しない。VS画面→READYの短い演出だけを
+  // startAtの手前で見せ、startAtに達した瞬間そのままplaying（=既存PlayScreen/
+  // useRushGameが内部で持つpreCountdown=3→2→1→GO）へ切り替える。両プレイヤーとも
+  // 同じstartAtでこのuseEffectからsetPhase('playing')を呼ぶため、PlayScreen（＝
+  // useRushGame）がマウントされる実時刻が両者で一致し、結果としてpreCountdownの
+  // 3→2→1→GOも両者で揃って表示される（新しい同期機構を追加する必要がない）。
   useEffect(() => {
     if (phase !== 'countdown' || startAt === null) return
-    let startTimer: ReturnType<typeof setTimeout> | null = null
+    const READY_WINDOW_MS = 1000
     const tick = () => {
       const remainingMs = startAt - Date.now()
       if (remainingMs <= 0) {
-        // 「START」の表示自体を一瞬で消してしまわないよう、countdownLabelを'0'
-        // （→START表示）にしたあと、少し見せてからplayingへ遷移する。
-        setCountdownLabel('0')
-        if (startTimer === null) {
-          startTimer = setTimeout(() => {
-            setPhase('playing')
-            if (!matchStartTrackedRef.current) {
-              matchStartTrackedRef.current = true
-              trackBattleMatchStart(mode)
-            }
-          }, 500)
+        setPhase('playing')
+        if (!matchStartTrackedRef.current) {
+          matchStartTrackedRef.current = true
+          trackBattleMatchStart(mode)
         }
         return
       }
-      setCountdownLabel(String(Math.min(3, Math.ceil(remainingMs / 1000))))
+      setReadyFlash(remainingMs <= READY_WINDOW_MS)
     }
     tick()
     const interval = setInterval(tick, 100)
-    return () => {
-      clearInterval(interval)
-      if (startTimer !== null) clearTimeout(startTimer)
-    }
+    return () => clearInterval(interval)
   }, [phase, startAt, mode])
 
   function sendReady() {
@@ -175,28 +171,37 @@ export function BattleMatchScreen({ matchId, mode, roomCode, playerId, myProfile
   }
 
   if (phase === 'playing') {
-    return (
-      <div className="relative min-h-dvh">
-        <div
-          className="pointer-events-none absolute inset-x-0 top-0 z-[60] flex items-center justify-between px-4 text-xs font-black"
-          style={{ paddingTop: 'calc(env(safe-area-inset-top) + 2px)' }}
-        >
-          <span className="rounded-full bg-black/50 px-3 py-1 text-white">YOU {Math.max(0, Math.round(myPercent))}%</span>
-          {opponentUnstable && <span className="rounded-full bg-amber-500/80 px-2 py-0.5 text-[10px] text-black">相手との接続が不安定です</span>}
-          <span className="rounded-full bg-black/50 px-3 py-1 text-rose-300">RIVAL {Math.max(0, Math.round(opponentPercent))}%</span>
+    // item 1/2（実機QA指摘）: YOU%は既存ゲームUI中央の自分のDOPA%表示と重複するため廃止。
+    // RIVAL%はQuitButton（「×やめる」）の帯の左側スロットに差し込む「専用の段」方式にし、
+    // absolute overlayで上から被せていた以前の実装（やめるボタンとの重なりの原因）を排除する。
+    const battleHud = (
+      <div className="flex flex-col items-start gap-1">
+        <div className="rounded-xl bg-black/55 px-3 py-1 text-left leading-tight">
+          <p className="text-[9px] font-black tracking-widest text-rose-300/70">RIVAL</p>
+          <p className="text-2xl font-black tabular-nums text-rose-300">{Math.max(0, Math.round(opponentPercent))}%</p>
         </div>
-        <PlayScreen
-          replayQuestions={problemSet ?? undefined}
-          onQuestionResolved={handleAnswer}
-          onFinalTrialProgress={handleFinalTrialProgress}
-          onFinish={handleFinish}
-          onQuit={handleForfeit}
-        />
+        {opponentUnstable && (
+          <span className="rounded-full bg-amber-500/90 px-2 py-0.5 text-[9px] font-bold text-black">相手との接続が不安定です</span>
+        )}
       </div>
+    )
+    return (
+      <PlayScreen
+        replayQuestions={problemSet ?? undefined}
+        onQuestionResolved={handleAnswer}
+        onFinalTrialProgress={handleFinalTrialProgress}
+        onFinish={handleFinish}
+        onQuit={handleForfeit}
+        battleHud={battleHud}
+      />
     )
   }
 
   if (phase === 'countdown') {
+    // item 4/5/6（実機QA指摘）: Battle側では数字のカウントダウンを出さない。VS画面を維持した
+    // まま、startAtの最後の約1秒だけ「READY」を短く見せ、startAtちょうどでplayingへ切り替える
+    // （数字の3→2→1→STARTは、この直後にマウントされる既存PlayScreen/useRushGame自身の
+    // preCountdownが1回だけ担当する）。
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-10 bg-black px-6 text-center">
         <div className="flex items-center gap-8">
@@ -204,7 +209,15 @@ export function BattleMatchScreen({ matchId, mode, roomCode, playerId, myProfile
           <p className="text-2xl font-black text-rose-400">VS</p>
           <PlayerVsCard profile={opponent} label="RIVAL" />
         </div>
-        <p className="anim-pop text-7xl font-black text-white">{countdownLabel === '0' ? 'START' : countdownLabel}</p>
+        <div className="flex h-16 items-center justify-center">
+          <p
+            className={`text-5xl font-black tracking-[0.3em] text-white transition-opacity duration-200 ${
+              readyFlash ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
+            READY
+          </p>
+        </div>
       </div>
     )
   }
