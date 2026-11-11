@@ -496,7 +496,14 @@ jobs:
           npm install --no-save ws@8 >/dev/null 2>&1
           WS_URL=$(echo "$PREVIEW_URL" | sed -E 's#^https://#wss://#')
 
-          cat > /tmp/battle_preview_e2e.js <<'NODESCRIPT'
+          # 注意: このスクリプトは必ずリポジトリの作業ディレクトリ（cwd）内に.cjsとして書く。
+          # /tmp等の外部に書くと、直前のnpm install --no-save ws@8でこのcwd配下の
+          # node_modulesへ入ったwsをrequire()が解決できず「Cannot find module 'ws'」で
+          # 落ちる（Node的ロード解決はファイルパスのあるスクリプトの場合、そのファイル自身の
+          # ディレクトリから上に辿るため）。拡張子を.cjsにするのは、このリポジトリの
+          # package.jsonがtype:"module"のため、.jsだと既定でESM扱いになりrequireが
+          # 使えなくなるのを避けるため（ローカル動作確認で実際に両方のエラーを再現済み）。
+          cat > battle-preview-e2e.cjs <<'NODESCRIPT'
           const WebSocket = require('ws')
           const base = process.argv[2]
 
@@ -607,9 +614,10 @@ jobs:
           NODESCRIPT
 
           set +e
-          node /tmp/battle_preview_e2e.js "$WS_URL"
+          node battle-preview-e2e.cjs "$WS_URL"
           E2E_EXIT=$?
           set -e
+          rm -f battle-preview-e2e.cjs
 
           {
             echo ""
