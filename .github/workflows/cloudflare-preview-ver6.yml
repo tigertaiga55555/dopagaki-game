@@ -481,6 +481,150 @@ jobs:
           fi
           echo "✅ Matchmaker Durable Object + WebSocket Hibernation APIの実Preview上での動作を確認しました。"
 
+      - name: Verify 2-client world battle round trip (identical ProblemSet, DOPA% sync, match resolution) on the real Preview
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
+        run: |
+          # ユーザー要求: 「ローカルE2Eだけで完了扱いにしない」「実際のCloudflare Preview上で
+          # Player A/Player Bの2クライアントによる世界対戦・WebSocket・Durable Object・
+          # 同一ProblemSet・DOPA%同期・勝敗確定までの通し確認」を行う。このサンドボックス自体は
+          # *.workers.devへ直接到達できないため、GitHub Actionsランナー上から本物の2つの
+          # WebSocketクライアント（Player A・Player B）で実際のMatchmaker/BattleRoom
+          # Durable Objectに接続し、マッチング→同一ProblemSet配布→同一startAt→
+          # 相手DOPA%リアルタイム同期（opponent_progress）→両者finished→battle_finish確定
+          # までを本物のCloudflare基盤上で一本通しで検証する。
+          npm install --no-save ws@8 >/dev/null 2>&1
+          WS_URL=$(echo "$PREVIEW_URL" | sed -E 's#^https://#wss://#')
+
+          cat > /tmp/battle_preview_e2e.js <<'NODESCRIPT'
+          const WebSocket = require('ws')
+          const base = process.argv[2]
+
+          function connect(path, qs) {
+            return new Promise((resolve, reject) => {
+              const ws = new WebSocket(`${base}${path}?${qs}`)
+              ws.once('open', () => resolve(ws))
+              ws.once('error', reject)
+            })
+          }
+
+          function waitForMessage(ws, predicate, timeoutMs, label) {
+            return new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => reject(new Error(`TIMEOUT waiting for ${label}`)), timeoutMs)
+              function onMessage(raw) {
+                const msg = JSON.parse(raw.toString())
+                if (predicate(msg)) {
+                  clearTimeout(timeout)
+                  ws.removeListener('message', onMessage)
+                  resolve(msg)
+                }
+              }
+              ws.on('message', onMessage)
+            })
+          }
+
+          async function main() {
+            const profileA = encodeURIComponent(
+              JSON.stringify({ nickname: 'PlayerA', avatar: { kind: 'preset', iconId: 'bolt' }, equippedTitleId: null }),
+            )
+            const profileB = encodeURIComponent(
+              JSON.stringify({ nickname: 'PlayerB', avatar: { kind: 'preset', iconId: 'flame' }, equippedTitleId: null }),
+            )
+            const idA = 'ci-e2e-a-' + Math.random().toString(36).slice(2)
+            const idB = 'ci-e2e-b-' + Math.random().toString(36).slice(2)
+
+            console.log('Connecting Player A and Player B to the Matchmaker Durable Object...')
+            const [queueA, queueB] = await Promise.all([
+              connect('/api/battles/queue/ws', `playerId=${idA}&profile=${profileA}`),
+              connect('/api/battles/queue/ws', `playerId=${idB}&profile=${profileB}`),
+            ])
+            const matchFoundA = waitForMessage(queueA, (m) => m.type === 'match_found', 15000, 'match_found(A)')
+            const matchFoundB = waitForMessage(queueB, (m) => m.type === 'match_found', 15000, 'match_found(B)')
+            queueA.send(JSON.stringify({ v: 1, type: 'join_world_queue' }))
+            queueB.send(JSON.stringify({ v: 1, type: 'join_world_queue' }))
+            const [foundA, foundB] = await Promise.all([matchFoundA, matchFoundB])
+            if (foundA.matchId !== foundB.matchId) throw new Error(`matchId mismatch: A=${foundA.matchId} B=${foundB.matchId}`)
+            console.log('Both players matched on the real Preview. matchId =', foundA.matchId)
+            queueA.close()
+            queueB.close()
+
+            console.log('Connecting both players to the BattleRoom Durable Object for this match...')
+            const [roomA, roomB] = await Promise.all([
+              connect(`/api/battles/room/${foundA.matchId}/ws`, `playerId=${idA}&profile=${profileA}`),
+              connect(`/api/battles/room/${foundA.matchId}/ws`, `playerId=${idB}&profile=${profileB}`),
+            ])
+            const [countdownA, countdownB] = await Promise.all([
+              waitForMessage(roomA, (m) => m.type === 'countdown', 10000, 'countdown(A)'),
+              waitForMessage(roomB, (m) => m.type === 'countdown', 10000, 'countdown(B)'),
+            ])
+            if (countdownA.startAt !== countdownB.startAt) throw new Error('server-anchored startAt differs between A and B')
+            if (JSON.stringify(countdownA.problemSet) !== JSON.stringify(countdownB.problemSet)) {
+              throw new Error('problemSet distributed to A and B is not identical')
+            }
+            console.log(
+              `CONFIRMED: both players received the identical ProblemSet (${countdownA.problemSet.length} items)` +
+                ` and the same server-anchored startAt (${countdownA.startAt}) from the real BattleRoom Durable Object.`,
+            )
+
+            const progressSeenByB = waitForMessage(
+              roomB,
+              (m) => m.type === 'opponent_progress' && m.percent === 42,
+              10000,
+              'opponent_progress(B sees A at 42%)',
+            )
+            roomA.send(JSON.stringify({ v: 1, type: 'progress', percent: 42 }))
+            await progressSeenByB
+            console.log('CONFIRMED: live opponent DOPA% sync works on the real Preview (B received A=42% via opponent_progress).')
+
+            const perf = { finalDopaPercent: 80, baseDopaPercent: 80, accuracy: 1, maxCombo: 5, medianCorrectReactionMs: 400 }
+            const finishA = waitForMessage(roomA, (m) => m.type === 'battle_finish', 10000, 'battle_finish(A)')
+            const finishB = waitForMessage(roomB, (m) => m.type === 'battle_finish', 10000, 'battle_finish(B)')
+            roomA.send(JSON.stringify({ v: 1, type: 'finished', performance: perf }))
+            roomB.send(JSON.stringify({ v: 1, type: 'finished', performance: perf }))
+            const [resultA, resultB] = await Promise.all([finishA, finishB])
+
+            if (resultA.result.winner !== 'draw' || resultB.result.winner !== 'draw') {
+              throw new Error(`expected a complete-tie DRAW (both reported identical performance), got A=${resultA.result.winner} B=${resultB.result.winner}`)
+            }
+            if (resultA.viewerIsPlayerA === resultB.viewerIsPlayerA) {
+              throw new Error('viewerIsPlayerA should differ between A and B (each client gets its own perspective flag)')
+            }
+            console.log(
+              'CONFIRMED: full 2-client world battle round trip on the real Cloudflare Preview resolved to DRAW for both viewers' +
+                ' (identical performance -> all 5 metrics tie), with correct per-viewer viewerIsPlayerA flags.',
+            )
+
+            roomA.close()
+            roomB.close()
+          }
+
+          main()
+            .then(() => process.exit(0))
+            .catch((err) => {
+              console.error(err)
+              process.exit(1)
+            })
+          NODESCRIPT
+
+          set +e
+          node /tmp/battle_preview_e2e.js "$WS_URL"
+          E2E_EXIT=$?
+          set -e
+
+          {
+            echo ""
+            if [ "$E2E_EXIT" -eq 0 ]; then
+              echo "- 実Preview 2クライアント世界対戦E2E: ✅ マッチング→同一ProblemSet→同一startAt→DOPA%同期→battle_finish確定を確認"
+            else
+              echo "- 実Preview 2クライアント世界対戦E2E: ❌ 失敗（exit $E2E_EXIT）"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$E2E_EXIT" -ne 0 ]; then
+            echo "::error::実Preview上での2クライアント世界対戦E2Eに失敗しました（exit $E2E_EXIT）。"
+            exit 1
+          fi
+
       - name: Verify Battle D1 persistence (migrations/0004) on the real Preview
         if: steps.d1_setup.outputs.d1_available == 'true' && steps.d1_migrate.outcome == 'success'
         env:
