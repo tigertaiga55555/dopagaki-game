@@ -349,3 +349,163 @@ jobs:
           else
             echo "::warning::POST /api/challenges/:id/attempts がHTTP $ATTEMPT_STATUS を返しました。create/getは確認済みのため続行しますが、確認してください。body: $ATTEMPT_BODY"
           fi
+
+      - name: Verify Battle Durable Object bindings on the real Preview (rooms + WebSocket)
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
+        run: |
+          # Ver.6 Phase 6（1対1リアルタイム対戦）: wrangler.toml上に[[durable_objects.bindings]]/
+          # [[previews.durable_objects.bindings]]を書いただけでは「実Preview上で本当に
+          # 動いている」ことの確認にならない（D1バインディングで過去に踏んだ教訓と同じ）。
+          # ここでは実際に起動済みのCloudflare Preview URLへ、
+          # 1) フレンド対戦ルーム作成（BattleRoom Durable Objectへの/internal/create経由fetch）
+          # 2) 同じルームへのstatus再取得（同一Durable Objectインスタンスが状態を保持するか）
+          # 3) 本物のWebSocketクライアントでのMatchmaker Durable Objectへの接続・
+          #    join_world_queue送信・queue_joined受信（WebSocket Hibernation APIが
+          #    実Cloudflare基盤上で機能しているかの確認。HTTPだけでは検証できないため、
+          #    ここだけは本物のWSハンドシェイクを行う）
+          # の3段階で確認する。
+          if [ -z "$PREVIEW_URL" ]; then
+            echo "::error::Preview URLを取得できなかったため、Battle Durable Objectの確認をスキップできません。"
+            exit 1
+          fi
+          echo "Verifying Battle Durable Object bindings against: $PREVIEW_URL"
+
+          CREATE_ROOM_RESP=$(curl -sS -w '\n%{http_code}' -X POST "${PREVIEW_URL}/api/battles/rooms")
+          CREATE_ROOM_STATUS=$(echo "$CREATE_ROOM_RESP" | tail -1)
+          CREATE_ROOM_BODY=$(echo "$CREATE_ROOM_RESP" | sed '$d')
+          echo "POST /api/battles/rooms -> HTTP $CREATE_ROOM_STATUS"
+          echo "$CREATE_ROOM_BODY"
+
+          {
+            echo "## Battle Durable Object確認（実際のCloudflare Preview URLに対して実行）"
+            echo ""
+            echo "- POST /api/battles/rooms -> HTTP \`$CREATE_ROOM_STATUS\`"
+            echo '```json'
+            echo "$CREATE_ROOM_BODY"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$CREATE_ROOM_STATUS" != "201" ]; then
+            echo "::error::POST /api/battles/rooms がHTTP $CREATE_ROOM_STATUS を返しました（期待値: 201）。MATCHMAKER/BATTLE_ROOM Durable Objectバインディングが実Preview上で機能していない可能性があります。body: $CREATE_ROOM_BODY"
+            exit 1
+          fi
+
+          ROOM_CODE=$(echo "$CREATE_ROOM_BODY" | jq -r '.value.roomCode // empty')
+          CREATE_ROOM_OK=$(echo "$CREATE_ROOM_BODY" | jq -r '.ok // false')
+          if [ "$CREATE_ROOM_OK" != "true" ] || [ -z "$ROOM_CODE" ]; then
+            echo "::error::POST /api/battles/rooms のレスポンスにroomCodeが含まれていません: $CREATE_ROOM_BODY"
+            exit 1
+          fi
+          echo "Created friend battle room: $ROOM_CODE (BattleRoom Durable Object is live on the real Preview)"
+
+          STATUS_RESP=$(curl -sS -w '\n%{http_code}' "${PREVIEW_URL}/api/battles/rooms/${ROOM_CODE}")
+          STATUS_STATUS=$(echo "$STATUS_RESP" | tail -1)
+          STATUS_BODY=$(echo "$STATUS_RESP" | sed '$d')
+          echo "GET /api/battles/rooms/${ROOM_CODE} -> HTTP $STATUS_STATUS"
+          echo "$STATUS_BODY"
+
+          {
+            echo ""
+            echo "- GET /api/battles/rooms/\`$ROOM_CODE\` -> HTTP \`$STATUS_STATUS\`"
+            echo '```json'
+            echo "$STATUS_BODY"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$STATUS_STATUS" != "200" ]; then
+            echo "::error::GET /api/battles/rooms/:roomCode がHTTP $STATUS_STATUS を返しました（期待値: 200）。body: $STATUS_BODY"
+            exit 1
+          fi
+          STATUS_OK=$(echo "$STATUS_BODY" | jq -r '.ok // false')
+          if [ "$STATUS_OK" != "true" ]; then
+            echo "::error::作成直後のルームがok:trueで取得できませんでした（まだ誰も参加していないはず）: $STATUS_BODY"
+            exit 1
+          fi
+          echo "Room status confirms the same BattleRoom Durable Object instance persisted state across two separate HTTP requests."
+
+          npm install --no-save ws@8 >/dev/null 2>&1
+          WS_URL=$(echo "$PREVIEW_URL" | sed -E 's#^https://#wss://#')
+
+          set +e
+          node - "$WS_URL" <<'NODESCRIPT'
+          const WebSocket = require('ws')
+          const base = process.argv[2]
+          const playerId = 'ci-verify-' + Math.random().toString(36).slice(2)
+          const profile = encodeURIComponent(
+            JSON.stringify({ nickname: 'CI', avatar: { kind: 'preset', iconId: 'bolt' }, equippedTitleId: null }),
+          )
+          const url = `${base}/api/battles/queue/ws?playerId=${playerId}&profile=${profile}`
+          console.log('Connecting to', url)
+          const ws = new WebSocket(url)
+          const timeout = setTimeout(() => {
+            console.error('TIMEOUT: did not receive queue_joined within 10s')
+            process.exit(1)
+          }, 10000)
+          ws.on('open', () => {
+            console.log('WebSocket upgraded (101 Switching Protocols) — sending join_world_queue')
+            ws.send(JSON.stringify({ v: 1, type: 'join_world_queue' }))
+          })
+          ws.on('message', (raw) => {
+            const msg = JSON.parse(raw.toString())
+            console.log('Received message:', msg)
+            if (msg.type === 'queue_joined') {
+              console.log('CONFIRMED: Matchmaker Durable Object + WebSocket Hibernation API are live on the real Cloudflare Preview.')
+              clearTimeout(timeout)
+              ws.send(JSON.stringify({ v: 1, type: 'cancel_world_queue' }))
+              ws.close()
+              process.exit(0)
+            }
+          })
+          ws.on('error', (err) => {
+            console.error('WebSocket error:', err.message)
+            clearTimeout(timeout)
+            process.exit(1)
+          })
+          NODESCRIPT
+          WS_CHECK_EXIT=$?
+          set -e
+
+          {
+            echo ""
+            if [ "$WS_CHECK_EXIT" -eq 0 ]; then
+              echo "- Matchmaker Durable Object WebSocket確認: ✅ 実Previewへの接続・join_world_queue送信・queue_joined受信を確認"
+            else
+              echo "- Matchmaker Durable Object WebSocket確認: ❌ 失敗（exit $WS_CHECK_EXIT）"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$WS_CHECK_EXIT" -ne 0 ]; then
+            echo "::error::Matchmaker Durable Objectへの実WebSocket接続確認に失敗しました（exit $WS_CHECK_EXIT）。"
+            exit 1
+          fi
+          echo "✅ Matchmaker Durable Object + WebSocket Hibernation APIの実Preview上での動作を確認しました。"
+
+      - name: Verify Battle D1 persistence (migrations/0004) on the real Preview
+        if: steps.d1_setup.outputs.d1_available == 'true' && steps.d1_migrate.outcome == 'success'
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
+        run: |
+          # 世界対戦の公式戦績はCHALLENGE_DB（既存Challengeと同じD1バインディング）に
+          # migrations/0004_create_battle_tables.sqlで追加したテーブルへ保存する。
+          # ここでは未知のplayerIdに対してもゼロ初期値で正常応答することを確認し、
+          # テーブル自体がPreview上で実際に作成・到達可能であることを確かめる。
+          STATS_RESP=$(curl -sS -w '\n%{http_code}' "${PREVIEW_URL}/api/battles/stats/ci-verify-stats-check")
+          STATS_STATUS=$(echo "$STATS_RESP" | tail -1)
+          STATS_BODY=$(echo "$STATS_RESP" | sed '$d')
+          echo "GET /api/battles/stats/ci-verify-stats-check -> HTTP $STATS_STATUS"
+          echo "$STATS_BODY"
+
+          {
+            echo ""
+            echo "- GET /api/battles/stats/ci-verify-stats-check -> HTTP \`$STATS_STATUS\`"
+            echo '```json'
+            echo "$STATS_BODY"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$STATS_STATUS" != "200" ]; then
+            echo "::error::GET /api/battles/stats/:playerId がHTTP $STATS_STATUS を返しました（期待値: 200）。migrations/0004_create_battle_tables.sqlがPreview D1へ正しく適用されていない可能性があります。body: $STATS_BODY"
+            exit 1
+          fi
+          echo "✅ Battle用D1テーブル（migrations/0004）が実PreviewのCHALLENGE_DBバインディング経由で読み取れることを確認しました。"
