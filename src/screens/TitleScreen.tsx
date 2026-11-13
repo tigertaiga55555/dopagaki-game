@@ -33,10 +33,10 @@ export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProf
   }
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center gap-7 px-6 py-10 text-center">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-5 px-6 py-8 text-center">
       <h1 className="text-4xl font-black tracking-tight">{TITLE_TEXT.heading}</h1>
 
-      <div className="space-y-3 text-base font-bold leading-relaxed text-white/85">
+      <div className="space-y-2 text-base font-bold leading-relaxed text-white/85">
         {TITLE_TEXT.lines.map((line) => (
           <p key={line} className="whitespace-pre-line">
             {line}
@@ -44,16 +44,19 @@ export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProf
         ))}
       </div>
 
-      <div className="flex w-full max-w-xs flex-col gap-3">
+      <div className="flex w-full max-w-xs flex-col gap-2">
         {HOME_MODES.map((mode) => (
           <button
             key={mode.id}
             onClick={handlers[mode.id]}
-            className={`w-full rounded-2xl py-4 text-white transition-transform active:translate-y-1 active:shadow-none ${mode.gradientClass} ${mode.shadowClass}`}
+            className={`w-full rounded-2xl py-2.5 text-white transition-transform active:translate-y-1 active:shadow-none ${mode.gradientClass} ${mode.shadowClass}`}
           >
             <span className="flex flex-col items-center gap-0.5">
-              <span className="text-xl font-black tracking-widest">
-                {mode.icon} {mode.titleEn}
+              <span className="flex items-center gap-1.5">
+                <span className="text-xl leading-none" aria-hidden="true">
+                  {mode.icon}
+                </span>
+                <span className="text-xl font-black leading-none tracking-widest">{mode.titleEn}</span>
               </span>
               <span className="text-[11px] font-bold text-white/90">{mode.subJa}</span>
             </span>

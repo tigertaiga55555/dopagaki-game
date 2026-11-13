@@ -1,5 +1,5 @@
 import { createD1ChallengeAttemptRepository, createD1ChallengeRepository } from './challengeRepository'
-import { compareChallengePerformance } from '../challenge/performance'
+import { compareChallengePerformance, compareEndlessStreak } from '../challenge/performance'
 import { isValidChallengeId, validateCreateChallengeAttemptInput, validateCreateChallengeInput } from './validation'
 import { createD1BattleRepository } from './battleRepository'
 import { generateBattleProblemSet } from '../battle/battleProblemSet'
@@ -22,8 +22,11 @@ export { Matchmaker, BattleRoom }
 /** Ver.6 Phase 5.3（送った挑戦状一覧）: 一括取得できるChallenge件数の上限（クライアントは直近10件しか送らない想定だが、サーバー側でも念のため上限を設ける）。 */
 const MAX_SUMMARY_IDS = 50
 
-/** Ver.6 Phase 5.2: 無料ユーザー向けの履歴表示件数（DOPA PASS未実装のため、将来ここだけ変える想定）。 */
-const FREE_TIER_ATTEMPT_LIMIT = 10
+/**
+ * Ver.6 Phase 5.2: 無料ユーザー向けの履歴表示件数（DOPA PASS未実装のため、将来ここだけ変える想定）。
+ * Ver.6 Phase 8: 確定仕様に合わせて10→5へ変更（D1の行自体は削除しない。無料UI表示だけの制限）。
+ */
+const FREE_TIER_ATTEMPT_LIMIT = 5
 const MAX_ATTEMPT_LIMIT = 50
 
 /**
@@ -116,34 +119,44 @@ async function handleCreateAttempt(request: Request, challengeId: string, db: D1
     return errorResponse({ ok: false, error: 'invalid_input', message: 'request body must be valid JSON' })
   }
 
-  const validation = validateCreateChallengeAttemptInput(raw, challengeId)
-  if (!validation.ok || !validation.value) {
-    return errorResponse({ ok: false, error: 'invalid_input', message: validation.message ?? 'invalid input' })
-  }
-
   try {
     const challengeRepo = createD1ChallengeRepository(db)
+    // Ver.6 Phase 8（ENDLESS Challenge）: 入力検証にmode（performance必須か/scoreの意味）が
+    // 必要になったため、検証より先にChallenge本体を取得する構成へ変更した。
     const challenge = await challengeRepo.getById(challengeId)
     if (!challenge) {
       return errorResponse({ ok: false, error: 'not_found', message: 'challenge not found' })
     }
 
+    const validation = validateCreateChallengeAttemptInput(raw, challengeId, challenge.mode)
+    if (!validation.ok || !validation.value) {
+      return errorResponse({ ok: false, error: 'invalid_input', message: validation.message ?? 'invalid input' })
+    }
+
     const attemptRepo = createD1ChallengeAttemptRepository(db)
     const input = validation.value
 
-    // Ver.6 Phase 5.3（Challenge勝敗判定強化）: 勝敗は必ずサーバー側でChallengePerformance同士を
-    // 比較して確定する（クライアントのwin/lose自己申告は一切信用しない。そもそも入力自体に
-    // win/loseという項目は存在しない——validation.ts参照）。作成者のChallengeがこのmigration
-    // 以前に作られたもの（performance=null）の場合だけ、creatorScoreだけを使った旧ルールへ
-    // フォールバックする（既存データにないperformance値を推測で埋めない）。
-    let result: 'win' | 'lose'
+    // Ver.6 Phase 5.3（Challenge勝敗判定強化）／Ver.6 Phase 8（ENDLESS Challenge・DRAW仕様追加）:
+    // 勝敗は必ずサーバー側で確定する（クライアントのwin/lose/draw自己申告は一切信用しない。
+    // そもそも入力自体にresultという項目は存在しない——validation.ts参照）。
+    //   - mode==='endless': ホストのcreatorScore（STREAK数）と挑戦者のscore（STREAK数）を
+    //     単純比較するcompareEndlessStreakだけを使う（performance/タイブレークは一切関与しない）。
+    //   - それ以外でchallenge.performanceが存在する: compareChallengePerformanceで判定
+    //     （Ver.6 Phase 8で反応速度を除外し、完全同値はDRAWへ変更済み）。
+    //   - 作成者のChallengeがこのmigration以前に作られたもの（performance=null）の場合だけ、
+    //     creatorScoreだけを使った旧ルールへフォールバックする（既存データにないperformance値を
+    //     推測で埋めない。完全同値はここもDRAWとして扱う——ホスト防衛という意味づけ自体を廃止したため）。
+    let result: 'win' | 'lose' | 'draw'
     let decidedBy: ChallengeDecidedBy
-    if (challenge.performance) {
-      const comparison = compareChallengePerformance(challenge.performance, input.performance)
+    if (challenge.mode === 'endless') {
+      result = compareEndlessStreak(challenge.creatorScore, input.score)
+      decidedBy = 'streak'
+    } else if (challenge.performance) {
+      const comparison = compareChallengePerformance(challenge.performance, input.performance!)
       result = comparison.result
       decidedBy = comparison.decidedBy
     } else {
-      result = input.score > challenge.creatorScore ? 'win' : 'lose'
+      result = input.score > challenge.creatorScore ? 'win' : input.score === challenge.creatorScore ? 'draw' : 'lose'
       decidedBy = 'legacyScoreOnly'
     }
 
@@ -201,6 +214,7 @@ async function handleGetSummaries(request: Request, db: D1Database): Promise<Res
         challengerCount: aggregate.challengerCount,
         attemptCount: aggregate.attemptCount,
         clearedCount: aggregate.clearedCount,
+        endlessDifficulty: challenge.conditions.endlessDifficulty,
       }
     })
     return json({ ok: true, value: summaries } satisfies ChallengeApiResult<ChallengeSummary[]>, 200)
@@ -262,6 +276,7 @@ async function handleGetParticipatedSummaries(request: Request, db: D1Database):
           hostPerformance: challenge.performance,
           myAttemptCount: aggregate.attemptCount,
           myLatestResult: aggregate.latestResult,
+          endlessDifficulty: challenge.conditions.endlessDifficulty,
         }
       })
     return json({ ok: true, value: summaries } satisfies ChallengeApiResult<ParticipatedChallengeSummary[]>, 200)

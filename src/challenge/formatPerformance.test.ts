@@ -19,6 +19,11 @@ describe('resultForViewer', () => {
   it('host視点は反転する: 挑戦者LOSE → ホストWIN', () => {
     expect(resultForViewer('lose', 'host')).toBe('win')
   })
+
+  it('Ver.6 Phase 8: DRAWはどちらの視点でもDRAWのまま（反転しない）', () => {
+    expect(resultForViewer('draw', 'challenger')).toBe('draw')
+    expect(resultForViewer('draw', 'host')).toBe('draw')
+  })
 })
 
 describe('describeDecidedBy', () => {
@@ -45,12 +50,14 @@ describe('describeDecidedBy', () => {
     expect(hostText).toContain('最大COMBO')
   })
 
-  it('exactTie: 挑戦者視点は「完全同値のためLOSE」', () => {
-    expect(describeDecidedBy('exactTie', 'lose', 'challenger')).toBe('完全同値のためLOSE')
+  it('Ver.6 Phase 8: exactTieはどちらの視点でも「完全同値のためDRAW」（ホスト防衛の表現は廃止）', () => {
+    expect(describeDecidedBy('exactTie', 'draw', 'challenger')).toBe('完全同値のためDRAW')
+    expect(describeDecidedBy('exactTie', 'draw', 'host')).toBe('完全同値のためDRAW')
   })
 
-  it('exactTie: ホスト視点は「完全同値で防衛成功」（DB上のresultは常にchallenger=loseのまま）', () => {
-    expect(describeDecidedBy('exactTie', 'lose', 'host')).toBe('完全同値で防衛成功')
+  it('Ver.6 Phase 8: ENDLESS Challengeのstreakタイ（同STREAK数）も視点によらず同じDRAW表記になる', () => {
+    expect(describeDecidedBy('streak', 'draw', 'challenger')).toBe('連続正解数が同数のためDRAW')
+    expect(describeDecidedBy('streak', 'draw', 'host')).toBe('連続正解数が同数のためDRAW')
   })
 
   it('legacyScoreOnly: 視点に応じて反転する（旧Challengeへの挑戦でも同じ規則）', () => {

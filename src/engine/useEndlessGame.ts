@@ -12,6 +12,7 @@ import {
   type EndlessAdvancedOrigin,
 } from './endlessAdvancedPicker'
 import { applyEndlessCorrect, applyEndlessMiss, createEndlessState, type EndlessState } from './endlessEngine'
+import { endlessSlotToProblemSetItem, problemSetItemToEndlessSlot } from './endlessReplay'
 import { pickFinalQuestion } from './finalQuestionPicker'
 import { generateNextQuestion } from './questionPicker'
 import { pick } from './random'
@@ -20,8 +21,12 @@ import { checkEndlessAchievements } from '../utils/achievementStorage'
 import { trackEndlessEnd, trackEndlessStart } from '../utils/analytics'
 import { getEndlessBest, updateEndlessBest } from '../utils/storage'
 import { sfx } from '../utils/sound'
+import type { ChallengeProblemSetItem } from '../challenge/types'
 import type { Challenge500QuestionSpec, Challenge500Tier } from '../questions/challenge500/types'
 import type { AchievementId, EndlessDifficulty, FinalQuestionSpec, FinalQuestionTag, QuestionSpec, QuestionTypeId } from '../types'
+
+/** Ver.6 Phase 8（ENDLESS Challenge）: 1件のChallengeへ保存する問題数の上限（Worker側validation.tsと同じ値）。 */
+const MAX_RECORDED_PROBLEMS = 300
 
 /** 直近何問分のタイプを覚えておくか。useRushGame.ts／useFinalTrial.tsと同じ値・同じ目的（カテゴリ連続回避）。 */
 const RECENT_TYPES_LENGTH = 3
@@ -83,6 +88,18 @@ export interface EndlessFinishPayload {
   best: number
   /** Ver.6 Phase 5.1: 今回のプレイで新たに解除されたEndless実績（qaModeでは常に空配列）。 */
   newlyUnlockedAchievements: AchievementId[]
+  /**
+   * Ver.6 Phase 8（ENDLESS Challenge）: 終了理由。通常のENDLESS（1 MISS = END）は常に'miss'。
+   * 'targetExceeded'は、targetStreak指定時に挑戦者がTARGETを超えた瞬間の即WIN終了のみ。
+   */
+  endedReason: 'miss' | 'targetExceeded'
+  /**
+   * Ver.6 Phase 8（ENDLESS Challenge）: このプレイで実際に出題された問題列。結果画面の
+   * 「挑戦状を送る」がこれをそのままChallengeのproblemSetとして送信する
+   * （getRecordedProblemSet()と同じ内容をpayloadにも含めておくことで、呼び出し元が
+   * 別途hookの参照を持ち回さずに済むようにする）。
+   */
+  recordedProblemSet: ChallengeProblemSetItem[]
 }
 
 export interface UseEndlessGameOptions {
@@ -90,8 +107,24 @@ export interface UseEndlessGameOptions {
    * Preview/QA専用モード。trueの場合、GA4のendless_start/endless_end送信と
    * localStorageの自己ベスト更新を両方抑制する（既存のuseChallenge500.tsと同じ方針：
    * QA操作を実際のプレイ記録として残さない）。
+   * Ver.6 Phase 8（ENDLESS Challenge）: ENDLESS Challengeへの挑戦プレイ（replayQuestions
+   * 指定時）も必ずこれをtrueにする——挑戦者の記録が公式ENDLESS BEST/Ranking/Achievementへ
+   * 絶対に反映されないようにするための、既存の実績ある遮断機構をそのまま再利用する。
    */
   qaMode?: boolean
+  /**
+   * Ver.6 Phase 8（ENDLESS Challenge）: 指定されると、通常のランダム出題の代わりに
+   * この配列を順番に出題する（挑戦者が、ホストと完全に同じ問題・同じ順番で再生するため）。
+   * 配列を使い切った後は、元々の問題生成ロジックへ自動的にフォールバックする
+   * （useChallenge500.tsのreplayQuestionsと同じ方針）。
+   */
+  replayQuestions?: ChallengeProblemSetItem[]
+  /**
+   * Ver.6 Phase 8（ENDLESS Challenge）: ホストの記録（STREAK数）。指定されている間、
+   * 正解のたびにstreakがこれを超えたかを確認し、超えた瞬間に即WIN終了する
+   * （そのまま記録を伸ばし続けるモードにはしない、というユーザー指示）。
+   */
+  targetStreak?: number
 }
 
 /**
@@ -112,6 +145,7 @@ export function useEndlessGame(
   options?: UseEndlessGameOptions,
 ) {
   const qaMode = options?.qaMode ?? false
+  const targetStreak = options?.targetStreak
 
   const [snapshot, setSnapshot] = useState<EndlessSnapshot>(() => ({
     state: createEndlessState(),
@@ -129,6 +163,14 @@ export function useEndlessGame(
   const startedRef = useRef(false)
   const milestoneKeyRef = useRef(0)
   const milestoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const replayQuestionsRef = useRef(options?.replayQuestions)
+  const replayIndexRef = useRef(0)
+  const recordedRef = useRef<ChallengeProblemSetItem[]>([])
+
+  /** Ver.6 Phase 8（ENDLESS Challenge）: このプレイで実際に出題された問題列（Challenge作成に使う）。 */
+  function getRecordedProblemSet(): ChallengeProblemSetItem[] {
+    return recordedRef.current
+  }
 
   function buildFinalSlot(): EndlessQuestionSlot {
     const tier = pick(FINAL_POOL_TIERS)
@@ -146,7 +188,7 @@ export function useEndlessGame(
     return { kind: 'challenge500', spec, tier }
   }
 
-  function buildNext(): EndlessQuestionSlot {
+  function buildRandomNext(): EndlessQuestionSlot {
     if (difficulty === 'beginner') {
       const spec = generateNextQuestion(ENDLESS_BEGINNER_PHASE, recentTypesRef.current)
       recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, RECENT_TYPES_LENGTH)
@@ -159,6 +201,40 @@ export function useEndlessGame(
     const origin = pickEndlessAdvancedOrigin(recentAdvancedOriginsRef.current)
     recentAdvancedOriginsRef.current = [origin, ...recentAdvancedOriginsRef.current].slice(0, RECENT_TYPES_LENGTH)
     return origin === 'final' ? buildFinalSlot() : buildChallenge500Slot()
+  }
+
+  /**
+   * Ver.6 Phase 8（ENDLESS Challenge）: replayQuestionsが指定されている間は、ランダム出題の
+   * 代わりにそれを順番に消費する（ホストと完全に同じ問題・同じ順番で再生するため、別random
+   * 生成は行わない）。使い切った後は自動的にbuildRandomNext()へフォールバックする
+   * （useChallenge500.tsのbuildNextと同じ方針）。実際に出題された問題は常にrecordedRefへ
+   * 記録する（Challenge未使用の通常プレイでも、結果画面の「挑戦状を送る」に使えるよう
+   * 常時記録しておく）。
+   */
+  function buildNext(): EndlessQuestionSlot {
+    const replayQuestions = replayQuestionsRef.current
+    let slot: EndlessQuestionSlot
+    if (replayQuestions && replayIndexRef.current < replayQuestions.length) {
+      slot = problemSetItemToEndlessSlot(replayQuestions[replayIndexRef.current])
+      replayIndexRef.current += 1
+      // 再生中も「直近タイプ」ヒューリスティクスを更新しておき、再生を使い切った直後の
+      // ランダム出題がいきなり同じタイプへ偏らないようにする（buildRandomNext内の各分岐が
+      // 自分で更新するのと同じ値を、再生時はここで代わりに更新する）。
+      if (slot.kind === 'normal') {
+        recentTypesRef.current = [slot.spec.type, ...recentTypesRef.current].slice(0, RECENT_TYPES_LENGTH)
+      } else if (slot.kind === 'final') {
+        recentFinalTypesRef.current = [slot.spec.type, ...recentFinalTypesRef.current].slice(0, RECENT_TYPES_LENGTH)
+        recentFinalTagsRef.current = slot.spec.tags
+      } else {
+        recentChallenge500TypeRef.current = slot.spec.type
+      }
+    } else {
+      slot = buildRandomNext()
+    }
+    if (recordedRef.current.length < MAX_RECORDED_PROBLEMS) {
+      recordedRef.current = [...recordedRef.current, endlessSlotToProblemSetItem(slot)]
+    }
+    return slot
   }
 
   function start() {
@@ -177,6 +253,22 @@ export function useEndlessGame(
       sfx.endlessCorrect(difficulty, intensity)
       const next = applyEndlessCorrect(stateRef.current)
       stateRef.current = next
+
+      // Ver.6 Phase 8（ENDLESS Challenge）: TARGET（ホストのSTREAK数）を超えた瞬間に即WIN終了する。
+      // そのまま記録を伸ばし続けるモードにはしない、というユーザー指示（item 11）。
+      if (targetStreak !== undefined && next.streak > targetStreak) {
+        if (milestoneTimerRef.current) clearTimeout(milestoneTimerRef.current)
+        setSnapshot((s) => ({ ...s, state: next, currentSlot: null, milestoneLabel: null }))
+        onFinish({
+          score: next.streak,
+          isNewBest: false,
+          best: getEndlessBest(difficulty),
+          newlyUnlockedAchievements: [],
+          endedReason: 'targetExceeded',
+          recordedProblemSet: getRecordedProblemSet(),
+        })
+        return
+      }
 
       if (isEndlessMilestone(next.streak)) {
         sfx.comboMilestone(endlessMilestoneLevel(next.streak))
@@ -210,8 +302,15 @@ export function useEndlessGame(
     // Ver.6 Phase 5.1: Endless STREAK実績。qaModeではDOPA%実績・自己ベスト更新と同様、一切解除しない。
     const newlyUnlockedAchievements = qaMode ? [] : checkEndlessAchievements(difficulty, next.streak)
     setSnapshot((s) => ({ ...s, state: next, currentSlot: null, milestoneLabel: null }))
-    onFinish({ score: next.streak, isNewBest, best: getEndlessBest(difficulty), newlyUnlockedAchievements })
+    onFinish({
+      score: next.streak,
+      isNewBest,
+      best: getEndlessBest(difficulty),
+      newlyUnlockedAchievements,
+      endedReason: 'miss',
+      recordedProblemSet: getRecordedProblemSet(),
+    })
   }
 
-  return { snapshot, start, handleResult }
+  return { snapshot, start, handleResult, getRecordedProblemSet }
 }

@@ -19,7 +19,7 @@ export function computeMedian(values: number[]): number | null {
 }
 
 export interface ChallengeComparisonResult {
-  result: 'win' | 'lose'
+  result: 'win' | 'lose' | 'draw'
   decidedBy: ChallengeDecidedBy
 }
 
@@ -79,15 +79,50 @@ export function compareDopaPerformance(a: ChallengePerformance, b: ChallengePerf
 }
 
 /**
- * challenger視点でのWIN/LOSE判定。compareDopaPerformance(creator, challenger)の結果を
- * Challenge固有の意味づけ（完全同値=ホスト防衛=challenger LOSE）へ変換するだけの
- * 薄いラッパー。既存の挙動（この関数のシグネチャ・戻り値）は一切変更していない。
+ * Ver.6 Phase 8（通常Challengeの勝敗ルール更新）: challenger視点でのWIN/LOSE/DRAW判定。
+ * 以前はcompareDopaPerformance（Battleと共有の5項目比較＋完全同値=ホスト防衛=lose）を
+ * そのまま流用していたが、今回のユーザー指示で通常Challengeだけ仕様を変更した：
+ *   1. 反応速度中央値（medianCorrectReactionMs）をタイブレークから除外する
+ *      （finalDopaPercent→baseDopaPercent→accuracy→maxComboの4項目までで必ず決着する）。
+ *   2. ここまで全て完全同値の場合、以前の「ホスト防衛＝challenger LOSE」をやめ、
+ *      両者DRAWへ変更する。
+ * Battle（compareDopaPerformance／compareDopaPerformanceを直接呼ぶbattleRoomEngine.ts）は
+ * 一切変更していない——このファイル内のcompareDopaPerformance自体は1バイトも変えておらず、
+ * 世界対戦は引き続き反応速度込みの5項目比較＋完全同値DRAWのまま動作する。
+ * そのため、この関数はcompareDopaPerformanceに委譲せず、4項目だけの独立した比較を行う。
  */
 export function compareChallengePerformance(
   creator: ChallengePerformance,
   challenger: ChallengePerformance,
 ): ChallengeComparisonResult {
-  const { winner, decidedBy } = compareDopaPerformance(creator, challenger)
-  // winner='a'（creatorが上）→challengerはlose、'b'（challengerが上）→win、'draw'→ホスト防衛でlose。
-  return { result: winner === 'b' ? 'win' : 'lose', decidedBy }
+  if (creator.finalDopaPercent !== challenger.finalDopaPercent) {
+    return { result: challenger.finalDopaPercent > creator.finalDopaPercent ? 'win' : 'lose', decidedBy: 'finalDopaPercent' }
+  }
+  if (creator.baseDopaPercent !== challenger.baseDopaPercent) {
+    return { result: challenger.baseDopaPercent > creator.baseDopaPercent ? 'win' : 'lose', decidedBy: 'baseDopaPercent' }
+  }
+
+  const creatorAccuracyPct = roundedAccuracyPercent(creator.accuracy)
+  const challengerAccuracyPct = roundedAccuracyPercent(challenger.accuracy)
+  if (creatorAccuracyPct !== challengerAccuracyPct) {
+    return { result: challengerAccuracyPct > creatorAccuracyPct ? 'win' : 'lose', decidedBy: 'accuracy' }
+  }
+
+  if (creator.maxCombo !== challenger.maxCombo) {
+    return { result: challenger.maxCombo > creator.maxCombo ? 'win' : 'lose', decidedBy: 'maxCombo' }
+  }
+
+  return { result: 'draw', decidedBy: 'exactTie' }
+}
+
+/**
+ * Ver.6 Phase 8（ENDLESS Challenge）: ホストのSTREAK数と挑戦者のSTREAK数を比較するだけの
+ * 純粋関数。DOPA%・正答率・COMBO・反応速度のいずれも関与しない——ENDLESS Challengeの
+ * 目的は「ホストの連続正解数を超えること」だけであるため、タイブレークという概念自体が
+ * 存在しない（同数なら無条件でDRAW）。
+ */
+export function compareEndlessStreak(hostStreak: number, challengerStreak: number): 'win' | 'lose' | 'draw' {
+  if (challengerStreak > hostStreak) return 'win'
+  if (challengerStreak === hostStreak) return 'draw'
+  return 'lose'
 }

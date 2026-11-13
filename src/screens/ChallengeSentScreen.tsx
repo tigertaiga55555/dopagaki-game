@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { resolveAvatarEmoji } from '../config/profileConfig'
 import { buildChallengeUrl } from '../challenge/url'
-import { BASE_DOPA_PERCENT_NOTE, formatAccuracyPercent, formatReactionSeconds } from '../challenge/formatPerformance'
+import { BASE_DOPA_PERCENT_NOTE, formatAccuracyPercent } from '../challenge/formatPerformance'
+import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
+import { ENDLESS_THEME } from '../config/endlessTheme'
 import type { ChallengeRecord } from '../challenge/types'
+import type { EndlessDifficulty } from '../types'
 
 interface Props {
   challenge: ChallengeRecord
@@ -13,6 +16,7 @@ const MODE_LABEL: Record<ChallengeRecord['mode'], string> = {
   normal: '通常プレイ',
   finalTrial: 'FINAL DOPA TRIAL',
   challenge500: 'LIMIT BREAK',
+  endless: 'ENDLESS',
 }
 
 /**
@@ -24,9 +28,16 @@ const MODE_LABEL: Record<ChallengeRecord['mode'], string> = {
 export function ChallengeSentScreen({ challenge, onDone }: Props) {
   const [copied, setCopied] = useState(false)
   const url = buildChallengeUrl(challenge.id)
+  const isEndless = challenge.mode === 'endless'
+  const endlessDifficulty = challenge.conditions.endlessDifficulty as EndlessDifficulty | undefined
+  const endlessTheme = endlessDifficulty ? ENDLESS_THEME[endlessDifficulty] : null
 
   async function handleShare() {
-    const text = `${challenge.creatorNickname}からの挑戦状！${MODE_LABEL[challenge.mode]}で${challenge.creatorScore}％を記録した。この記録を超えてみろ！`
+    // Ver.6 Phase 8（ENDLESS Challenge）: ENDLESSは％ではなくSTREAK数を煽り文に使う。
+    const text =
+      isEndless && endlessDifficulty
+        ? `${challenge.creatorNickname}からの挑戦状！ENDLESS ${ENDLESS_DIFFICULTY_LABEL[endlessDifficulty]}で${challenge.creatorScore}連続を記録した。これ抜ける？`
+        : `${challenge.creatorNickname}からの挑戦状！${MODE_LABEL[challenge.mode]}で${challenge.creatorScore}％を記録した。この記録を超えてみろ！`
     if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       try {
         await navigator.share({ title: 'ドパガキゲーム 挑戦状', text, url })
@@ -58,8 +69,19 @@ export function ChallengeSentScreen({ challenge, onDone }: Props) {
           {resolveAvatarEmoji(challenge.creatorIcon)}
         </div>
         <p className="text-lg font-black text-white">{challenge.creatorNickname}</p>
-        <p className="text-xs font-bold tracking-widest text-amber-200/80">{MODE_LABEL[challenge.mode]}</p>
-        <p className="text-3xl font-black tabular-nums text-amber-300">{challenge.creatorScore}％</p>
+        {isEndless && endlessDifficulty && endlessTheme ? (
+          <>
+            <p className="text-xs font-bold tracking-widest text-amber-200/80">
+              ENDLESS ・ {ENDLESS_DIFFICULTY_LABEL[endlessDifficulty]} ・ {endlessTheme.mood}
+            </p>
+            <p className={`text-3xl font-black tabular-nums ${endlessTheme.textClass}`}>{challenge.creatorScore}連続</p>
+          </>
+        ) : (
+          <>
+            <p className="text-xs font-bold tracking-widest text-amber-200/80">{MODE_LABEL[challenge.mode]}</p>
+            <p className="text-3xl font-black tabular-nums text-amber-300">{challenge.creatorScore}％</p>
+          </>
+        )}
       </div>
 
       {challenge.performance && (
@@ -71,7 +93,6 @@ export function ChallengeSentScreen({ challenge, onDone }: Props) {
           <PerformanceRow label="通常獲得DOPA%" value={`${challenge.performance.baseDopaPercent}%`} />
           <PerformanceRow label="正答率" value={formatAccuracyPercent(challenge.performance.accuracy)} />
           <PerformanceRow label="最大COMBO" value={`${challenge.performance.maxCombo}`} />
-          <PerformanceRow label="反応速度中央値" value={formatReactionSeconds(challenge.performance.medianCorrectReactionMs)} />
           <p className="pt-0.5 text-center text-[9px] text-white/30">{BASE_DOPA_PERCENT_NOTE}</p>
         </div>
       )}

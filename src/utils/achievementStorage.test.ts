@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   checkDopaPercentAchievements,
   checkEndlessAchievements,
+  checkEndlessChallengeDefenseAchievement,
+  checkEndlessChallengeWinAchievement,
   checkFinalQuestionAchievement,
   getAchievementCount,
   isAchievementUnlocked,
@@ -149,5 +151,35 @@ describe('achievementStorage (Ver.6 Phase 5.1: DOPA%実績12個＋Endless実績1
     expect(isTitleUnlocked('endlessAdvanced3')).toBe(false)
     checkEndlessAchievements('advanced', 3)
     expect(isTitleUnlocked('endlessAdvanced3')).toBe(true)
+  })
+
+  it('Ver.6 Phase 8: ENDLESS Challenge「終わらない挑戦者」はwon=falseでは解除されない', () => {
+    expect(checkEndlessChallengeWinAchievement(false)).toEqual([])
+    expect(isAchievementUnlocked('endlessChallengeFirstWin')).toBe(false)
+  })
+
+  it('Ver.6 Phase 8: ENDLESS Challenge「終わらない挑戦者」はwon=trueで一度だけ解除される。endlessStreak系とは独立している', () => {
+    expect(checkEndlessChallengeWinAchievement(true)).toEqual(['endlessChallengeFirstWin'])
+    expect(isAchievementUnlocked('endlessChallengeFirstWin')).toBe(true)
+    expect(checkEndlessChallengeWinAchievement(true)).toEqual([]) // 重複解除防止
+    // 通常ENDLESSの連続正解実績には一切影響しない（別の条件種別のため）。
+    expect(isAchievementUnlocked('endlessAdvanced3')).toBe(false)
+  })
+
+  it('Ver.6 Phase 8: ENDLESS Challenge「終わらない門番」はdefended=falseでは解除されない', () => {
+    expect(checkEndlessChallengeDefenseAchievement(false)).toEqual([])
+    expect(isAchievementUnlocked('endlessChallengeFirstDefense')).toBe(false)
+  })
+
+  it('Ver.6 Phase 8: ENDLESS Challenge「終わらない門番」はdefended=trueで一度だけ解除される', () => {
+    expect(checkEndlessChallengeDefenseAchievement(true)).toEqual(['endlessChallengeFirstDefense'])
+    expect(isAchievementUnlocked('endlessChallengeFirstDefense')).toBe(true)
+    expect(checkEndlessChallengeDefenseAchievement(true)).toEqual([]) // 重複解除防止
+  })
+
+  it('Ver.6 Phase 8: 通常ENDLESSの連続正解実績を解除しても、ENDLESS Challenge専用の2実績には一切影響しない', () => {
+    checkEndlessAchievements('advanced', 30)
+    expect(isAchievementUnlocked('endlessChallengeFirstWin')).toBe(false)
+    expect(isAchievementUnlocked('endlessChallengeFirstDefense')).toBe(false)
   })
 })

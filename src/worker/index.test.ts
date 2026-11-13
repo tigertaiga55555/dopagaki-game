@@ -181,7 +181,7 @@ describe('worker fetch handler: challenge_attempts API (Ver.6 Phase 5.2/5.3: Cha
     expect(attempt.attemptNumber).toBe(1)
   })
 
-  it('LOSE判定: finalDopaPercent(420)未満、および同値（exactTie）はどちらもLOSEになる', async () => {
+  it('LOSE判定: finalDopaPercent(420)未満はLOSEになる', async () => {
     const db = createFakeD1Database()
     const env = { CHALLENGE_DB: db as never }
     const challenge = await createSampleChallenge(env)
@@ -189,10 +189,15 @@ describe('worker fetch handler: challenge_attempts API (Ver.6 Phase 5.2/5.3: Cha
     const loseAttempt = await postAttempt(env, challenge.id, { score: 400, performance: { finalDopaPercent: 400 } })
     expect(loseAttempt.result).toBe('lose')
     expect(loseAttempt.decidedBy).toBe('finalDopaPercent')
+  })
 
-    // 作成者とperformanceが完全に同値 → exactTie → challenger LOSE（ホスト防衛）。
+  it('Ver.6 Phase 8: 作成者とperformanceが完全に同値ならDRAW・decidedBy=exactTie（ホスト防衛は廃止）', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createSampleChallenge(env)
+
     const tieAttempt = await postAttempt(env, challenge.id, {})
-    expect(tieAttempt.result).toBe('lose')
+    expect(tieAttempt.result).toBe('draw')
     expect(tieAttempt.decidedBy).toBe('exactTie')
   })
 
@@ -234,26 +239,26 @@ describe('worker fetch handler: challenge_attempts API (Ver.6 Phase 5.2/5.3: Cha
     expect(win.decidedBy).toBe('maxCombo')
   })
 
-  it('タイブレーク: ここまで同値ならmedianCorrectReactionMsで決まる（速い方が勝ち）', async () => {
+  it('Ver.6 Phase 8: 反応速度中央値はタイブレークから除外される（finalDopaPercent〜maxComboが同値なら反応速度に関わらずDRAW）', async () => {
     const db = createFakeD1Database()
     const env = { CHALLENGE_DB: db as never }
     const challenge = await createSampleChallenge(env) // medianCorrectReactionMs=540
 
-    const win = await postAttempt(env, challenge.id, { performance: { medianCorrectReactionMs: 300 } })
-    expect(win.result).toBe('win')
-    expect(win.decidedBy).toBe('medianCorrectReactionMs')
+    const fasterButTied = await postAttempt(env, challenge.id, { performance: { medianCorrectReactionMs: 300 } })
+    expect(fasterButTied.result).toBe('draw')
+    expect(fasterButTied.decidedBy).toBe('exactTie')
 
-    const lose = await postAttempt(env, challenge.id, { performance: { medianCorrectReactionMs: 900 } })
-    expect(lose.result).toBe('lose')
-    expect(lose.decidedBy).toBe('medianCorrectReactionMs')
+    const slowerButTied = await postAttempt(env, challenge.id, { performance: { medianCorrectReactionMs: 900 } })
+    expect(slowerButTied.result).toBe('draw')
+    expect(slowerButTied.decidedBy).toBe('exactTie')
   })
 
-  it('完全同値（5項目すべて一致）はchallenger LOSE・decidedBy=exactTie', async () => {
+  it('4項目すべて一致（finalDopaPercent/baseDopaPercent/accuracy/maxCombo）はDRAW・decidedBy=exactTie', async () => {
     const db = createFakeD1Database()
     const env = { CHALLENGE_DB: db as never }
     const challenge = await createSampleChallenge(env)
     const attempt = await postAttempt(env, challenge.id, {})
-    expect(attempt.result).toBe('lose')
+    expect(attempt.result).toBe('draw')
     expect(attempt.decidedBy).toBe('exactTie')
   })
 
@@ -276,9 +281,27 @@ describe('worker fetch handler: challenge_attempts API (Ver.6 Phase 5.2/5.3: Cha
     expect(winAttempt.result).toBe('win')
     expect(winAttempt.decidedBy).toBe('legacyScoreOnly')
 
-    const loseAttempt = await postAttempt(env, challenge.id, { score: 420, performance: { finalDopaPercent: 420 } })
+    const loseAttempt = await postAttempt(env, challenge.id, { score: 400, performance: { finalDopaPercent: 400 } })
     expect(loseAttempt.result).toBe('lose')
     expect(loseAttempt.decidedBy).toBe('legacyScoreOnly')
+  })
+
+  it('Ver.6 Phase 8: legacyScoreOnlyフォールバックでもcreatorScoreと完全同値ならDRAWになる（ホスト防衛の廃止を旧ルールにも一貫適用）', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createSampleChallenge(env) // creatorScore=420
+
+    const row = db._rows.get(challenge.id)
+    if (!row) throw new Error('row not found')
+    row.performance_final_dopa_percent = null
+    row.performance_base_dopa_percent = null
+    row.performance_accuracy = null
+    row.performance_max_combo = null
+    row.performance_median_reaction_ms = null
+
+    const tieAttempt = await postAttempt(env, challenge.id, { score: 420, performance: { finalDopaPercent: 420 } })
+    expect(tieAttempt.result).toBe('draw')
+    expect(tieAttempt.decidedBy).toBe('legacyScoreOnly')
   })
 
   it('attemptNumber increment: 同一playerIdが同じChallengeへ何度挑戦しても保存され、回数が増える（例: LOSE→LOSE→WIN）', async () => {
@@ -388,7 +411,7 @@ describe('worker fetch handler: challenge_attempts API (Ver.6 Phase 5.2/5.3: Cha
     expect(body.value.attempts[0].playerId).toBe('pid-a')
   })
 
-  it('10件表示制限: limit未指定だと既定の10件までしか返らず、truncated=trueになる', async () => {
+  it('Ver.6 Phase 8: 無料履歴表示制限は5件（10→5に変更）。limit未指定だと既定の5件までしか返らず、truncated=trueになる', async () => {
     const db = createFakeD1Database()
     const env = { CHALLENGE_DB: db as never }
     const challenge = await createSampleChallenge(env)
@@ -404,7 +427,7 @@ describe('worker fetch handler: challenge_attempts API (Ver.6 Phase 5.2/5.3: Cha
     const body = (await res.json()) as ChallengeApiResult<ChallengeAttemptListResult>
     expect(body.ok).toBe(true)
     if (!body.ok) throw new Error('expected attempts fetch to succeed')
-    expect(body.value.attempts).toHaveLength(10)
+    expect(body.value.attempts).toHaveLength(5)
     expect(body.value.truncated).toBe(true)
   })
 
@@ -413,6 +436,168 @@ describe('worker fetch handler: challenge_attempts API (Ver.6 Phase 5.2/5.3: Cha
     const env = { CHALLENGE_DB: db as never }
     const res = await worker.fetch(new Request('https://example.com/api/challenges/does-not-exist/attempts', { method: 'GET' }), env)
     expect(res.status).toBe(404)
+  })
+})
+
+describe('worker fetch handler: ENDLESS Challenge (Ver.6 Phase 8)', () => {
+  function sampleEndlessCreateBody(overrides: Record<string, unknown> = {}) {
+    return {
+      creatorPlayerId: 'pid-host-1',
+      creatorNickname: 'ホスト太郎',
+      creatorIcon: { kind: 'preset', iconId: 'flame' },
+      creatorEquippedTitle: null,
+      mode: 'endless',
+      problemSet: { version: 1, items: [{ type: 'numberPick', data: { answer: 3 } }] },
+      conditions: { mode: 'endless', endlessDifficulty: 'advanced' },
+      creatorScore: 37,
+      performance: null,
+      ...overrides,
+    }
+  }
+
+  async function createEndlessChallenge(env: { CHALLENGE_DB: never }, overrides: Record<string, unknown> = {}): Promise<ChallengeRecord> {
+    const res = await worker.fetch(
+      new Request('https://example.com/api/challenges', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(sampleEndlessCreateBody(overrides)),
+      }),
+      env,
+    )
+    const body = (await res.json()) as ChallengeApiResult<ChallengeRecord>
+    if (!body.ok) throw new Error(`expected endless create to succeed, got: ${JSON.stringify(body)}`)
+    return body.value
+  }
+
+  async function postEndlessAttempt(
+    env: { CHALLENGE_DB: never },
+    challengeId: string,
+    overrides: Record<string, unknown> = {},
+  ): Promise<ChallengeAttemptRecord> {
+    const res = await worker.fetch(
+      new Request(`https://example.com/api/challenges/${challengeId}/attempts`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          playerId: 'pid-challenger-1',
+          nickname: '挑戦者太郎',
+          avatar: { kind: 'preset', iconId: 'star' },
+          equippedTitle: null,
+          score: 38,
+          ...overrides,
+        }),
+      }),
+      env,
+    )
+    const body = (await res.json()) as ChallengeApiResult<ChallengeAttemptRecord>
+    if (!body.ok) throw new Error(`expected endless attempt to succeed, got: ${JSON.stringify(body)}`)
+    return body.value
+  }
+
+  it('POST /api/challenges: 上級はSTREAK3未満だと400、3以上なら201でmode=endless・performance=nullが保存される', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+
+    const tooLow = await worker.fetch(
+      new Request('https://example.com/api/challenges', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(sampleEndlessCreateBody({ creatorScore: 2 })),
+      }),
+      env,
+    )
+    expect(tooLow.status).toBe(400)
+
+    const challenge = await createEndlessChallenge(env, { creatorScore: 3 })
+    expect(challenge.mode).toBe('endless')
+    expect(challenge.performance).toBeNull()
+    expect(challenge.creatorScore).toBe(3)
+    expect(challenge.conditions).toEqual({ mode: 'endless', endlessDifficulty: 'advanced' })
+  })
+
+  it('POST /api/challenges: 初級10・中級5・上級3の最低条件がそれぞれ強制される', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+
+    const beginnerLow = await worker.fetch(
+      new Request('https://example.com/api/challenges', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(sampleEndlessCreateBody({ conditions: { mode: 'endless', endlessDifficulty: 'beginner' }, creatorScore: 9 })),
+      }),
+      env,
+    )
+    expect(beginnerLow.status).toBe(400)
+
+    const intermediateLow = await worker.fetch(
+      new Request('https://example.com/api/challenges', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(sampleEndlessCreateBody({ conditions: { mode: 'endless', endlessDifficulty: 'intermediate' }, creatorScore: 4 })),
+      }),
+      env,
+    )
+    expect(intermediateLow.status).toBe(400)
+  })
+
+  it('GET /api/challenges/:id: 作成したENDLESS Challengeを同じ内容で取得できる', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const created = await createEndlessChallenge(env)
+    const res = await worker.fetch(new Request(`https://example.com/api/challenges/${created.id}`), env)
+    const body = (await res.json()) as ChallengeApiResult<ChallengeRecord>
+    expect(body.ok).toBe(true)
+    if (!body.ok) throw new Error('expected fetch to succeed')
+    expect(body.value).toEqual(created)
+  })
+
+  it('WIN判定: 挑戦者のSTREAKがホストを超えるとresult=win・decidedBy=streak', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createEndlessChallenge(env) // hostStreak=37
+    const attempt = await postEndlessAttempt(env, challenge.id, { score: 38 })
+    expect(attempt.result).toBe('win')
+    expect(attempt.decidedBy).toBe('streak')
+    expect(attempt.performance).toBeNull()
+  })
+
+  it('DRAW判定: 挑戦者のSTREAKがホストと同数ならresult=draw・decidedBy=streak（タイブレークなし）', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createEndlessChallenge(env) // hostStreak=37
+    const attempt = await postEndlessAttempt(env, challenge.id, { score: 37 })
+    expect(attempt.result).toBe('draw')
+    expect(attempt.decidedBy).toBe('streak')
+  })
+
+  it('LOSE判定: 挑戦者のSTREAKがホスト未満ならresult=lose・decidedBy=streak', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createEndlessChallenge(env) // hostStreak=37
+    const attempt = await postEndlessAttempt(env, challenge.id, { score: 20 })
+    expect(attempt.result).toBe('lose')
+    expect(attempt.decidedBy).toBe('streak')
+  })
+
+  it('POST attempts: mode=endlessのChallengeへの挑戦はscoreが整数でないと400を返す', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createEndlessChallenge(env)
+    const res = await worker.fetch(
+      new Request(`https://example.com/api/challenges/${challenge.id}/attempts`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          playerId: 'pid-challenger-1',
+          nickname: '挑戦者太郎',
+          avatar: { kind: 'preset', iconId: 'star' },
+          equippedTitle: null,
+          score: 38.5,
+        }),
+      }),
+      env,
+    )
+    expect(res.status).toBe(400)
   })
 })
 

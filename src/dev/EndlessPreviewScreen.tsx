@@ -62,6 +62,7 @@ export function EndlessPreviewScreen() {
           best={result.best}
           isNewBest={result.isNewBest}
           newlyUnlockedAchievements={result.newlyUnlockedAchievements}
+          recordedProblemSet={result.recordedProblemSet}
           onRetry={() => handleSelect(difficulty)}
           onChangeDifficulty={() => setPhase('select')}
           onHome={() => setPhase('select')}

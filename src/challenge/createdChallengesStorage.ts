@@ -10,8 +10,12 @@
  * （utils/profileStorage.ts等と同じ「保存方式を画面から隠す」方針）。
  */
 const CREATED_CHALLENGE_IDS_KEY = 'dopagaki:createdChallengeIdsV1'
-/** 無料ユーザーは直近10件のみ表示する既存方針（item 15）に合わせ、保持件数自体もここで揃える。 */
-const MAX_STORED_IDS = 10
+/**
+ * Ver.6 Phase 8: 無料ユーザーは直近5件のみ表示する確定仕様（将来DOPA PASSで無制限）に
+ * 合わせ、10→5へ変更した。Challenge作成自体は無制限（D1側の行は一切削除しない）——
+ * この定数はあくまで「ローカルでIDを何件まで覚えておくか」という表示件数の上限。
+ */
+const MAX_STORED_IDS = 5
 
 function readIds(): string[] {
   try {

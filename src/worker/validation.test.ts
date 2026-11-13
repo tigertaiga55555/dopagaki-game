@@ -140,21 +140,22 @@ describe('validateCreateChallengeAttemptInput (Ver.6 Phase 5.2/5.3: attempt入�
   }
 
   it('正常な入力はokで通る', () => {
-    const result = validateCreateChallengeAttemptInput(validAttemptInput(), 'challenge-1')
+    const result = validateCreateChallengeAttemptInput(validAttemptInput(), 'challenge-1', 'challenge500')
     expect(result.ok).toBe(true)
     expect(result.value?.performance).toEqual(validPerformance())
   })
 
-  it('performanceが欠けていればinvalid', () => {
+  it('performanceが欠けていればinvalid（endless以外のmode）', () => {
     const { performance, ...rest } = validAttemptInput()
     void performance
-    expect(validateCreateChallengeAttemptInput(rest, 'challenge-1').ok).toBe(false)
+    expect(validateCreateChallengeAttemptInput(rest, 'challenge-1', 'challenge500').ok).toBe(false)
   })
 
   it('performance.accuracyが範囲外ならinvalid', () => {
     const result = validateCreateChallengeAttemptInput(
       { ...validAttemptInput(), performance: { ...validPerformance(), accuracy: 2 } },
       'challenge-1',
+      'challenge500',
     )
     expect(result.ok).toBe(false)
   })
@@ -163,10 +164,101 @@ describe('validateCreateChallengeAttemptInput (Ver.6 Phase 5.2/5.3: attempt入�
     const result = validateCreateChallengeAttemptInput(
       { ...validAttemptInput(), result: 'win', decidedBy: 'maxCombo' },
       'challenge-1',
+      'challenge500',
     )
     expect(result.ok).toBe(true)
     expect(result.value).not.toHaveProperty('result')
     expect(result.value).not.toHaveProperty('decidedBy')
+  })
+})
+
+describe('Ver.6 Phase 8: ENDLESS Challengeの入力検証', () => {
+  function validEndlessInput(overrides: Record<string, unknown> = {}) {
+    return {
+      ...validInput(),
+      mode: 'endless',
+      conditions: { mode: 'endless', endlessDifficulty: 'advanced' },
+      creatorScore: 37,
+      performance: null,
+      ...overrides,
+    }
+  }
+
+  it('mode=endlessでperformance=null・十分なSTREAK数ならokで通る（performance検証は一切行わない）', () => {
+    const result = validateCreateChallengeInput(validEndlessInput())
+    expect(result.ok).toBe(true)
+    expect(result.value?.performance).toBeNull()
+    expect(result.value?.creatorScore).toBe(37)
+  })
+
+  it('初級は10連続未満ならinvalid、10以上ならok', () => {
+    const below = validateCreateChallengeInput(
+      validEndlessInput({ conditions: { mode: 'endless', endlessDifficulty: 'beginner' }, creatorScore: 9 }),
+    )
+    expect(below.ok).toBe(false)
+    const atMin = validateCreateChallengeInput(
+      validEndlessInput({ conditions: { mode: 'endless', endlessDifficulty: 'beginner' }, creatorScore: 10 }),
+    )
+    expect(atMin.ok).toBe(true)
+  })
+
+  it('中級は5連続未満ならinvalid、5以上ならok', () => {
+    const below = validateCreateChallengeInput(
+      validEndlessInput({ conditions: { mode: 'endless', endlessDifficulty: 'intermediate' }, creatorScore: 4 }),
+    )
+    expect(below.ok).toBe(false)
+    const atMin = validateCreateChallengeInput(
+      validEndlessInput({ conditions: { mode: 'endless', endlessDifficulty: 'intermediate' }, creatorScore: 5 }),
+    )
+    expect(atMin.ok).toBe(true)
+  })
+
+  it('上級は3連続未満ならinvalid、3以上ならok', () => {
+    const below = validateCreateChallengeInput(
+      validEndlessInput({ conditions: { mode: 'endless', endlessDifficulty: 'advanced' }, creatorScore: 2 }),
+    )
+    expect(below.ok).toBe(false)
+    const atMin = validateCreateChallengeInput(
+      validEndlessInput({ conditions: { mode: 'endless', endlessDifficulty: 'advanced' }, creatorScore: 3 }),
+    )
+    expect(atMin.ok).toBe(true)
+  })
+
+  it('conditions.endlessDifficultyが不正な値ならinvalid', () => {
+    const result = validateCreateChallengeInput(
+      validEndlessInput({ conditions: { mode: 'endless', endlessDifficulty: 'legendary' } }),
+    )
+    expect(result.ok).toBe(false)
+  })
+
+  it('creatorScoreが整数でなければinvalid（STREAK数は必ず整数）', () => {
+    const result = validateCreateChallengeInput(validEndlessInput({ creatorScore: 37.5 }))
+    expect(result.ok).toBe(false)
+  })
+
+  it('performanceを渡しても(null以外)invalid', () => {
+    const result = validateCreateChallengeInput(validEndlessInput({ performance: validPerformance() }))
+    expect(result.ok).toBe(false)
+  })
+
+  it('attempt入力: mode=endlessならscore（整数STREAK数）だけでok、performance不要', () => {
+    const result = validateCreateChallengeAttemptInput(
+      { playerId: 'pid-challenger-1', nickname: '挑戦者太郎', avatar: { kind: 'preset', iconId: 'star' }, equippedTitle: null, score: 38 },
+      'challenge-1',
+      'endless',
+    )
+    expect(result.ok).toBe(true)
+    expect(result.value?.performance).toBeNull()
+    expect(result.value?.score).toBe(38)
+  })
+
+  it('attempt入力: mode=endlessでscoreが整数でなければinvalid', () => {
+    const result = validateCreateChallengeAttemptInput(
+      { playerId: 'pid-challenger-1', nickname: '挑戦者太郎', avatar: { kind: 'preset', iconId: 'star' }, equippedTitle: null, score: 38.5 },
+      'challenge-1',
+      'endless',
+    )
+    expect(result.ok).toBe(false)
   })
 })
 

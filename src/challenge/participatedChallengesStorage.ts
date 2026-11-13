@@ -8,8 +8,8 @@
  * 「保存方式を画面から隠す」方針）。
  */
 const PARTICIPATED_CHALLENGE_IDS_KEY = 'dopagaki:participatedChallengeIdsV1'
-/** 無料ユーザーは直近10件のみ表示する既存方針に合わせ、保持件数自体もここで揃える。 */
-const MAX_STORED_IDS = 10
+/** Ver.6 Phase 8: 無料ユーザーは直近5件のみ表示する確定仕様に合わせ、10→5へ変更した。 */
+const MAX_STORED_IDS = 5
 
 function readIds(): string[] {
   try {

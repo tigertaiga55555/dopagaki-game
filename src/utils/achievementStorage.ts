@@ -103,6 +103,37 @@ export function checkFinalQuestionAchievement(reached490: boolean): AchievementI
   return unlocked
 }
 
+/**
+ * Ver.6 Phase 8（ENDLESS Challenge）: 挑戦者としてENDLESS ChallengeにWINしたときに呼ぶ
+ * （ChallengeResultScreen.tsxから、mode==='endless'かつattempt.result==='win'の場合のみ）。
+ * 通常ENDLESSの連続正解実績（checkEndlessAchievements）とは完全に別の条件種別を見るため、
+ * 通常プレイからこの実績が解除されることは構造的にない。
+ */
+export function checkEndlessChallengeWinAchievement(won: boolean): AchievementId[] {
+  if (!won) return []
+  const unlocked: AchievementId[] = []
+  for (const def of ACHIEVEMENT_DEFS) {
+    if (def.unlockCondition.type !== 'endlessChallengeWin') continue
+    if (unlockAchievement(def.id)) unlocked.push(def.id)
+  }
+  return unlocked
+}
+
+/**
+ * Ver.6 Phase 8（ENDLESS Challenge）: ホストとして自分のENDLESS Challengeの防衛
+ * （挑戦者がLOSEまたはDRAW＝ホスト視点でWIN）に成功したときに呼ぶ
+ * （ChallengeHistoryScreen.tsxから、ホスト本人がmode==='endless'の履歴を開いたときのみ）。
+ */
+export function checkEndlessChallengeDefenseAchievement(defended: boolean): AchievementId[] {
+  if (!defended) return []
+  const unlocked: AchievementId[] = []
+  for (const def of ACHIEVEMENT_DEFS) {
+    if (def.unlockCondition.type !== 'endlessChallengeDefense') continue
+    if (unlockAchievement(def.id)) unlocked.push(def.id)
+  }
+  return unlocked
+}
+
 export function isTitleUnlocked(titleId: TitleId): boolean {
   const title = TITLE_DEFS.find((t) => t.id === titleId)
   if (!title) return false

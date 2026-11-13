@@ -1,6 +1,12 @@
+import { useState } from 'react'
 import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
 import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
 import { ENDLESS_THEME } from '../config/endlessTheme'
+import { buildCreateEndlessChallengeInput } from '../challenge/endlessChallenge'
+import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSource'
+import { trackChallengeCreated } from '../utils/analytics'
+import { getProfile } from '../utils/profileStorage'
+import type { ChallengeProblemSetItem, ChallengeRecord } from '../challenge/types'
 import type { AchievementId, EndlessDifficulty } from '../types'
 
 interface Props {
@@ -12,6 +18,10 @@ interface Props {
   onRetry: () => void
   onChangeDifficulty: () => void
   onHome: () => void
+  /** Ver.6 Phase 8（ENDLESS Challenge）: このプレイで実際に出題された問題列（挑戦状のproblemSetに使う）。 */
+  recordedProblemSet: ChallengeProblemSetItem[]
+  /** Ver.6 Phase 8: 「挑戦状を送る」が成功した際に呼ばれる（既存ResultScreen.tsxと同じ契約）。 */
+  onChallengeSent?: (challenge: ChallengeRecord) => void
 }
 
 /**
@@ -31,8 +41,45 @@ export function EndlessResultScreen({
   onRetry,
   onChangeDifficulty,
   onHome,
+  recordedProblemSet,
+  onChallengeSent,
 }: Props) {
   const theme = ENDLESS_THEME[difficulty]
+  const [challengeBusy, setChallengeBusy] = useState(false)
+  const [challengeError, setChallengeError] = useState(false)
+  const profile = getProfile()
+  const challengeInput = buildCreateEndlessChallengeInput(
+    { playerId: profile.playerId, nickname: profile.nickname, icon: profile.avatar, equippedTitleId: profile.equippedTitleId },
+    difficulty,
+    score,
+    { version: 1, items: recordedProblemSet },
+  )
+
+  /**
+   * Ver.6 Phase 8（ENDLESS Challenge）: 「この記録で挑戦状を送る」。既存ResultScreen.tsxの
+   * handleSendChallengeと同じ流れ（サーバーが実際に保存した正規のChallengeRecordを
+   * 受け取ってからonChallengeSentを呼ぶ）。最低STREAK数未満の場合はchallengeInputが
+   * nullになり、ボタン自体を表示しない（buildCreateEndlessChallengeInput参照）。
+   */
+  async function handleSendChallenge() {
+    if (challengeBusy || !challengeInput || !onChallengeSent) return
+    setChallengeBusy(true)
+    setChallengeError(false)
+    try {
+      const res = await remoteChallengeDataSource.createChallenge(challengeInput)
+      if (res.ok) {
+        trackChallengeCreated(challengeInput.mode)
+        onChallengeSent(res.value)
+      } else {
+        setChallengeError(true)
+      }
+    } catch {
+      setChallengeError(true)
+    } finally {
+      setChallengeBusy(false)
+    }
+  }
+
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-8 px-6 py-10 text-center">
       <AchievementUnlockBanner newlyUnlocked={newlyUnlockedAchievements} />
@@ -56,6 +103,20 @@ export function EndlessResultScreen({
         )}
         <p className="text-xs font-bold tabular-nums text-white/50">BEST {best}</p>
       </div>
+
+      {challengeInput && onChallengeSent && (
+        <div className="flex w-full max-w-xs flex-col items-center gap-2">
+          <p className={`text-sm font-black tracking-widest ${theme.textClass}`}>{score}連続を超えろ</p>
+          <button
+            onClick={handleSendChallenge}
+            disabled={challengeBusy}
+            className="w-full rounded-2xl bg-gradient-to-b from-amber-400 to-orange-500 py-3.5 text-sm font-black text-[#2a1200] shadow-[0_5px_0_0_rgba(154,52,18,0.8)] transition-transform active:translate-y-1 active:shadow-[0_1px_0_0_rgba(154,52,18,0.8)] disabled:opacity-60"
+          >
+            {challengeBusy ? '挑戦状を作成中…' : '⚔️ この記録で挑戦状を送る'}
+          </button>
+          {challengeError && <p className="text-[10px] font-bold text-white/50">挑戦状の作成に失敗しました。もう一度お試しください。</p>}
+        </div>
+      )}
 
       <div className="flex w-full max-w-xs flex-col gap-3">
         <button

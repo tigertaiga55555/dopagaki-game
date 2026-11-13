@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react'
 import { resolveAvatarEmoji } from '../config/profileConfig'
 import { TITLE_DEFS_BY_ID } from '../config/titles'
 import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSource'
+import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
+import { ENDLESS_THEME } from '../config/endlessTheme'
 import { trackChallengeOpened } from '../utils/analytics'
 import type { ChallengeApiError, ChallengeRecord } from '../challenge/types'
+import type { EndlessDifficulty } from '../types'
 
 interface Props {
   challengeId: string
@@ -17,6 +20,7 @@ const MODE_LABEL: Record<ChallengeRecord['mode'], string> = {
   normal: '通常プレイ（0〜120%）',
   finalTrial: 'FINAL DOPA TRIAL（120〜200%）',
   challenge500: 'LIMIT BREAK（200〜500%）',
+  endless: 'ENDLESS',
 }
 
 type LoadState = { status: 'loading' } | { status: 'error'; error: ChallengeApiError } | { status: 'ready'; challenge: ChallengeRecord }
@@ -76,6 +80,9 @@ export function ChallengeReceiveScreen({ challengeId, onAccept, onHome, onViewHi
 
   const { challenge } = state
   const equippedTitle = challenge.creatorEquippedTitle ? TITLE_DEFS_BY_ID[challenge.creatorEquippedTitle] : null
+  const isEndless = challenge.mode === 'endless'
+  const endlessDifficulty = challenge.conditions.endlessDifficulty as EndlessDifficulty | undefined
+  const endlessTheme = endlessDifficulty ? ENDLESS_THEME[endlessDifficulty] : null
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 py-10 text-center">
@@ -88,15 +95,38 @@ export function ChallengeReceiveScreen({ challengeId, onAccept, onHome, onViewHi
         </div>
         <p className="text-lg font-black text-white">{challenge.creatorNickname}</p>
         {equippedTitle && <p className="text-xs font-bold tracking-widest text-fuchsia-300/90">{equippedTitle.name}</p>}
-        <p className="text-[10px] font-black tracking-widest text-white/40">{MODE_LABEL[challenge.mode]}</p>
-        <p className="text-4xl font-black tabular-nums text-amber-300">{challenge.creatorScore}％</p>
+
+        {isEndless && endlessDifficulty && endlessTheme ? (
+          <>
+            <p className="text-[10px] font-black tracking-widest text-white/40">
+              ENDLESS ・ {ENDLESS_DIFFICULTY_LABEL[endlessDifficulty]} ・{' '}
+              <span className={endlessTheme.textClass}>{endlessTheme.mood}</span>
+            </p>
+            <p className="text-[10px] font-black tracking-widest text-white/40">TARGET</p>
+            <p className={`text-4xl font-black tabular-nums ${endlessTheme.textClass}`}>{challenge.creatorScore}連続</p>
+          </>
+        ) : (
+          <>
+            <p className="text-[10px] font-black tracking-widest text-white/40">{MODE_LABEL[challenge.mode]}</p>
+            <p className="text-4xl font-black tabular-nums text-amber-300">{challenge.creatorScore}％</p>
+          </>
+        )}
       </div>
 
-      <p className="text-lg font-black tracking-widest text-amber-300">この記録を超えろ</p>
+      {isEndless ? (
+        <>
+          <p className="text-lg font-black tracking-widest text-amber-300">この連続正解数を超えろ</p>
+          <p className="w-full max-w-xs text-[11px] font-bold leading-relaxed text-white/50">
+            {challenge.creatorScore + 1}連続正解でWIN　{challenge.creatorScore}連続ならDRAW
+          </p>
+        </>
+      ) : (
+        <p className="text-lg font-black tracking-widest text-amber-300">この記録を超えろ</p>
+      )}
 
-      {challenge.performance && (
+      {!isEndless && challenge.performance && (
         <p className="w-full max-w-xs text-[10px] font-bold leading-relaxed text-white/40">
-          最終DOPA%が同じ場合、通常獲得DOPA%→正答率→最大COMBO→反応速度中央値の順で判定します
+          最終DOPA%が同じ場合、通常獲得DOPA%→正答率→最大COMBOの順で判定します（完全同値はDRAW）
         </p>
       )}
 

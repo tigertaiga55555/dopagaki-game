@@ -107,11 +107,11 @@ export function createD1ChallengeRepository(db: D1Database): ChallengeRepository
           JSON.stringify(input.conditions),
           input.creatorScore,
           createdAt,
-          input.performance.finalDopaPercent,
-          input.performance.baseDopaPercent,
-          input.performance.accuracy,
-          input.performance.maxCombo,
-          input.performance.medianCorrectReactionMs,
+          input.performance?.finalDopaPercent ?? null,
+          input.performance?.baseDopaPercent ?? null,
+          input.performance?.accuracy ?? null,
+          input.performance?.maxCombo ?? null,
+          input.performance?.medianCorrectReactionMs ?? null,
         )
         .run()
 
@@ -146,7 +146,7 @@ export interface ChallengeAttemptRepository {
     id: string,
     createdAt: number,
     attemptNumber: number,
-    result: 'win' | 'lose',
+    result: 'win' | 'lose' | 'draw',
     decidedBy: ChallengeDecidedBy,
     input: CreateChallengeAttemptInput,
   ): Promise<ChallengeAttemptRecord>
@@ -175,7 +175,7 @@ export interface ChallengeAttemptRepository {
   getMyAggregatesByChallengeIds(
     challengeIds: string[],
     playerId: string,
-  ): Promise<Record<string, { attemptCount: number; latestResult: 'win' | 'lose' }>>
+  ): Promise<Record<string, { attemptCount: number; latestResult: 'win' | 'lose' | 'draw' }>>
 }
 
 interface ChallengeAttemptRow {
@@ -219,7 +219,7 @@ function attemptRowToRecord(row: ChallengeAttemptRow): ChallengeAttemptRecord {
       row.icon_kind === 'remoteCustom' ? { kind: 'remoteCustom', url: row.icon_value } : { kind: 'preset', iconId: row.icon_value as never },
     equippedTitle: row.equipped_title,
     score: row.score,
-    result: row.result as 'win' | 'lose',
+    result: row.result as 'win' | 'lose' | 'draw',
     attemptNumber: row.attempt_number,
     createdAt: row.created_at,
     performance: attemptRowToPerformance(row),
@@ -258,11 +258,11 @@ export function createD1ChallengeAttemptRepository(db: D1Database): ChallengeAtt
           result,
           attemptNumber,
           createdAt,
-          input.performance.finalDopaPercent,
-          input.performance.baseDopaPercent,
-          input.performance.accuracy,
-          input.performance.maxCombo,
-          input.performance.medianCorrectReactionMs,
+          input.performance?.finalDopaPercent ?? null,
+          input.performance?.baseDopaPercent ?? null,
+          input.performance?.accuracy ?? null,
+          input.performance?.maxCombo ?? null,
+          input.performance?.medianCorrectReactionMs ?? null,
           decidedBy,
         )
         .run()
@@ -334,12 +334,12 @@ export function createD1ChallengeAttemptRepository(db: D1Database): ChallengeAtt
 
       // created_at昇順で畳み込むため、各challenge_idについて最後に上書きされたresultが
       // 自動的に「最新」になる（ウィンドウ関数を使わずに1クエリで済ませるための方針）。
-      const aggregates: Record<string, { attemptCount: number; latestResult: 'win' | 'lose' }> = {}
+      const aggregates: Record<string, { attemptCount: number; latestResult: 'win' | 'lose' | 'draw' }> = {}
       for (const row of result.results ?? []) {
         const existing = aggregates[row.challenge_id]
         aggregates[row.challenge_id] = {
           attemptCount: (existing?.attemptCount ?? 0) + 1,
-          latestResult: row.result as 'win' | 'lose',
+          latestResult: row.result as 'win' | 'lose' | 'draw',
         }
       }
       return aggregates

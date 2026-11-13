@@ -26,7 +26,16 @@ export function formatAccuracyPercent(accuracy: number): string {
  */
 export type ChallengeViewerPerspective = 'challenger' | 'host'
 
-export function resultForViewer(challengerResult: 'win' | 'lose', perspective: ChallengeViewerPerspective): 'win' | 'lose' {
+/**
+ * Ver.6 Phase 8（通常Challengeの勝敗ルール更新）: 'draw'を追加。挑戦者WIN→ホストLOSE、
+ * 挑戦者LOSE→ホストWINの反転は従来どおりだが、DRAWはどちらの視点でもDRAWのまま
+ * （「ホスト防衛」という意味づけ自体を廃止したため、視点による特別扱いが不要になった）。
+ */
+export function resultForViewer(
+  challengerResult: 'win' | 'lose' | 'draw',
+  perspective: ChallengeViewerPerspective,
+): 'win' | 'lose' | 'draw' {
+  if (challengerResult === 'draw') return 'draw'
   if (perspective === 'challenger') return challengerResult
   return challengerResult === 'win' ? 'lose' : 'win'
 }
@@ -39,23 +48,24 @@ const DECIDED_BY_LABEL: Record<ChallengeDecidedBy, string> = {
   medianCorrectReactionMs: '反応速度',
   exactTie: '完全同値',
   legacyScoreOnly: '記録(DOPA%)',
+  streak: '連続正解数',
 }
 
 /**
- * 「通常獲得DOPA%でWIN」「正答率でLOSE」等の理由文。decidedByが示す比較項目そのものは
- * 視点によって変わらない（事実は1つ）が、WIN/LOSEの表記はperspectiveに応じて反転する。
- * exactTieだけは視点ごとに自然な言い回しへ特別に差し替える
- * （挑戦者:「完全同値のためLOSE」／ホスト:「完全同値で防衛成功」）。
+ * Ver.6 Phase 8: 「通常獲得DOPA%でWIN」「正答率でLOSE」等の理由文。decidedByが示す
+ * 比較項目そのものは視点によって変わらない（事実は1つ）が、WIN/LOSEの表記はperspectiveに
+ * 応じて反転する。DRAW（exactTie、またはENDLESS Challengeの同STREAK数=streak）は
+ * どちらの視点でも同じ「DRAW」表記になる（以前の「ホスト防衛」表現は廃止した）。
  */
 export function describeDecidedBy(
   decidedBy: ChallengeDecidedBy,
-  challengerResult: 'win' | 'lose',
+  challengerResult: 'win' | 'lose' | 'draw',
   perspective: ChallengeViewerPerspective,
 ): string {
-  if (decidedBy === 'exactTie') {
-    return perspective === 'challenger' ? '完全同値のためLOSE' : '完全同値で防衛成功'
-  }
   const viewerResult = resultForViewer(challengerResult, perspective)
+  if (viewerResult === 'draw') {
+    return decidedBy === 'exactTie' ? '完全同値のためDRAW' : `${DECIDED_BY_LABEL[decidedBy]}が同数のためDRAW`
+  }
   return `${DECIDED_BY_LABEL[decidedBy]}で${viewerResult === 'win' ? 'WIN' : 'LOSE'}`
 }
 

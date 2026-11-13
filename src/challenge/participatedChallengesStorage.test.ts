@@ -42,13 +42,13 @@ describe('participatedChallengesStorage (Ver.6 Phase 5.4: 参加したChallenge�
     expect(getParticipatedChallengeIds()).toEqual(['id-1', 'id-2'])
   })
 
-  it('10件を超えると古いものから捨てられる（無料ユーザー直近10件表示の方針に合わせる）', () => {
-    for (let i = 0; i < 12; i++) {
+  it('Ver.6 Phase 8: 5件を超えると古いものから捨てられる（無料ユーザー直近5件表示の方針、10→5へ変更）', () => {
+    for (let i = 0; i < 7; i++) {
       addParticipatedChallengeId(`id-${i}`)
     }
     const ids = getParticipatedChallengeIds()
-    expect(ids.length).toBe(10)
-    expect(ids[0]).toBe('id-11')
+    expect(ids.length).toBe(5)
+    expect(ids[0]).toBe('id-6')
     expect(ids).not.toContain('id-0')
     expect(ids).not.toContain('id-1')
   })

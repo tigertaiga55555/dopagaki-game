@@ -3,6 +3,7 @@ import { BackButton } from '../components/BackButton'
 import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSource'
 import { getCreatedChallengeIds } from '../challenge/createdChallengesStorage'
 import { trackChallengeSentListView } from '../utils/analytics'
+import { ENDLESS_THEME } from '../config/endlessTheme'
 import type { ChallengeApiError, ChallengeRecord, ChallengeSummary } from '../challenge/types'
 
 interface Props {
@@ -21,6 +22,15 @@ const MODE_LABEL: Record<ChallengeSummary['mode'], string> = {
   normal: '通常プレイ',
   finalTrial: 'FINAL DOPA TRIAL',
   challenge500: 'LIMIT BREAK',
+  endless: 'ENDLESS',
+}
+
+/** Ver.6 Phase 8（ENDLESS Challenge）: 一覧では「ENDLESS EASY/HARD/DANGER」のように難易度まで表示する。 */
+function describeMode(summary: ChallengeSummary): string {
+  if (summary.mode === 'endless' && summary.endlessDifficulty) {
+    return `ENDLESS ${ENDLESS_THEME[summary.endlessDifficulty].mood}`
+  }
+  return MODE_LABEL[summary.mode]
 }
 
 /**
@@ -88,8 +98,10 @@ export function SentChallengesScreen({ onBack, onOpenHistory }: Props) {
                 className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left active:scale-95 disabled:opacity-60"
               >
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-black text-white">{summary.creatorScore}％への挑戦状</p>
-                  <span className="text-[10px] font-bold tracking-widest text-white/40">{MODE_LABEL[summary.mode]}</span>
+                  <p className="text-sm font-black text-white">
+                    {summary.mode === 'endless' ? `${summary.creatorScore}連続` : `${summary.creatorScore}％`}への挑戦状
+                  </p>
+                  <span className="text-[10px] font-bold tracking-widest text-white/40">{describeMode(summary)}</span>
                 </div>
                 <p className="mt-1 text-[11px] text-white/40">
                   挑戦者 {summary.challengerCount}人 ・ {summary.attemptCount}回挑戦 ・ 突破 {summary.clearedCount}人

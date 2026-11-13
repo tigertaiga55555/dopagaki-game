@@ -20,7 +20,8 @@ export interface HomeModeDef {
  * 色で瞬時に判別できる」ことを狙い、以前より明るく・濃く・発光感のある配色にした
  * （薄い・淡い印象を減らす）。
  *
- * - 🔥 DOPA RUSH（旧「通常」）：赤系を主役。
+ * - 🔥 DOPA RUSH（旧「通常」）：紫〜ネオンパープル系。実機QAで赤系が試されたが、
+ *   通常モードは従来の紫系の方がユーザー評価が高かったため、Phase 8で紫系へ戻した。
  * - ♾️ ENDLESS：黄色〜オレンジ〜金系。以前はトップ画面上で地味に見えていたため、
  *   3モード中もっとも目立つ配色にして良い、という明示指示に基づく。
  * - ⚔️ ONLINE BATTLE（旧「BATTLE」）：ユーザー評価の高い剣アイコン・赤〜ピンク系を維持。
@@ -31,8 +32,8 @@ export const HOME_MODES: HomeModeDef[] = [
     icon: '🔥',
     titleEn: 'DOPA RUSH',
     subJa: '0%から500%を目指せ',
-    gradientClass: 'bg-gradient-to-b from-red-500 to-red-700',
-    shadowClass: 'shadow-[0_8px_0_0_rgba(127,29,29,0.9),0_0_28px_4px_rgba(248,113,113,0.4)]',
+    gradientClass: 'bg-gradient-to-b from-fuchsia-500 to-purple-800',
+    shadowClass: 'shadow-[0_8px_0_0_rgba(88,28,135,0.9),0_0_28px_4px_rgba(216,180,254,0.45)]',
   },
   {
     id: 'endless',

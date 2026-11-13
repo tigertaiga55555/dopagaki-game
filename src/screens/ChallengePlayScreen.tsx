@@ -4,15 +4,22 @@ import { createStats } from '../engine/useRushGame'
 import { computeChallenge500Result } from '../engine/resultEngineV4'
 import type { Challenge500State } from '../engine/challenge500Engine'
 import { Challenge500Screen } from './Challenge500Screen'
+import { EndlessPlayScreen } from './EndlessPlayScreen'
 import { FinalTrialScreen } from './FinalTrialScreen'
 import { PlayScreen } from './PlayScreen'
 import { getBestPercent, getPlayCount } from '../utils/storage'
 import type { ChallengeRecord } from '../challenge/types'
-import type { FinalResultV4 } from '../types'
+import type { EndlessDifficulty, FinalResultV4 } from '../types'
 
 interface Props {
   challenge: ChallengeRecord
+  /** mode==='normal'|'finalTrial'|'challenge500'の場合に呼ばれる。 */
   onFinish: (result: FinalResultV4) => void
+  /**
+   * Ver.6 Phase 8（ENDLESS Challenge）: mode==='endless'の場合だけ呼ばれる。ENDLESSは
+   * DOPA%ベースのFinalResultV4を持たないため、記録したSTREAK数だけを渡す薄いパス。
+   */
+  onFinishEndless: (streak: number) => void
   onQuit: () => void
 }
 
@@ -32,7 +39,7 @@ interface Props {
  * ランダム出題を一切行わない（実際の出題ロジックの変更はしない。問題の供給元を
  * 差し替えるだけ）。
  */
-export function ChallengePlayScreen({ challenge, onFinish, onQuit }: Props) {
+export function ChallengePlayScreen({ challenge, onFinish, onFinishEndless, onQuit }: Props) {
   const [challenge500BaseResult] = useState<FinalResultV4>(() => ({
     percent: 200,
     rawPercent: 200,
@@ -65,14 +72,32 @@ export function ChallengePlayScreen({ challenge, onFinish, onQuit }: Props) {
     )
   }
 
-  // mode === 'challenge500'
+  if (challenge.mode === 'challenge500') {
+    return (
+      <Challenge500Screen
+        onQuit={onQuit}
+        replayQuestions={challenge.problemSet.items}
+        onFinish={(state: Challenge500State, recordedProblemSet, performanceStats) => {
+          onFinish(computeChallenge500Result(state, challenge500BaseResult, true, recordedProblemSet, performanceStats))
+        }}
+      />
+    )
+  }
+
+  // mode === 'endless'（Ver.6 Phase 8: ENDLESS Challenge）。
+  // qaMode: true は、挑戦者の記録が公式ENDLESS BEST/Ranking/Achievementへ絶対に
+  // 反映されないようにするための既存の遮断機構（useEndlessGame.ts参照）。
+  // targetStreakにホストのcreatorScore（STREAK数）を渡すと、それを超えた瞬間に
+  // 即WIN終了する（そのまま記録を伸ばし続けるモードにはしない）。
+  const endlessDifficulty = challenge.conditions.endlessDifficulty as EndlessDifficulty
   return (
-    <Challenge500Screen
-      onQuit={onQuit}
+    <EndlessPlayScreen
+      difficulty={endlessDifficulty}
+      qaMode
       replayQuestions={challenge.problemSet.items}
-      onFinish={(state: Challenge500State, recordedProblemSet, performanceStats) => {
-        onFinish(computeChallenge500Result(state, challenge500BaseResult, true, recordedProblemSet, performanceStats))
-      }}
+      targetStreak={challenge.creatorScore}
+      onFinish={(payload) => onFinishEndless(payload.score)}
+      onQuit={onQuit}
     />
   )
 }

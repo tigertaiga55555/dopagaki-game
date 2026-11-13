@@ -27,6 +27,11 @@ describe('homeConfig (Ver.6 Phase 7: ホーム画面モード名称・サブコ�
     expect(battle.subJa).toBe('世界中のドパガキと1対1')
   })
 
+  it('DOPA RUSH uses a purple/neon-purple gradient (Phase 8: reverted from red per user feedback)', () => {
+    const rush = HOME_MODES.find((m) => m.id === 'rush')!
+    expect(rush.gradientClass).toMatch(/purple|violet|fuchsia|indigo/)
+  })
+
   it('every mode defines a non-empty gradient and shadow class (brighter/bolder look requirement)', () => {
     for (const mode of HOME_MODES) {
       expect(mode.gradientClass.length).toBeGreaterThan(0)

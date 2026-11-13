@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { compareChallengePerformance, compareDopaPerformance, computeMedian } from './performance'
+import { compareChallengePerformance, compareDopaPerformance, compareEndlessStreak, computeMedian } from './performance'
 import type { ChallengePerformance } from './types'
 
 function perf(overrides: Partial<ChallengePerformance> = {}): ChallengePerformance {
@@ -56,7 +56,7 @@ describe('compareChallengePerformance (Ver.6 Phase 5.3: Challenge勝敗判定強
     expect(compareChallengePerformance(creator, challenger)).toEqual({ result: 'win', decidedBy: 'maxCombo' })
   })
 
-  it('ここまで同率ならmaxComboで決まる', () => {
+  it('ここまで同率ならmaxComboで決まる（反応速度は一切見ない）', () => {
     const creator = perf()
     const winner = perf({ maxCombo: 25 })
     const loser = perf({ maxCombo: 10 })
@@ -64,35 +64,35 @@ describe('compareChallengePerformance (Ver.6 Phase 5.3: Challenge勝敗判定強
     expect(compareChallengePerformance(creator, loser)).toEqual({ result: 'lose', decidedBy: 'maxCombo' })
   })
 
-  it('ここまで同率ならmedianCorrectReactionMsで決まる（速い=小さい方が勝ち）', () => {
-    const creator = perf()
-    const winner = perf({ medianCorrectReactionMs: 300 })
-    const loser = perf({ medianCorrectReactionMs: 900 })
-    expect(compareChallengePerformance(creator, winner)).toEqual({ result: 'win', decidedBy: 'medianCorrectReactionMs' })
-    expect(compareChallengePerformance(creator, loser)).toEqual({ result: 'lose', decidedBy: 'medianCorrectReactionMs' })
+  it('Ver.6 Phase 8: maxComboまで完全同値なら反応速度に関わらずDRAW・decidedBy=exactTie（ホスト防衛は廃止）', () => {
+    const creator = perf({ medianCorrectReactionMs: 300 })
+    // 反応速度だけ大きく違っても、Challengeの比較からは除外されているため一切見られない。
+    const challenger = perf({ medianCorrectReactionMs: 9999 })
+    expect(compareChallengePerformance(creator, challenger)).toEqual({ result: 'draw', decidedBy: 'exactTie' })
   })
 
-  it('反応速度もUI表示と同じ0.01秒精度で比較する（10ms未満の差では決着しない）', () => {
-    const creator = perf({ medianCorrectReactionMs: 540 })
-    const challenger = perf({ medianCorrectReactionMs: 544, maxCombo: 30 })
-    // 540msも544msも0.54秒表示で同じため、反応速度では決着せず、それより上位のmaxComboで既に決まっている。
-    expect(compareChallengePerformance(creator, challenger)).toEqual({ result: 'win', decidedBy: 'maxCombo' })
-  })
-
-  it('medianCorrectReactionMsがnull（比較可能な正解サンプルが無い）は最も遅い扱いになる', () => {
+  it('medianCorrectReactionMsがnullでもfinalDopaPercent〜maxComboが同値なら同じくDRAWになる（反応速度は比較に一切関与しない）', () => {
     const creator = perf({ medianCorrectReactionMs: null })
-    const challengerWithData = perf({ medianCorrectReactionMs: 100 })
-    expect(compareChallengePerformance(creator, challengerWithData)).toEqual({ result: 'win', decidedBy: 'medianCorrectReactionMs' })
+    const challenger = perf({ medianCorrectReactionMs: 100 })
+    expect(compareChallengePerformance(creator, challenger)).toEqual({ result: 'draw', decidedBy: 'exactTie' })
+  })
+})
 
-    const challengerAlsoNull = perf({ medianCorrectReactionMs: null })
-    // 両方nullなら差がつかず、完全同値としてLOSEになる。
-    expect(compareChallengePerformance(creator, challengerAlsoNull)).toEqual({ result: 'lose', decidedBy: 'exactTie' })
+describe('compareEndlessStreak (Ver.6 Phase 8: ENDLESS Challenge専用の単純なSTREAK比較)', () => {
+  it('挑戦者のSTREAKがホストを超えればwin', () => {
+    expect(compareEndlessStreak(37, 38)).toBe('win')
   })
 
-  it('5項目すべて完全に同値ならchallenger LOSE・decidedBy=exactTie（ホスト防衛）', () => {
-    const creator = perf()
-    const challenger = perf()
-    expect(compareChallengePerformance(creator, challenger)).toEqual({ result: 'lose', decidedBy: 'exactTie' })
+  it('挑戦者のSTREAKがホストと同数ならdraw（タイブレークなし）', () => {
+    expect(compareEndlessStreak(37, 37)).toBe('draw')
+  })
+
+  it('挑戦者のSTREAKがホスト未満ならlose', () => {
+    expect(compareEndlessStreak(37, 36)).toBe('lose')
+  })
+
+  it('ホスト0・挑戦者0でもdraw（境界値）', () => {
+    expect(compareEndlessStreak(0, 0)).toBe('draw')
   })
 })
 
@@ -113,12 +113,14 @@ describe('compareDopaPerformance (Ver.6 Phase 6: a/b/draw共有比較ロジッ�
     expect(compareDopaPerformance(a, b)).toEqual({ winner: 'draw', decidedBy: 'exactTie' })
   })
 
-  it('compareChallengePerformanceはcompareDopaPerformance(creator, challenger)のwinner=bをwin、draw/aをloseへ変換するだけの薄いラッパー', () => {
-    const creator = perf()
-    const challenger = perf({ finalDopaPercent: 430 })
-    const neutral = compareDopaPerformance(creator, challenger)
-    const legacy = compareChallengePerformance(creator, challenger)
-    expect(neutral.winner).toBe('b')
-    expect(legacy).toEqual({ result: 'win', decidedBy: neutral.decidedBy })
+  it('Ver.6 Phase 8: compareChallengePerformanceはcompareDopaPerformanceから独立している（反応速度だけが異なり他4項目が完全同値なケースで、Battle側はdecidedByがmedianCorrectReactionMsで決着するのに対し、Challenge側は反応速度を見ずにdrawになる）', () => {
+    const creator = perf({ medianCorrectReactionMs: 300 })
+    const challenger = perf({ medianCorrectReactionMs: 9999 })
+
+    const battleStyle = compareDopaPerformance(creator, challenger)
+    expect(battleStyle).toEqual({ winner: 'a', decidedBy: 'medianCorrectReactionMs' })
+
+    const challengeStyle = compareChallengePerformance(creator, challenger)
+    expect(challengeStyle).toEqual({ result: 'draw', decidedBy: 'exactTie' })
   })
 })

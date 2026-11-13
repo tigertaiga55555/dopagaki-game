@@ -9,7 +9,8 @@ import type {
   CreateChallengeAttemptInput,
   CreateChallengeInput,
 } from '../challenge/types'
-import type { AvatarRef } from '../types'
+import { ENDLESS_CHALLENGE_MIN_STREAK } from '../challenge/endlessChallenge'
+import type { AvatarRef, EndlessDifficulty } from '../types'
 
 const KNOWN_TITLE_IDS = new Set(TITLE_DEFS.map((t) => t.id))
 
@@ -32,7 +33,9 @@ const MAX_QUESTION_TYPE_LENGTH = 80
 const MAX_TAG_LENGTH = 40
 const MAX_SCORE = 100_000
 
-const CHALLENGE_MODES: ChallengeMode[] = ['normal', 'finalTrial', 'challenge500']
+const CHALLENGE_MODES: ChallengeMode[] = ['normal', 'finalTrial', 'challenge500', 'endless']
+
+const ENDLESS_DIFFICULTIES: EndlessDifficulty[] = ['beginner', 'intermediate', 'advanced']
 
 function isNonEmptyString(value: unknown, maxLength: number): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= maxLength
@@ -82,7 +85,12 @@ function validateProblemSet(value: unknown): value is ChallengeProblemSet {
 function validateConditions(value: unknown, mode: ChallengeMode): value is ChallengeConditions {
   if (typeof value !== 'object' || value === null) return false
   const conditions = value as Partial<ChallengeConditions>
-  return conditions.mode === mode
+  if (conditions.mode !== mode) return false
+  // Ver.6 Phase 8（ENDLESS Challenge）: mode==='endless'の場合のみendlessDifficultyが必須。
+  if (mode === 'endless') {
+    return typeof conditions.endlessDifficulty === 'string' && ENDLESS_DIFFICULTIES.includes(conditions.endlessDifficulty as EndlessDifficulty)
+  }
+  return true
 }
 
 /**
@@ -144,7 +152,24 @@ export function validateCreateChallengeInput(raw: unknown): ValidationResult {
   if (!isFiniteNumberInRange(input.creatorScore, 0, MAX_SCORE)) {
     return { ok: false, message: 'creatorScore is invalid' }
   }
-  if (!validateChallengePerformance(input.performance)) {
+
+  // Ver.6 Phase 8（ENDLESS Challenge）: ENDLESSにはDOPA%/正答率等のperformance概念が
+  // 存在しないため、modeで完全に分岐する。creatorScoreはホストのSTREAK数（整数）として扱い、
+  // 難易度ごとの最低作成条件（初級10／中級5／上級3）もここで強制する
+  // （結果画面のボタン非表示判定はクライアント側の親切さにすぎず、ここが最終防衛）。
+  if (input.mode === 'endless') {
+    if (input.performance !== null && input.performance !== undefined) {
+      return { ok: false, message: 'performance must be null for endless challenges' }
+    }
+    if (!Number.isInteger(input.creatorScore)) {
+      return { ok: false, message: 'creatorScore (host streak) must be an integer for endless challenges' }
+    }
+    const difficulty = (input.conditions as ChallengeConditions).endlessDifficulty as EndlessDifficulty
+    const minStreak = ENDLESS_CHALLENGE_MIN_STREAK[difficulty]
+    if ((input.creatorScore as number) < minStreak) {
+      return { ok: false, message: `creatorScore must be at least ${minStreak} for ${difficulty} endless challenges` }
+    }
+  } else if (!validateChallengePerformance(input.performance)) {
     return { ok: false, message: 'performance is invalid' }
   }
 
@@ -159,7 +184,7 @@ export function validateCreateChallengeInput(raw: unknown): ValidationResult {
       problemSet: input.problemSet as ChallengeProblemSet,
       conditions: input.conditions as ChallengeConditions,
       creatorScore: input.creatorScore as number,
-      performance: input.performance,
+      performance: input.mode === 'endless' ? null : (input.performance as ChallengePerformance),
     },
   }
 }
@@ -182,7 +207,12 @@ export interface AttemptValidationResult {
  * （index.ts）がcreatorScoreとの比較・countForPlayerの結果から確定させる
  * （クライアントが勝敗や挑戦回数を自己申告できる余地を一切残さない）。
  */
-export function validateCreateChallengeAttemptInput(raw: unknown, challengeId: string): AttemptValidationResult {
+/**
+ * Ver.6 Phase 8（ENDLESS Challenge）: modeを引数で受け取るようになった
+ * （呼び出し側=index.tsが、先にChallenge本体を取得してからこの検証を呼ぶ構成に変更した。
+ * ENDLESSかどうかでperformance必須/scoreの意味が変わるため、検証時点でmodeが必要）。
+ */
+export function validateCreateChallengeAttemptInput(raw: unknown, challengeId: string, mode: ChallengeMode): AttemptValidationResult {
   if (typeof raw !== 'object' || raw === null) {
     return { ok: false, message: 'request body must be a JSON object' }
   }
@@ -203,7 +233,13 @@ export function validateCreateChallengeAttemptInput(raw: unknown, challengeId: s
   if (!isFiniteNumberInRange(input.score, 0, MAX_SCORE)) {
     return { ok: false, message: 'score is invalid' }
   }
-  if (!validateChallengePerformance(input.performance)) {
+
+  if (mode === 'endless') {
+    // ENDLESS Challengeのscoreは挑戦者が実際に記録したSTREAK数（整数）。
+    if (!Number.isInteger(input.score)) {
+      return { ok: false, message: 'score (streak) must be an integer for endless challenges' }
+    }
+  } else if (!validateChallengePerformance(input.performance)) {
     return { ok: false, message: 'performance is invalid' }
   }
 
@@ -216,7 +252,7 @@ export function validateCreateChallengeAttemptInput(raw: unknown, challengeId: s
       avatar: input.avatar as AvatarRef,
       equippedTitle: input.equippedTitle ?? null,
       score: input.score as number,
-      performance: input.performance,
+      performance: mode === 'endless' ? null : (input.performance as ChallengePerformance),
     },
   }
 }

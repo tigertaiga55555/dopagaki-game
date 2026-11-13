@@ -63,6 +63,8 @@ export default function App() {
   const [challengeId] = useState(() => extractChallengeIdFromLocation())
   const [activeChallenge, setActiveChallenge] = useState<ChallengeRecord | null>(null)
   const [challengeResult, setChallengeResult] = useState<FinalResultV4 | null>(null)
+  /** Ver.6 Phase 8（ENDLESS Challenge）: mode==='endless'の挑戦プレイ結果（STREAK数のみ、FinalResultV4は使わない）。 */
+  const [challengeEndlessStreak, setChallengeEndlessStreak] = useState<number | null>(null)
   const [challengePlayKey, setChallengePlayKey] = useState(0)
   // Ver.6 Phase 6（1対1リアルタイム対戦）: Battle専用の状態。通常ゲーム・Challengeとは
   // 完全に独立させる。初期roomCodeは/battle/:roomCodeを直接開いた場合だけ使う。
@@ -190,6 +192,12 @@ export default function App() {
     setScreen('challengeResult')
   }, [])
 
+  /** Ver.6 Phase 8（ENDLESS Challenge）: mode==='endless'専用の薄い完了パス（FinalResultV4を経由しない）。 */
+  const handleChallengeFinishEndless = useCallback((streak: number) => {
+    setChallengeEndlessStreak(streak)
+    setScreen('challengeResult')
+  }, [])
+
   const openChallengeHistory = useCallback((challenge: ChallengeRecord) => {
     setActiveChallenge(challenge)
     setScreen('challengeHistory')
@@ -280,6 +288,8 @@ export default function App() {
               best={endlessResult.best}
               isNewBest={endlessResult.isNewBest}
               newlyUnlockedAchievements={endlessResult.newlyUnlockedAchievements}
+              recordedProblemSet={endlessResult.recordedProblemSet}
+              onChallengeSent={handleChallengeSent}
               onRetry={() => startEndless(endlessDifficulty)}
               onChangeDifficulty={() => setScreen('endlessSelect')}
               onHome={quitToHome}
@@ -308,12 +318,19 @@ export default function App() {
           )}
           {screen === 'challengeSent' && activeChallenge && <ChallengeSentScreen challenge={activeChallenge} onDone={quitToHome} />}
           {screen === 'challengePlaying' && activeChallenge && (
-            <ChallengePlayScreen key={challengePlayKey} challenge={activeChallenge} onFinish={handleChallengeFinish} onQuit={quitToHome} />
+            <ChallengePlayScreen
+              key={challengePlayKey}
+              challenge={activeChallenge}
+              onFinish={handleChallengeFinish}
+              onFinishEndless={handleChallengeFinishEndless}
+              onQuit={quitToHome}
+            />
           )}
-          {screen === 'challengeResult' && activeChallenge && challengeResult && (
+          {screen === 'challengeResult' && activeChallenge && (challengeResult || challengeEndlessStreak !== null) && (
             <ChallengeResultScreen
               challenge={activeChallenge}
-              myResult={challengeResult}
+              myResult={challengeResult ?? undefined}
+              myEndlessStreak={challengeEndlessStreak ?? undefined}
               onRetry={handleChallengeRetry}
               onHome={quitToHome}
               onViewHistory={() => openChallengeHistory(activeChallenge)}

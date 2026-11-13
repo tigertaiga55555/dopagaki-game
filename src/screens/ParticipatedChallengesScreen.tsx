@@ -6,6 +6,7 @@ import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSourc
 import { getParticipatedChallengeIds } from '../challenge/participatedChallengesStorage'
 import { trackChallengeParticipatedListView } from '../utils/analytics'
 import { getOrCreatePlayerId } from '../utils/profileStorage'
+import { ENDLESS_THEME } from '../config/endlessTheme'
 import type { ChallengeApiError, ChallengeRecord, ParticipatedChallengeSummary } from '../challenge/types'
 
 interface Props {
@@ -24,6 +25,15 @@ const MODE_LABEL: Record<ParticipatedChallengeSummary['mode'], string> = {
   normal: '通常プレイ',
   finalTrial: 'FINAL DOPA TRIAL',
   challenge500: 'LIMIT BREAK',
+  endless: 'ENDLESS',
+}
+
+/** Ver.6 Phase 8（ENDLESS Challenge）: 一覧では「ENDLESS EASY/HARD/DANGER」のように難易度まで表示する。 */
+function describeMode(summary: ParticipatedChallengeSummary): string {
+  if (summary.mode === 'endless' && summary.endlessDifficulty) {
+    return `ENDLESS ${ENDLESS_THEME[summary.endlessDifficulty].mood}`
+  }
+  return MODE_LABEL[summary.mode]
 }
 
 /**
@@ -104,15 +114,19 @@ export function ParticipatedChallengesScreen({ onBack, onOpenHistory }: Props) {
                       <p className="truncate text-sm font-black text-white">{summary.creatorNickname}への挑戦</p>
                       {title && <p className="truncate text-[10px] font-bold text-fuchsia-300/80">{title.name}</p>}
                     </div>
-                    <span className="text-[10px] font-bold tracking-widest text-white/40">{MODE_LABEL[summary.mode]}</span>
+                    <span className="text-[10px] font-bold tracking-widest text-white/40">{describeMode(summary)}</span>
                   </div>
                   <p className="mt-1.5 flex items-center gap-2 text-[11px] text-white/40">
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
-                        summary.myLatestResult === 'win' ? 'bg-amber-400/20 text-amber-300' : 'bg-white/10 text-white/50'
+                        summary.myLatestResult === 'win'
+                          ? 'bg-amber-400/20 text-amber-300'
+                          : summary.myLatestResult === 'draw'
+                            ? 'bg-white/15 text-white/70'
+                            : 'bg-white/10 text-white/50'
                       }`}
                     >
-                      最新: {summary.myLatestResult === 'win' ? 'WIN' : 'LOSE'}
+                      最新: {summary.myLatestResult === 'win' ? 'WIN' : summary.myLatestResult === 'draw' ? 'DRAW' : 'LOSE'}
                     </span>
                     <span>{summary.myAttemptCount}回挑戦</span>
                   </p>

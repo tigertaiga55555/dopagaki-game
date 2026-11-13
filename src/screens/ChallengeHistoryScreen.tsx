@@ -5,13 +5,15 @@ import {
   BASE_DOPA_PERCENT_NOTE,
   describeDecidedBy,
   formatAccuracyPercent,
-  formatReactionSeconds,
   resultForViewer,
   type ChallengeViewerPerspective,
 } from '../challenge/formatPerformance'
+import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
 import { trackChallengeHistoryView } from '../utils/analytics'
+import { checkEndlessChallengeDefenseAchievement } from '../utils/achievementStorage'
 import { getOrCreatePlayerId } from '../utils/profileStorage'
-import type { ChallengeApiError, ChallengeAttemptRecord, ChallengeRecord } from '../challenge/types'
+import type { ChallengeApiError, ChallengeAttemptRecord, ChallengeMode, ChallengeRecord } from '../challenge/types'
+import type { AchievementId } from '../types'
 
 interface Props {
   challenge: ChallengeRecord
@@ -23,7 +25,8 @@ type LoadState =
   | { status: 'error'; error: ChallengeApiError }
   | { status: 'ready'; attempts: ChallengeAttemptRecord[]; truncated: boolean }
 
-const RESULT_LABEL: Record<ChallengeAttemptRecord['result'], string> = { win: 'WIN', lose: 'LOSE' }
+/** Ver.6 Phase 8: 通常Challengeの新しいDRAW仕様・ENDLESS Challengeの同STREAK数DRAWの両方で使う。 */
+const RESULT_LABEL: Record<ChallengeAttemptRecord['result'], string> = { win: 'WIN', lose: 'LOSE', draw: 'DRAW' }
 
 /**
  * Ver.6 Phase 5.2（Challenge機能完成）: Challengeの挑戦履歴画面。
@@ -40,6 +43,7 @@ const RESULT_LABEL: Record<ChallengeAttemptRecord['result'], string> = { win: 'W
  */
 export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
   const [state, setState] = useState<LoadState>({ status: 'loading' })
+  const [newlyUnlocked, setNewlyUnlocked] = useState<AchievementId[]>([])
   const viewerPlayerId = getOrCreatePlayerId()
   const isCreator = viewerPlayerId === challenge.creatorPlayerId
   // Ver.6 Phase 5.4（実機QA最終修正）: D1上のattempt.resultは常に挑戦者視点で保存されている。
@@ -58,6 +62,13 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
       if (cancelled) return
       if (res.ok) {
         setState({ status: 'ready', attempts: res.value.attempts, truncated: res.value.truncated })
+        // Ver.6 Phase 8（ENDLESS Challenge）: ホストが自分のENDLESS Challengeの履歴を開き、
+        // 誰か1人でも防衛できている（挑戦者視点でlose/draw＝ホスト視点でwin）ことが
+        // 確認できた時点で「終わらない門番」を解除する。
+        if (isCreator && challenge.mode === 'endless') {
+          const defended = res.value.attempts.some((a) => resultForViewer(a.result, 'host') === 'win')
+          setNewlyUnlocked(checkEndlessChallengeDefenseAchievement(defended))
+        }
       } else {
         setState({ status: 'error', error: res.error })
       }
@@ -106,6 +117,7 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
+      <AchievementUnlockBanner newlyUnlocked={newlyUnlocked} />
       <div className="flex items-center justify-between px-5 pt-4">
         <button onClick={onBack} className="rounded-full bg-white/10 px-4 py-1.5 text-xs font-bold text-white/70 active:scale-95">
           ← 戻る
@@ -115,17 +127,23 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
       </div>
 
       <div className="flex flex-1 flex-col items-center gap-3 px-5 py-4">
+        {challenge.mode === 'endless' && (
+          <div className="w-full max-w-sm rounded-2xl bg-white/5 px-4 py-3 text-center text-xs">
+            <p className="text-[10px] font-black tracking-widest text-white/40">TARGET</p>
+            <p className="text-lg font-black tabular-nums text-amber-300">{challenge.creatorScore}連続</p>
+          </div>
+        )}
+
         {challenge.performance && (
           <div className="w-full max-w-sm space-y-1 rounded-2xl bg-white/5 px-4 py-3 text-xs">
             <p className="mb-1 text-[10px] font-black tracking-widest text-white/40">
               {isCreator ? 'あなたの基準記録' : 'ホストの基準記録'}
             </p>
-            <div className="grid grid-cols-5 gap-1 text-center">
+            <div className="grid grid-cols-4 gap-1 text-center">
               <BaselineStat label="最終%" value={`${challenge.performance.finalDopaPercent}`} />
               <BaselineStat label="通常%" value={`${challenge.performance.baseDopaPercent}`} />
               <BaselineStat label="正答率" value={formatAccuracyPercent(challenge.performance.accuracy)} />
               <BaselineStat label="COMBO" value={`${challenge.performance.maxCombo}`} />
-              <BaselineStat label="反応" value={formatReactionSeconds(challenge.performance.medianCorrectReactionMs)} />
             </div>
             <p className="pt-0.5 text-center text-[9px] text-white/30">{BASE_DOPA_PERCENT_NOTE}</p>
           </div>
@@ -145,7 +163,11 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
                     <p className="flex-1 truncate text-sm font-black text-white">{group.nickname}</p>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
-                        latestForHost === 'win' ? 'bg-amber-400/20 text-amber-300' : 'bg-white/10 text-white/50'
+                        latestForHost === 'win'
+                          ? 'bg-amber-400/20 text-amber-300'
+                          : latestForHost === 'draw'
+                            ? 'bg-white/15 text-white/70'
+                            : 'bg-white/10 text-white/50'
                       }`}
                     >
                       最新: {RESULT_LABEL[latestForHost]}
@@ -157,7 +179,7 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
                   </p>
                   <div className="mt-2 flex flex-col gap-1.5 border-t border-white/5 pt-2">
                     {group.rows.map((r, i) => (
-                      <AttemptDetailRow key={r.id} attempt={r} index={i + 1} perspective={perspective} />
+                      <AttemptDetailRow key={r.id} attempt={r} index={i + 1} perspective={perspective} mode={challenge.mode} />
                     ))}
                   </div>
                 </div>
@@ -170,13 +192,13 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
           <div className="flex w-full max-w-sm flex-col gap-2">
             {attempts.map((row) => (
               <div key={row.id} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                <AttemptDetailRow attempt={row} index={row.attemptNumber} perspective={perspective} />
+                <AttemptDetailRow attempt={row} index={row.attemptNumber} perspective={perspective} mode={challenge.mode} />
               </div>
             ))}
           </div>
         )}
 
-        {truncated && <p className="mt-2 text-[10px] font-bold text-white/30">直近10件のみ表示しています（DOPA PASSで全履歴表示予定）</p>}
+        {truncated && <p className="mt-2 text-[10px] font-bold text-white/30">直近5件のみ表示しています（DOPA PASSで全履歴表示予定）</p>}
       </div>
     </div>
   )
@@ -192,32 +214,37 @@ function BaselineStat({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * Ver.6 Phase 5.3（Challenge勝敗判定強化）: 1回ぶんのattemptの詳細（WIN/LOSE・5指標・
+ * Ver.6 Phase 5.3（Challenge勝敗判定強化）: 1回ぶんのattemptの詳細（WIN/LOSE/DRAW・4指標・
  * 勝敗理由）。作成者視点（グループ内の各行）・挑戦者本人視点（自分の履歴）の両方で
  * 同じコンポーネントを使う（item 14: 「挑戦者本人の履歴でも、同じ詳細を見られて構いません」）。
- * performance/decidedByが無い（このmigration以前のattempt）場合は、score・resultだけの
- * 簡易表示にフォールバックする。
+ * performance/decidedByが無い（このmigration以前のattempt、またはmode==='endless'）場合は、
+ * score・resultだけの簡易表示にフォールバックする。
  *
  * Ver.6 Phase 5.4（実機QA最終修正）: attempt.result自体は常に挑戦者視点（DBの値を書き換えない）
  * ため、perspectiveに応じて表示直前にだけ反転する（resultForViewer/describeDecidedBy参照）。
+ * Ver.6 Phase 8: 反応速度中央値は通常Challengeの勝敗判定から除外されたため、詳細行からも削除した
+ * （Battle側のPerformanceComparisonTableは別コンポーネントのため影響しない）。
+ * mode==='endless'の場合はscoreをDOPA%ではなくSTREAK数として表示する。
  */
 function AttemptDetailRow({
   attempt,
   index,
   perspective,
+  mode,
 }: {
   attempt: ChallengeAttemptRecord
   index: number
   perspective: ChallengeViewerPerspective
+  mode: ChallengeMode
 }) {
   const viewerResult = resultForViewer(attempt.result, perspective)
-  const resultClass = viewerResult === 'win' ? 'text-amber-300' : 'text-white/50'
+  const resultClass = viewerResult === 'win' ? 'text-amber-300' : viewerResult === 'draw' ? 'text-white/70' : 'text-white/50'
 
-  if (!attempt.performance || !attempt.decidedBy) {
+  if (mode === 'endless' || !attempt.performance || !attempt.decidedBy) {
     return (
       <div className="flex items-center justify-between text-xs">
         <span className="text-white/50">{index}回目</span>
-        <span className="font-bold tabular-nums text-white">{attempt.score}％</span>
+        <span className="font-bold tabular-nums text-white">{mode === 'endless' ? `${attempt.score}連続` : `${attempt.score}％`}</span>
         <span className={`font-black ${resultClass}`}>{RESULT_LABEL[viewerResult]}</span>
       </div>
     )
@@ -231,8 +258,7 @@ function AttemptDetailRow({
       </div>
       <p className="mt-0.5 text-[10px] text-white/40">
         最終{attempt.performance.finalDopaPercent}% ・ 通常{attempt.performance.baseDopaPercent}% ・{' '}
-        {formatAccuracyPercent(attempt.performance.accuracy)} ・ COMBO{attempt.performance.maxCombo} ・{' '}
-        {formatReactionSeconds(attempt.performance.medianCorrectReactionMs)}
+        {formatAccuracyPercent(attempt.performance.accuracy)} ・ COMBO{attempt.performance.maxCombo}
       </p>
       <p className="mt-0.5 text-[10px] font-bold text-amber-200/80">
         {describeDecidedBy(attempt.decidedBy, attempt.result, perspective)}

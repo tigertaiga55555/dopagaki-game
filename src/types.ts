@@ -459,6 +459,13 @@ export type AchievementId =
   | 'endlessAdvanced10'
   | 'endlessAdvanced20'
   | 'endlessAdvanced30'
+  /**
+   * Ver.6 Phase 8（ENDLESS Challenge）: Challenge専用の実績2個。通常ENDLESSの連続正解
+   * 実績（endlessStreak系）とは完全に独立しており、通常プレイからは絶対に解除されない
+   * （Challenge経由の結果処理からのみ呼ばれる専用関数で解除する）。
+   */
+  | 'endlessChallengeFirstWin'
+  | 'endlessChallengeFirstDefense'
 
 /**
  * 実績の解除条件。
@@ -473,6 +480,10 @@ export type AchievementUnlockCondition =
   | { type: 'dopaPercent'; threshold: number }
   | { type: 'endlessStreak'; difficulty: EndlessDifficulty; threshold: number }
   | { type: 'challenge500FinalQuestion' }
+  /** Ver.6 Phase 8（ENDLESS Challenge）: 挑戦者として初めてENDLESS ChallengeにWINした。 */
+  | { type: 'endlessChallengeWin' }
+  /** Ver.6 Phase 8（ENDLESS Challenge）: ホストとして初めて自分のENDLESS Challengeの防衛（相手のLOSE/DRAW）に成功した。 */
+  | { type: 'endlessChallengeDefense' }
 
 /** 実績のカテゴリ（Achievement画面のALL/DOPA/ENDLESSフィルタに使う）。 */
 export type AchievementCategory = 'dopa' | 'endless'

@@ -2,15 +2,20 @@ import { useEffect, useState } from 'react'
 import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSource'
 import { describeDecidedBy } from '../challenge/formatPerformance'
 import { addParticipatedChallengeId } from '../challenge/participatedChallengesStorage'
+import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
 import { PerformanceComparisonTable } from '../components/PerformanceComparisonTable'
 import { trackChallengeWin } from '../utils/analytics'
+import { checkEndlessChallengeWinAchievement } from '../utils/achievementStorage'
 import { getProfile } from '../utils/profileStorage'
 import type { ChallengeApiError, ChallengeAttemptRecord, ChallengeRecord } from '../challenge/types'
-import type { FinalResultV4 } from '../types'
+import type { AchievementId, FinalResultV4 } from '../types'
 
 interface Props {
   challenge: ChallengeRecord
-  myResult: FinalResultV4
+  /** mode!=='endless'の場合は必須（DOPA%ベースのperformanceを含む）。 */
+  myResult?: FinalResultV4
+  /** Ver.6 Phase 8（ENDLESS Challenge）: mode==='endless'の場合は必須（記録したSTREAK数）。 */
+  myEndlessStreak?: number
   onRetry: () => void
   onHome: () => void
   onViewHistory: () => void
@@ -27,22 +32,54 @@ type SubmitState =
  * 返したサーバー確定のresultだけを表示する（クライアントが勝敗を自己申告できる
  * 余地を残さないユーザー指示を、画面側でも徹底する）。
  */
-export function ChallengeResultScreen({ challenge, myResult, onRetry, onHome, onViewHistory }: Props) {
+export function ChallengeResultScreen({ challenge, myResult, myEndlessStreak, onRetry, onHome, onViewHistory }: Props) {
   const [state, setState] = useState<SubmitState>({ status: 'submitting' })
+  const [newlyUnlocked, setNewlyUnlocked] = useState<AchievementId[]>([])
 
   useEffect(() => {
     let cancelled = false
 
     async function submit() {
       setState({ status: 'submitting' })
+      const profile = getProfile()
+
+      // Ver.6 Phase 8（ENDLESS Challenge）: ENDLESSにはDOPA%ベースのperformance概念が
+      // 存在しないため、記録したSTREAK数だけをscoreとして送る（performance=null）。
+      if (challenge.mode === 'endless') {
+        if (myEndlessStreak === undefined) {
+          setState({ status: 'error', error: 'internal_error' })
+          return
+        }
+        const res = await remoteChallengeDataSource.createAttempt(challenge.id, {
+          challengeId: challenge.id,
+          playerId: profile.playerId,
+          nickname: profile.nickname,
+          avatar: profile.avatar,
+          equippedTitle: profile.equippedTitleId,
+          score: myEndlessStreak,
+          performance: null,
+        })
+        if (cancelled) return
+        if (res.ok) {
+          setState({ status: 'done', attempt: res.value })
+          addParticipatedChallengeId(challenge.id)
+          if (res.value.result === 'win') {
+            trackChallengeWin(challenge.mode)
+            setNewlyUnlocked(checkEndlessChallengeWinAchievement(true))
+          }
+        } else {
+          setState({ status: 'error', error: res.error })
+        }
+        return
+      }
+
       // Ver.6 Phase 5.3（Challenge勝敗判定強化）: performanceが無ければ（通常は発生しない、
       // 新しい3エンジンのどの経路でも必ず計算されるが、念のための防御）推測値で埋めて
       // 送信せず、素直にエラー扱いにする。
-      if (!myResult.challengePerformance) {
+      if (!myResult?.challengePerformance) {
         setState({ status: 'error', error: 'internal_error' })
         return
       }
-      const profile = getProfile()
       const res = await remoteChallengeDataSource.createAttempt(challenge.id, {
         challengeId: challenge.id,
         playerId: profile.playerId,
@@ -97,19 +134,35 @@ export function ChallengeResultScreen({ challenge, myResult, onRetry, onHome, on
 
   const { attempt } = state
   const isWin = attempt.result === 'win'
+  const isDraw = attempt.result === 'draw'
+  const resultColorClass = isWin
+    ? 'text-amber-300 drop-shadow-[0_0_16px_rgba(251,191,36,0.75)]'
+    : isDraw
+      ? 'text-white/80'
+      : 'text-white/60'
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 py-10 text-center">
+      <AchievementUnlockBanner newlyUnlocked={newlyUnlocked} />
       <p className="text-xs font-black tracking-[0.3em] text-white/40">CHALLENGE RESULT</p>
-      <p
-        className={`anim-pop text-5xl font-black tracking-widest ${
-          isWin ? 'text-amber-300 drop-shadow-[0_0_16px_rgba(251,191,36,0.75)]' : 'text-white/60'
-        }`}
-      >
-        {isWin ? 'WIN' : 'LOSE'}
+      <p className={`anim-pop text-5xl font-black tracking-widest ${resultColorClass}`}>
+        {isWin ? 'WIN' : isDraw ? 'DRAW' : 'LOSE'}
       </p>
 
-      {challenge.performance && attempt.performance && attempt.decidedBy ? (
+      {challenge.mode === 'endless' ? (
+        // Ver.6 Phase 8（ENDLESS Challenge）: 反応速度等の比較は不要。ホストのSTREAK数と
+        // 自分のSTREAK数だけを一目で比較できるシンプルな表示にする。
+        <div className="w-full max-w-xs space-y-2 rounded-2xl bg-white/5 px-4 py-4 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-white/60">ホスト（{challenge.creatorNickname}）</span>
+            <span className="font-bold tabular-nums text-white">{challenge.creatorScore}連続</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-white/60">あなた</span>
+            <span className={`font-bold tabular-nums ${isWin ? 'text-amber-300' : 'text-white'}`}>{attempt.score}連続</span>
+          </div>
+        </div>
+      ) : challenge.performance && attempt.performance && attempt.decidedBy ? (
         <PerformanceComparisonTable
           leftLabel={challenge.creatorNickname}
           left={challenge.performance}
@@ -117,6 +170,7 @@ export function ChallengeResultScreen({ challenge, myResult, onRetry, onHome, on
           right={attempt.performance}
           decidedBy={attempt.decidedBy}
           reasonText={describeDecidedBy(attempt.decidedBy, attempt.result, 'challenger')}
+          showReactionTime={false}
         />
       ) : (
         // Ver.6 Phase 5.3: このmigration以前に作成されたChallenge（performance無し）への挑戦は、
@@ -128,7 +182,7 @@ export function ChallengeResultScreen({ challenge, myResult, onRetry, onHome, on
           </div>
           <div className="flex items-center justify-between">
             <span className="text-white/60">あなたの記録</span>
-            <span className={`font-bold tabular-nums ${isWin ? 'text-amber-300' : 'text-white'}`}>{myResult.percent}％</span>
+            <span className={`font-bold tabular-nums ${isWin ? 'text-amber-300' : 'text-white'}`}>{myResult?.percent}％</span>
           </div>
         </div>
       )}

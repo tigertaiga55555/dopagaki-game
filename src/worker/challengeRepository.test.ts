@@ -110,6 +110,23 @@ describe('createD1ChallengeRepository (Ver.6 Phase 5.1: Challenge D1リポジト
     const repo = createD1ChallengeRepository(db as never)
     expect(await repo.getByIds([])).toEqual([])
   })
+
+  it('Ver.6 Phase 8（ENDLESS Challenge）: mode=endless・performance=nullのChallengeを保存・復元できる', async () => {
+    const db = createFakeD1Database()
+    const repo = createD1ChallengeRepository(db as never)
+    const input = sampleInput({
+      mode: 'endless',
+      conditions: { mode: 'endless', endlessDifficulty: 'advanced' },
+      creatorScore: 37,
+      performance: null,
+    })
+    await repo.create('challenge-endless-1', 1700000000000, input)
+    const fetched = await repo.getById('challenge-endless-1')
+    expect(fetched?.mode).toBe('endless')
+    expect(fetched?.conditions).toEqual({ mode: 'endless', endlessDifficulty: 'advanced' })
+    expect(fetched?.creatorScore).toBe(37)
+    expect(fetched?.performance).toBeNull()
+  })
 })
 
 describe('createD1ChallengeAttemptRepository (Ver.6 Phase 5.2/5.3: challenge_attempts D1リポジトリ)', () => {
@@ -238,5 +255,25 @@ describe('createD1ChallengeAttemptRepository (Ver.6 Phase 5.2/5.3: challenge_att
     const db = createFakeD1Database()
     const repo = createD1ChallengeAttemptRepository(db as never)
     expect(await repo.getMyAggregatesByChallengeIds([], 'pid-me')).toEqual({})
+  })
+
+  it('Ver.6 Phase 8: result="draw"のattemptを保存・復元できる（通常Challengeの完全同値・ENDLESS Challengeの同STREAK数）', async () => {
+    const db = createFakeD1Database()
+    const repo = createD1ChallengeAttemptRepository(db as never)
+    const record = await repo.create('attempt-draw-1', 1700000001000, 1, 'draw', 'exactTie', sampleAttemptInput())
+    expect(record.result).toBe('draw')
+    const { rows } = await repo.list('challenge-1', { limit: 10 })
+    expect(rows[0].result).toBe('draw')
+  })
+
+  it('Ver.6 Phase 8（ENDLESS Challenge）: performance=null・score=STREAK数のattemptを保存・復元できる', async () => {
+    const db = createFakeD1Database()
+    const repo = createD1ChallengeAttemptRepository(db as never)
+    const input = sampleAttemptInput({ score: 38, performance: null })
+    const record = await repo.create('attempt-endless-1', 1700000001000, 1, 'win', 'streak', input)
+    expect(record).toEqual({ id: 'attempt-endless-1', createdAt: 1700000001000, attemptNumber: 1, result: 'win', decidedBy: 'streak', ...input })
+    const { rows } = await repo.list('challenge-1', { limit: 10 })
+    expect(rows[0].performance).toBeNull()
+    expect(rows[0].score).toBe(38)
   })
 })

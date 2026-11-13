@@ -1,4 +1,4 @@
-import type { AvatarRef, ChallengePerformance, ChallengeProblemSetItem } from '../types'
+import type { AvatarRef, ChallengePerformance, ChallengeProblemSetItem, EndlessDifficulty } from '../types'
 
 /**
  * Ver.6 Phase 5.1（Challengeバックエンド基盤）: クライアント（Worker API呼び出し側）と
@@ -14,8 +14,11 @@ import type { AvatarRef, ChallengePerformance, ChallengeProblemSetItem } from '.
  */
 export type { ChallengeProblemSetItem, ChallengePerformance }
 
-/** Challengeの元になったプレイモード。既存のFinalResultV4が持つ3つの経路に対応する。 */
-export type ChallengeMode = 'normal' | 'finalTrial' | 'challenge500'
+/**
+ * Challengeの元になったプレイモード。既存のFinalResultV4が持つ3つの経路に加え、
+ * Ver.6 Phase 8（ENDLESS Challenge）で'endless'を追加した。
+ */
+export type ChallengeMode = 'normal' | 'finalTrial' | 'challenge500' | 'endless'
 
 /** 保存形式のバージョン。将来問題データの形を変える場合はversionを上げて両対応する。 */
 export interface ChallengeProblemSet {
@@ -23,9 +26,14 @@ export interface ChallengeProblemSet {
   items: ChallengeProblemSetItem[]
 }
 
-/** プレイ条件。現時点ではmodeの重複保持のみ（将来、時間制限バリエーション等が増えたらここに追加する）。 */
+/**
+ * プレイ条件。現時点ではmodeの重複保持がほとんどだが、mode==='endless'の場合のみ
+ * endlessDifficultyが必須になる（初級/中級/上級でTARGETの意味・最低作成条件が変わるため）。
+ */
 export interface ChallengeConditions {
   mode: ChallengeMode
+  /** Ver.6 Phase 8（ENDLESS Challenge）: mode==='endless'の場合のみ必須。それ以外では未使用。 */
+  endlessDifficulty?: EndlessDifficulty
 }
 
 export interface ChallengeRecord {
@@ -43,24 +51,38 @@ export interface ChallengeRecord {
    * Ver.6 Phase 5.3（Challenge勝敗判定強化）: 作成者の基準performance。
    * このmigration以前に作成された既存Challengeにはnull（推測で埋めない）。
    * nullの場合、挑戦の勝敗判定はcreatorScoreだけを使った旧ルールにフォールバックする
-   * （src/worker/index.ts参照）。
+   * （src/worker/index.ts参照）。Ver.6 Phase 8（ENDLESS Challenge）: mode==='endless'の
+   * 場合は常にnull（ENDLESSにはDOPA%/正答率等のperformance概念が存在しないため。
+   * creatorScoreにホストのSTREAK数をそのまま入れる）。
    */
   performance: ChallengePerformance | null
 }
 
-/** 新規作成時は必ずperformanceを持つ（nullを許可しない）。 */
+/** 新規作成時、mode==='endless'以外は必ずperformanceを持つ（endlessのみnullを許可）。 */
 export type CreateChallengeInput = Omit<ChallengeRecord, 'id' | 'createdAt' | 'performance'> & {
-  performance: ChallengePerformance
+  performance: ChallengePerformance | null
 }
 
 /**
  * Ver.6 Phase 5.3（Challenge勝敗判定強化）: 勝敗を決めた比較項目。優先順位どおりに
- * finalDopaPercent→baseDopaPercent→accuracy→maxCombo→medianCorrectReactionMsで
- * 必ず比較し、ここまで全て同値なら'exactTie'（挑戦者LOSE＝作成者防衛）。
+ * finalDopaPercent→baseDopaPercent→accuracy→maxComboで必ず比較し、ここまで全て同値なら
+ * 'exactTie'（Ver.6 Phase 8で意味づけを変更：挑戦者LOSE＝作成者防衛 ではなく DRAW）。
  * 'legacyScoreOnly'は、作成者のChallengeがこのmigration以前のものでperformanceを
  * 持たない場合のみ使う、creatorScoreだけを使った旧ルールへのフォールバック。
+ * 'medianCorrectReactionMs'はVer.6 Phase 8より前に作成された既存attemptの表示にのみ
+ * 残る値で、新規attemptの比較には二度と使われない（通常Challengeの比較から反応速度を
+ * 除外したため）。'streak'はVer.6 Phase 8で追加：ENDLESS Challenge専用の比較
+ * （ホストSTREAK数 vs 挑戦者STREAK数の単純比較）で確定した場合に使う。
  */
-export type ChallengeDecidedBy = 'finalDopaPercent' | 'baseDopaPercent' | 'accuracy' | 'maxCombo' | 'medianCorrectReactionMs' | 'exactTie' | 'legacyScoreOnly'
+export type ChallengeDecidedBy =
+  | 'finalDopaPercent'
+  | 'baseDopaPercent'
+  | 'accuracy'
+  | 'maxCombo'
+  | 'medianCorrectReactionMs'
+  | 'exactTie'
+  | 'legacyScoreOnly'
+  | 'streak'
 
 export type ChallengeApiError = 'invalid_input' | 'not_found' | 'not_configured' | 'internal_error'
 
@@ -79,13 +101,16 @@ export interface ChallengeAttemptRecord {
   nickname: string
   avatar: AvatarRef
   equippedTitle: string | null
+  /** Ver.6 Phase 8（ENDLESS Challenge）: mode==='endless'の場合はscoreに挑戦者のSTREAK数をそのまま入れる。 */
   score: number
-  result: 'win' | 'lose'
+  /** Ver.6 Phase 8: 'draw'を追加（通常Challengeの完全同値、およびENDLESS Challengeの同STREAK数）。 */
+  result: 'win' | 'lose' | 'draw'
   attemptNumber: number
   createdAt: number
   /**
    * Ver.6 Phase 5.3: 挑戦者自身のperformance。クライアントの自己申告をサーバーが検証した
-   * うえで保存する。このmigration以前に作成された既存attemptにはnull。
+   * うえで保存する。このmigration以前に作成された既存attemptにはnull。Ver.6 Phase 8:
+   * mode==='endless'の場合は常にnull。
    */
   performance: ChallengePerformance | null
   /**
@@ -95,11 +120,11 @@ export interface ChallengeAttemptRecord {
   decidedBy: ChallengeDecidedBy | null
 }
 
-/** 新規submit時は必ずperformanceを持つ（nullを許可しない。result/decidedByはサーバーが確定するため入力に含めない）。 */
+/** 新規submit時、mode==='endless'以外は必ずperformanceを持つ（endlessのみnullを許可。result/decidedByはサーバーが確定するため入力に含めない）。 */
 export type CreateChallengeAttemptInput = Omit<
   ChallengeAttemptRecord,
   'id' | 'createdAt' | 'attemptNumber' | 'result' | 'decidedBy' | 'performance'
-> & { performance: ChallengePerformance }
+> & { performance: ChallengePerformance | null }
 
 /**
  * 履歴一覧の1件。GET /api/challenges/:id/attemptsが返す形。
@@ -156,6 +181,8 @@ export interface ChallengeSummary {
   attemptCount: number
   /** 一度でもWINした（突破した）ユニークプレイヤー数。 */
   clearedCount: number
+  /** Ver.6 Phase 8（ENDLESS Challenge）: mode==='endless'の場合のみ設定される。一覧で「ENDLESS EASY/HARD/DANGER」のように表示するため。 */
+  endlessDifficulty?: EndlessDifficulty
 }
 
 /**
@@ -177,5 +204,7 @@ export interface ParticipatedChallengeSummary {
   /** このChallengeへの自分の挑戦回数。 */
   myAttemptCount: number
   /** 自分の最新attemptのresult（挑戦者視点のまま）。 */
-  myLatestResult: 'win' | 'lose'
+  myLatestResult: 'win' | 'lose' | 'draw'
+  /** Ver.6 Phase 8（ENDLESS Challenge）: mode==='endless'の場合のみ設定される。 */
+  endlessDifficulty?: EndlessDifficulty
 }

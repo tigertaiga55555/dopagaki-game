@@ -11,6 +11,7 @@ import { QUESTION_MODULES } from '../questions'
 import { FINAL_QUESTION_MODULES } from '../questions/final'
 import { EndlessAdvancedRuleCard } from './EndlessAdvancedRuleCard'
 import { setBgmProgress, setFinalIntensity, setFinalMode, startBgm, stopBgm } from '../utils/bgm'
+import type { ChallengeProblemSetItem } from '../challenge/types'
 import type { EndlessDifficulty } from '../types'
 
 interface Props {
@@ -19,6 +20,17 @@ interface Props {
   onQuit: () => void
   /** Preview/QA専用（既定false）。本番のApp.tsx通常プレイ経路からは絶対にtrueを渡さない。 */
   qaMode?: boolean
+  /**
+   * Ver.6 Phase 8（ENDLESS Challenge）: 指定時、挑戦者はホストと完全に同じ問題・同じ順番で
+   * 再生する（useEndlessGameへそのまま渡す）。
+   */
+  replayQuestions?: ChallengeProblemSetItem[]
+  /**
+   * Ver.6 Phase 8（ENDLESS Challenge）: 指定時、画面上部に「STREAK N / TARGET M」を常時表示し、
+   * TARGETに近づくと軽い演出（あと5/あと3/あと1）を出す。超えた瞬間に即WIN終了する
+   * （useEndlessGameのtargetStreakへそのまま渡す）。
+   */
+  targetStreak?: number
 }
 
 /** 正解時の軽い一撃（500%チャレンジのような大規模演出はコピーしない、控えめな手応えだけ）。 */
@@ -81,8 +93,8 @@ function finalBgmIntensity(streak: number): number {
  */
 type Phase = 'rule' | 'countdown' | 'playing'
 
-export function EndlessPlayScreen({ difficulty, onFinish, onQuit, qaMode = false }: Props) {
-  const { snapshot, start, handleResult } = useEndlessGame(difficulty, onFinish, { qaMode })
+export function EndlessPlayScreen({ difficulty, onFinish, onQuit, qaMode = false, replayQuestions, targetStreak }: Props) {
+  const { snapshot, start, handleResult } = useEndlessGame(difficulty, onFinish, { qaMode, replayQuestions, targetStreak })
   // item 5/7（実機QA最終改善）: 上級だけ開始前にルール説明を挟む。その後（または
   // 他難易度は最初から）、通常モードと同じ3→2→1→STARTを見せてからplayingへ入る。
   // phaseが'playing'になるまでstart()を呼ばないため、「カウントダウン中は問題の
@@ -201,10 +213,23 @@ export function EndlessPlayScreen({ difficulty, onFinish, onQuit, qaMode = false
           ENDLESS ・ {ENDLESS_DIFFICULTY_LABEL[difficulty]} ・ {theme.mood}
         </p>
         <div className="text-right">
-          <p className="text-[10px] font-bold tracking-widest text-white/50">STREAK</p>
+          <p className="text-[10px] font-bold tracking-widest text-white/50">
+            {targetStreak === undefined ? 'STREAK' : 'STREAK / TARGET'}
+          </p>
           <p ref={streakTextRef} className={`text-4xl font-black tabular-nums ${theme.textClass} ${theme.glowClass}`}>
             {snapshot.state.streak}
+            {targetStreak !== undefined && <span className="text-xl text-white/30"> / {targetStreak}</span>}
           </p>
+          {/* Ver.6 Phase 8（ENDLESS Challenge）: item 16/17。TARGETが近づいたときだけ軽く表示する
+              非ブロッキングな演出（テンポを止める一時停止・モーダルは出さない）。 */}
+          {targetStreak !== undefined &&
+            (() => {
+              const remainingToWin = targetStreak + 1 - snapshot.state.streak
+              if (remainingToWin === 2) return <p className="text-[10px] font-black text-white/50">DRAW LINE</p>
+              if (remainingToWin === 1) return <p className="text-[10px] font-black text-amber-300">WIN QUESTION</p>
+              if (remainingToWin === 5 || remainingToWin === 3) return <p className="text-[10px] font-black text-amber-200/80">あと{remainingToWin}</p>
+              return null
+            })()}
         </div>
       </div>
 

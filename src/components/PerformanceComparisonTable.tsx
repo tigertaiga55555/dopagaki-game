@@ -10,6 +10,13 @@ interface Props {
   decidedBy: ChallengeDecidedBy
   /** 呼び出し側が組み立てた理由文（視点・WIN/LOSE/DRAWの意味づけは呼び出し側の責務）。 */
   reasonText: string
+  /**
+   * Ver.6 Phase 8（通常Challengeの勝敗ルール更新）: 反応速度中央値の行を表示するか。
+   * 省略時はtrue（Battle側の挙動を一切変えない）。通常Challenge
+   * （ChallengeResultScreen）だけがfalseを渡し、勝敗判定から除外された反応速度を
+   * 比較表からも隠す。
+   */
+  showReactionTime?: boolean
 }
 
 /**
@@ -20,18 +27,22 @@ interface Props {
  * 並べて見せるだけの中立なプレゼンテーション層にする（Challengeの既存動作を壊さず、
  * Battleでも同じ比較ロジック・同じUIを再利用できるようにするための共通化）。
  */
-export function PerformanceComparisonTable({ leftLabel, left, rightLabel, right, decidedBy, reasonText }: Props) {
+export function PerformanceComparisonTable({ leftLabel, left, rightLabel, right, decidedBy, reasonText, showReactionTime = true }: Props) {
   const rows: { key: ChallengeDecidedBy; label: string; leftValue: string; rightValue: string }[] = [
     { key: 'finalDopaPercent', label: '最終DOPA%', leftValue: `${left.finalDopaPercent}%`, rightValue: `${right.finalDopaPercent}%` },
     { key: 'baseDopaPercent', label: '通常獲得DOPA%', leftValue: `${left.baseDopaPercent}%`, rightValue: `${right.baseDopaPercent}%` },
     { key: 'accuracy', label: '正答率', leftValue: formatAccuracyPercent(left.accuracy), rightValue: formatAccuracyPercent(right.accuracy) },
     { key: 'maxCombo', label: '最大COMBO', leftValue: `${left.maxCombo}`, rightValue: `${right.maxCombo}` },
-    {
-      key: 'medianCorrectReactionMs',
-      label: '反応速度中央値',
-      leftValue: formatReactionSeconds(left.medianCorrectReactionMs),
-      rightValue: formatReactionSeconds(right.medianCorrectReactionMs),
-    },
+    ...(showReactionTime
+      ? [
+          {
+            key: 'medianCorrectReactionMs' as const,
+            label: '反応速度中央値',
+            leftValue: formatReactionSeconds(left.medianCorrectReactionMs),
+            rightValue: formatReactionSeconds(right.medianCorrectReactionMs),
+          },
+        ]
+      : []),
   ]
 
   return (

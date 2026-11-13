@@ -137,7 +137,31 @@ const ENDLESS_ACHIEVEMENTS: AchievementDef[] = [
   },
 ]
 
-export const ACHIEVEMENT_DEFS: AchievementDef[] = [...DOPA_ACHIEVEMENTS, ...ENDLESS_ACHIEVEMENTS]
+/**
+ * Ver.6 Phase 8（ENDLESS Challenge）: Challenge専用の実績2個。通常ENDLESSの連続正解
+ * 実績（上のENDLESS_ACHIEVEMENTS、endlessStreak条件）とは完全に別の条件種別
+ * （endlessChallengeWin/endlessChallengeDefense）を使うため、通常プレイから誤って
+ * 解除されることはない。Achievement/Title 68個への全面拡張は別フェーズのため、
+ * 今回はこの2個だけを追加する。
+ */
+const CHALLENGE_ACHIEVEMENTS: AchievementDef[] = [
+  {
+    id: 'endlessChallengeFirstWin',
+    name: '終わらない挑戦者',
+    description: 'ENDLESS Challengeで初めてホストの記録を超える',
+    unlockCondition: { type: 'endlessChallengeWin' },
+    category: 'endless',
+  },
+  {
+    id: 'endlessChallengeFirstDefense',
+    name: '終わらない門番',
+    description: 'ENDLESS Challengeで初めて自分の記録を守り切る',
+    unlockCondition: { type: 'endlessChallengeDefense' },
+    category: 'endless',
+  },
+]
+
+export const ACHIEVEMENT_DEFS: AchievementDef[] = [...DOPA_ACHIEVEMENTS, ...ENDLESS_ACHIEVEMENTS, ...CHALLENGE_ACHIEVEMENTS]
 
 export const ACHIEVEMENT_DEFS_BY_ID: Record<AchievementId, AchievementDef> = Object.fromEntries(
   ACHIEVEMENT_DEFS.map((def) => [def.id, def]),
