@@ -1,0 +1,663 @@
+name: Cloudflare Worker Preview (Ver.6 / claude/dopagaki-game-v1-pewz92)
+
+on:
+  push:
+    branches:
+      - claude/dopagaki-game-v1-pewz92
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        env:
+          WORKERS_CI_BRANCH: ${{ github.ref_name }}
+        run: npm run build
+
+      - name: Provision Preview-only D1 database (dopagaki-challenges-preview)
+        id: d1_setup
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set +e
+          # Ver.6 Phase 5.2（Challenge機能完成）: Challengeバックエンド専用のD1データベースを
+          # Preview環境にだけ用意する。Productionのデータベース・Workerには一切触れない
+          # （名前も"dopagaki-challenges-preview"でProductionと明確に分離）。
+          #
+          # wrangler CLIの`d1 create`はJSON出力が整備されていないため、Cloudflareの
+          # REST API（wranglerの内部実装と同じエンドポイント）へ直接curlする。
+          # CLOUDFLARE_API_TOKEN自体はヘッダーにのみ使い、ログへは一切出力しない
+          # （レスポンスのJSON本文にはトークンは含まれないため、本文をそのままログへ
+          # 出しても安全）。
+          API_BASE="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database"
+          DB_NAME="dopagaki-challenges-preview"
+
+          LIST_RESP=$(curl -sS -w '\n%{http_code}' "${API_BASE}?per_page=50" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json")
+          LIST_STATUS=$(echo "$LIST_RESP" | tail -1)
+          LIST_BODY=$(echo "$LIST_RESP" | sed '$d')
+          LIST_SUCCESS=$(echo "$LIST_BODY" | jq -r '.success // false' 2>/dev/null)
+
+          echo "D1 list HTTP status: $LIST_STATUS"
+
+          if [ "$LIST_STATUS" != "200" ] || [ "$LIST_SUCCESS" != "true" ]; then
+            echo "d1_available=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Preview D1 (dopagaki-challenges-preview)"
+              echo ""
+              echo "⚠️ D1 APIへのアクセスに失敗しました（HTTP $LIST_STATUS）。"
+              echo "CLOUDFLARE_API_TOKENにD1の権限（D1:Edit）が付与されていない可能性があります。"
+              echo ""
+              echo '```json'
+              echo "$LIST_BODY" | jq -c '.errors // empty' 2>/dev/null || echo "$LIST_BODY"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            EXISTING_ID=$(echo "$LIST_BODY" | jq -r --arg name "$DB_NAME" '.result[] | select(.name==$name) | .uuid' | head -1)
+
+            if [ -n "$EXISTING_ID" ] && [ "$EXISTING_ID" != "null" ]; then
+              DB_ID="$EXISTING_ID"
+              echo "Found existing D1 database: $DB_ID"
+            else
+              CREATE_RESP=$(curl -sS -w '\n%{http_code}' -X POST "$API_BASE" \
+                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                --data "{\"name\":\"${DB_NAME}\"}")
+              CREATE_STATUS=$(echo "$CREATE_RESP" | tail -1)
+              CREATE_BODY=$(echo "$CREATE_RESP" | sed '$d')
+              CREATE_SUCCESS=$(echo "$CREATE_BODY" | jq -r '.success // false' 2>/dev/null)
+              echo "D1 create HTTP status: $CREATE_STATUS"
+
+              if [ "$CREATE_SUCCESS" == "true" ]; then
+                DB_ID=$(echo "$CREATE_BODY" | jq -r '.result.uuid')
+              else
+                # エラーコード7502＝同名DBが既に存在（並行実行等のレース）。再度listして拾う。
+                DB_ID=$(curl -sS "${API_BASE}?per_page=50" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                  | jq -r --arg name "$DB_NAME" '.result[] | select(.name==$name) | .uuid' | head -1)
+              fi
+            fi
+
+            if [ -n "$DB_ID" ] && [ "$DB_ID" != "null" ]; then
+              echo "d1_available=true" >> "$GITHUB_OUTPUT"
+              echo "d1_database_id=$DB_ID" >> "$GITHUB_OUTPUT"
+              {
+                echo "## Preview D1 (dopagaki-challenges-preview)"
+                echo ""
+                echo "✅ D1データベースを確認/作成しました（database_id: \`$DB_ID\`）。"
+              } >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "d1_available=false" >> "$GITHUB_OUTPUT"
+              {
+                echo "## Preview D1 (dopagaki-challenges-preview)"
+                echo ""
+                echo "⚠️ D1データベースのid取得に失敗しました。"
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+          set -e
+
+      - name: Apply D1 migrations to Preview database
+        if: steps.d1_setup.outputs.d1_available == 'true'
+        id: d1_migrate
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # wrangler.tomlへ[[d1_databases]]を追記するのはこのジョブのワークスペース上だけ
+          # （リポジトリへコミットし直すことはしない）。database_idはPreview専用DBのIDのみで、
+          # Production側のwrangler.tomlやコードには一切触れない。
+          # continue-on-error: trueにしているのは、migration適用に何らかの問題があっても
+          # D1バインディング無しの安全な状態（既存の静的サイト配信のみ）へフォールバックして
+          # デプロイ自体は継続させるため（DBだけが未接続のまま、他の全機能は壊さない）。
+          #
+          # [[d1_databases]]（トップレベル）はこの`wrangler d1 migrations apply`コマンド自身の
+          # バインディング解決に必要。一方、後続の`wrangler preview`は、wrangler.tomlに既に
+          # [previews]テーブルが存在する場合、トップレベルのbindingを一切継承せず
+          # `previews.d1_databases`だけを見る（wrangler本体のensurePreviewsConfig/
+          # extractConfigBindingsの実装で確認済み）。そのため[[previews.d1_databases]]も
+          # 同じdatabase_idで明示的に追記する（migrationの適用先とPreviewのbinding先を
+          # 必ず同一database_idに揃える）。
+          cat >> wrangler.toml <<EOF
+
+          [[d1_databases]]
+          binding = "CHALLENGE_DB"
+          database_name = "dopagaki-challenges-preview"
+          database_id = "${{ steps.d1_setup.outputs.d1_database_id }}"
+          migrations_dir = "migrations"
+
+          [[previews.d1_databases]]
+          binding = "CHALLENGE_DB"
+          database_name = "dopagaki-challenges-preview"
+          database_id = "${{ steps.d1_setup.outputs.d1_database_id }}"
+          EOF
+
+          npx wrangler d1 migrations apply CHALLENGE_DB --remote
+
+      - name: Report D1 migration outcome
+        if: steps.d1_setup.outputs.d1_available == 'true' && steps.d1_migrate.outcome == 'failure'
+        run: |
+          {
+            echo ""
+            echo "⚠️ D1 migrationの適用に失敗しました。wrangler.tomlからd1_databasesブロックを"
+            echo "取り除き、D1バインディング無しでデプロイを継続します（他機能には影響しません）。"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # 失敗時はd1_databasesブロックを取り除き、後続のpreviewデプロイが
+          # 壊れたバインディングを引きずらないようにする。
+          git checkout -- wrangler.toml
+
+      - name: Create Cloudflare Worker Preview (ver6)
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set +e
+          npx wrangler preview --name ver6 --json > preview-output.json 2> preview-stderr.log
+          WRANGLER_EXIT_CODE=$?
+          set -e
+
+          echo "----- wrangler preview stdout (preview-output.json) -----"
+          cat preview-output.json || true
+          echo "----- wrangler preview stderr -----"
+          cat preview-stderr.log || true
+          echo "----- wrangler exit code: $WRANGLER_EXIT_CODE -----"
+
+          PREVIEW_URL=$(jq -r '.preview.urls[0] // .deployment.urls[0] // .preview_urls[0] // .deployment_urls[0] // empty' preview-output.json 2>/dev/null || true)
+          if [ -z "$PREVIEW_URL" ]; then
+            # -h（--no-filename）で、複数ファイルを渡してもURLの前に"ファイル名:"が
+            # 付かないようにする（以前はこの保険ルートに落ちた場合、抽出結果が
+            # "preview-output.json:https://..."という壊れた文字列になっていた）。
+            PREVIEW_URL=$(grep -hoE 'https://[A-Za-z0-9.-]+\.workers\.dev[^"[:space:]]*' preview-output.json preview-stderr.log 2>/dev/null | head -1 || true)
+          fi
+
+          {
+            echo "## Cloudflare Worker Preview (ver6)"
+            echo ""
+            echo "- wrangler exit code: $WRANGLER_EXIT_CODE"
+            if [ -n "$PREVIEW_URL" ]; then
+              echo "- Preview URL: $PREVIEW_URL"
+              echo "- QA URL (\`?preview=challenge500\`): ${PREVIEW_URL}?preview=challenge500"
+            else
+              echo "- Preview URLを自動抽出できませんでした。下記の生出力を確認してください。"
+            fi
+            echo ""
+            echo "<details><summary>wrangler preview stdout</summary>"
+            echo ""
+            echo '```json'
+            cat preview-output.json
+            echo '```'
+            echo "</details>"
+            echo ""
+            echo "<details><summary>wrangler preview stderr</summary>"
+            echo ""
+            echo '```'
+            cat preview-stderr.log
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$WRANGLER_EXIT_CODE" -ne 0 ]; then
+            echo "::error::wrangler preview failed with exit code $WRANGLER_EXIT_CODE"
+            exit 1
+          fi
+
+          echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Verify Challenge API on the real Preview (create → get → attempts)
+        if: steps.d1_setup.outputs.d1_available == 'true' && steps.d1_migrate.outcome == 'success'
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
+        run: |
+          # Ver.6 Phase 5.2 追加修正: 「D1作成成功」だけで完了扱いにしないため、実際に
+          # デプロイされたCloudflare Preview URLへ本物のHTTPリクエストを送り、
+          # POST /api/challenges → GET /api/challenges/:id → POST/GET .../attempts
+          # が実際に通ることをCI内で確認する（このWorkerのサンドボックスは
+          # *.workers.devへの直接アクセスが許可されていないため、GitHub Actions
+          # ランナー側でこの確認を行う）。
+          if [ -z "$PREVIEW_URL" ]; then
+            echo "::error::Preview URLを取得できなかったため、Challenge APIの確認をスキップできません。"
+            exit 1
+          fi
+          echo "Verifying Challenge API against: $PREVIEW_URL"
+
+          # デプロイ直後はWorkerの伝播に数秒かかることがあるため、GETで軽く疎通確認してから進める。
+          for i in 1 2 3 4 5; do
+            PROBE_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' "${PREVIEW_URL}/api/challenges/does-not-exist" || true)
+            if [ "$PROBE_STATUS" != "000" ]; then break; fi
+            echo "Worker not ready yet (attempt $i), retrying in 3s..."
+            sleep 3
+          done
+          echo "Probe GET /api/challenges/does-not-exist -> HTTP $PROBE_STATUS"
+
+          # Ver.6 Phase 5.3（Challenge勝敗判定強化）: performanceが必須フィールドになったため、
+          # 検証用ペイロードにも妥当なChallengePerformanceを含める（欠けていると
+          # validateCreateChallengeInputがHTTP 400 "performance is invalid"で弾く）。
+          CREATE_PAYLOAD='{"creatorPlayerId":"ci-verify-creator","creatorNickname":"CI Verify","creatorIcon":{"kind":"preset","iconId":"bolt"},"creatorEquippedTitle":null,"mode":"challenge500","problemSet":{"version":1,"items":[{"type":"numberPick","data":{"answer":3}}]},"conditions":{"mode":"challenge500"},"creatorScore":420,"performance":{"finalDopaPercent":420,"baseDopaPercent":400,"accuracy":0.8,"maxCombo":15,"medianCorrectReactionMs":500}}'
+          CREATE_RESP=$(curl -sS -w '\n%{http_code}' -X POST "${PREVIEW_URL}/api/challenges" \
+            -H "Content-Type: application/json" \
+            --data "$CREATE_PAYLOAD")
+          CREATE_STATUS=$(echo "$CREATE_RESP" | tail -1)
+          CREATE_BODY=$(echo "$CREATE_RESP" | sed '$d')
+          echo "POST /api/challenges -> HTTP $CREATE_STATUS"
+          echo "$CREATE_BODY"
+
+          {
+            echo "## Challenge API E2E確認（実際のCloudflare Preview URLに対して実行）"
+            echo ""
+            echo "- POST /api/challenges -> HTTP \`$CREATE_STATUS\`"
+            echo '```json'
+            echo "$CREATE_BODY"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$CREATE_STATUS" != "201" ]; then
+            echo "::error::POST /api/challenges がHTTP $CREATE_STATUS を返しました（期待値: 201）。body: $CREATE_BODY"
+            exit 1
+          fi
+
+          CHALLENGE_ID=$(echo "$CREATE_BODY" | jq -r '.value.id // empty')
+          CREATE_OK=$(echo "$CREATE_BODY" | jq -r '.ok // false')
+          if [ "$CREATE_OK" != "true" ] || [ -z "$CHALLENGE_ID" ]; then
+            echo "::error::POST /api/challenges のレスポンスにidが含まれていません: $CREATE_BODY"
+            exit 1
+          fi
+          echo "Created challenge id: $CHALLENGE_ID"
+
+          GET_RESP=$(curl -sS -w '\n%{http_code}' "${PREVIEW_URL}/api/challenges/${CHALLENGE_ID}")
+          GET_STATUS=$(echo "$GET_RESP" | tail -1)
+          GET_BODY=$(echo "$GET_RESP" | sed '$d')
+          echo "GET /api/challenges/${CHALLENGE_ID} -> HTTP $GET_STATUS"
+          echo "$GET_BODY"
+
+          {
+            echo ""
+            echo "- GET /api/challenges/\`$CHALLENGE_ID\` -> HTTP \`$GET_STATUS\`"
+            echo '```json'
+            echo "$GET_BODY"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$GET_STATUS" != "200" ]; then
+            echo "::error::GET /api/challenges/:id がHTTP $GET_STATUS を返しました（期待値: 200）。body: $GET_BODY"
+            exit 1
+          fi
+
+          GET_SCORE=$(echo "$GET_BODY" | jq -r '.value.creatorScore // empty')
+          if [ "$GET_SCORE" != "420" ]; then
+            echo "::error::GETで取得したcreatorScoreが作成時と一致しません（got: $GET_SCORE, want: 420）"
+            exit 1
+          fi
+          echo "GET content matches creation (creatorScore=$GET_SCORE). Challenge create -> get is confirmed working on the real Preview."
+
+          # finalDopaPercent(500) > creator(420)の時点で第1優先指標により決着するため、
+          # 他の指標（accuracy/maxCombo/reaction）の値に関わらずwin/finalDopaPercentになる。
+          ATTEMPT_PAYLOAD='{"playerId":"ci-verify-challenger","nickname":"CI Verify Challenger","avatar":{"kind":"preset","iconId":"flame"},"equippedTitle":null,"score":500,"performance":{"finalDopaPercent":500,"baseDopaPercent":480,"accuracy":0.9,"maxCombo":20,"medianCorrectReactionMs":400}}'
+          ATTEMPT_RESP=$(curl -sS -w '\n%{http_code}' -X POST "${PREVIEW_URL}/api/challenges/${CHALLENGE_ID}/attempts" \
+            -H "Content-Type: application/json" \
+            --data "$ATTEMPT_PAYLOAD")
+          ATTEMPT_STATUS=$(echo "$ATTEMPT_RESP" | tail -1)
+          ATTEMPT_BODY=$(echo "$ATTEMPT_RESP" | sed '$d')
+          echo "POST /api/challenges/${CHALLENGE_ID}/attempts -> HTTP $ATTEMPT_STATUS"
+          echo "$ATTEMPT_BODY"
+
+          {
+            echo ""
+            echo "- POST /api/challenges/\`$CHALLENGE_ID\`/attempts -> HTTP \`$ATTEMPT_STATUS\`"
+            echo '```json'
+            echo "$ATTEMPT_BODY"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$ATTEMPT_STATUS" == "201" ]; then
+            ATTEMPT_RESULT=$(echo "$ATTEMPT_BODY" | jq -r '.value.result // empty')
+            ATTEMPT_DECIDED_BY=$(echo "$ATTEMPT_BODY" | jq -r '.value.decidedBy // empty')
+            echo "Attempt created with result=$ATTEMPT_RESULT, decidedBy=$ATTEMPT_DECIDED_BY (finalDopaPercent 500 > creator's 420 should decide 'win' by 'finalDopaPercent')."
+
+            ATTEMPTS_GET_RESP=$(curl -sS -w '\n%{http_code}' "${PREVIEW_URL}/api/challenges/${CHALLENGE_ID}/attempts?playerId=ci-verify-challenger")
+            ATTEMPTS_GET_STATUS=$(echo "$ATTEMPTS_GET_RESP" | tail -1)
+            ATTEMPTS_GET_BODY=$(echo "$ATTEMPTS_GET_RESP" | sed '$d')
+            echo "GET /api/challenges/${CHALLENGE_ID}/attempts?playerId=... -> HTTP $ATTEMPTS_GET_STATUS"
+            echo "$ATTEMPTS_GET_BODY"
+            {
+              echo ""
+              echo "- GET /api/challenges/\`$CHALLENGE_ID\`/attempts?playerId=ci-verify-challenger -> HTTP \`$ATTEMPTS_GET_STATUS\`"
+              echo '```json'
+              echo "$ATTEMPTS_GET_BODY"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            if [ "$ATTEMPTS_GET_STATUS" != "200" ]; then
+              echo "::error::GET /api/challenges/:id/attempts がHTTP $ATTEMPTS_GET_STATUS を返しました。body: $ATTEMPTS_GET_BODY"
+              exit 1
+            fi
+          else
+            echo "::warning::POST /api/challenges/:id/attempts がHTTP $ATTEMPT_STATUS を返しました。create/getは確認済みのため続行しますが、確認してください。body: $ATTEMPT_BODY"
+          fi
+
+      - name: Verify Battle Durable Object bindings on the real Preview (rooms + WebSocket)
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
+        run: |
+          # Ver.6 Phase 6（1対1リアルタイム対戦）: wrangler.toml上に[[durable_objects.bindings]]/
+          # [[previews.durable_objects.bindings]]を書いただけでは「実Preview上で本当に
+          # 動いている」ことの確認にならない（D1バインディングで過去に踏んだ教訓と同じ）。
+          # ここでは実際に起動済みのCloudflare Preview URLへ、
+          # 1) フレンド対戦ルーム作成（BattleRoom Durable Objectへの/internal/create経由fetch）
+          # 2) 同じルームへのstatus再取得（同一Durable Objectインスタンスが状態を保持するか）
+          # 3) 本物のWebSocketクライアントでのMatchmaker Durable Objectへの接続・
+          #    join_world_queue送信・queue_joined受信（WebSocket Hibernation APIが
+          #    実Cloudflare基盤上で機能しているかの確認。HTTPだけでは検証できないため、
+          #    ここだけは本物のWSハンドシェイクを行う）
+          # の3段階で確認する。
+          if [ -z "$PREVIEW_URL" ]; then
+            echo "::error::Preview URLを取得できなかったため、Battle Durable Objectの確認をスキップできません。"
+            exit 1
+          fi
+          echo "Verifying Battle Durable Object bindings against: $PREVIEW_URL"
+
+          CREATE_ROOM_RESP=$(curl -sS -w '\n%{http_code}' -X POST "${PREVIEW_URL}/api/battles/rooms")
+          CREATE_ROOM_STATUS=$(echo "$CREATE_ROOM_RESP" | tail -1)
+          CREATE_ROOM_BODY=$(echo "$CREATE_ROOM_RESP" | sed '$d')
+          echo "POST /api/battles/rooms -> HTTP $CREATE_ROOM_STATUS"
+          echo "$CREATE_ROOM_BODY"
+
+          {
+            echo "## Battle Durable Object確認（実際のCloudflare Preview URLに対して実行）"
+            echo ""
+            echo "- POST /api/battles/rooms -> HTTP \`$CREATE_ROOM_STATUS\`"
+            echo '```json'
+            echo "$CREATE_ROOM_BODY"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$CREATE_ROOM_STATUS" != "201" ]; then
+            echo "::error::POST /api/battles/rooms がHTTP $CREATE_ROOM_STATUS を返しました（期待値: 201）。MATCHMAKER/BATTLE_ROOM Durable Objectバインディングが実Preview上で機能していない可能性があります。body: $CREATE_ROOM_BODY"
+            exit 1
+          fi
+
+          ROOM_CODE=$(echo "$CREATE_ROOM_BODY" | jq -r '.value.roomCode // empty')
+          CREATE_ROOM_OK=$(echo "$CREATE_ROOM_BODY" | jq -r '.ok // false')
+          if [ "$CREATE_ROOM_OK" != "true" ] || [ -z "$ROOM_CODE" ]; then
+            echo "::error::POST /api/battles/rooms のレスポンスにroomCodeが含まれていません: $CREATE_ROOM_BODY"
+            exit 1
+          fi
+          echo "Created friend battle room: $ROOM_CODE (BattleRoom Durable Object is live on the real Preview)"
+
+          STATUS_RESP=$(curl -sS -w '\n%{http_code}' "${PREVIEW_URL}/api/battles/rooms/${ROOM_CODE}")
+          STATUS_STATUS=$(echo "$STATUS_RESP" | tail -1)
+          STATUS_BODY=$(echo "$STATUS_RESP" | sed '$d')
+          echo "GET /api/battles/rooms/${ROOM_CODE} -> HTTP $STATUS_STATUS"
+          echo "$STATUS_BODY"
+
+          {
+            echo ""
+            echo "- GET /api/battles/rooms/\`$ROOM_CODE\` -> HTTP \`$STATUS_STATUS\`"
+            echo '```json'
+            echo "$STATUS_BODY"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$STATUS_STATUS" != "200" ]; then
+            echo "::error::GET /api/battles/rooms/:roomCode がHTTP $STATUS_STATUS を返しました（期待値: 200）。body: $STATUS_BODY"
+            exit 1
+          fi
+          STATUS_OK=$(echo "$STATUS_BODY" | jq -r '.ok // false')
+          if [ "$STATUS_OK" != "true" ]; then
+            echo "::error::作成直後のルームがok:trueで取得できませんでした（まだ誰も参加していないはず）: $STATUS_BODY"
+            exit 1
+          fi
+          echo "Room status confirms the same BattleRoom Durable Object instance persisted state across two separate HTTP requests."
+
+          npm install --no-save ws@8 >/dev/null 2>&1
+          WS_URL=$(echo "$PREVIEW_URL" | sed -E 's#^https://#wss://#')
+
+          set +e
+          node - "$WS_URL" <<'NODESCRIPT'
+          const WebSocket = require('ws')
+          const base = process.argv[2]
+          const playerId = 'ci-verify-' + Math.random().toString(36).slice(2)
+          const profile = encodeURIComponent(
+            JSON.stringify({ nickname: 'CI', avatar: { kind: 'preset', iconId: 'bolt' }, equippedTitleId: null }),
+          )
+          const url = `${base}/api/battles/queue/ws?playerId=${playerId}&profile=${profile}`
+          console.log('Connecting to', url)
+          const ws = new WebSocket(url)
+          const timeout = setTimeout(() => {
+            console.error('TIMEOUT: did not receive queue_joined within 10s')
+            process.exit(1)
+          }, 10000)
+          ws.on('open', () => {
+            console.log('WebSocket upgraded (101 Switching Protocols) — sending join_world_queue')
+            ws.send(JSON.stringify({ v: 1, type: 'join_world_queue' }))
+          })
+          ws.on('message', (raw) => {
+            const msg = JSON.parse(raw.toString())
+            console.log('Received message:', msg)
+            if (msg.type === 'queue_joined') {
+              console.log('CONFIRMED: Matchmaker Durable Object + WebSocket Hibernation API are live on the real Cloudflare Preview.')
+              clearTimeout(timeout)
+              ws.send(JSON.stringify({ v: 1, type: 'cancel_world_queue' }))
+              ws.close()
+              process.exit(0)
+            }
+          })
+          ws.on('error', (err) => {
+            console.error('WebSocket error:', err.message)
+            clearTimeout(timeout)
+            process.exit(1)
+          })
+          NODESCRIPT
+          WS_CHECK_EXIT=$?
+          set -e
+
+          {
+            echo ""
+            if [ "$WS_CHECK_EXIT" -eq 0 ]; then
+              echo "- Matchmaker Durable Object WebSocket確認: ✅ 実Previewへの接続・join_world_queue送信・queue_joined受信を確認"
+            else
+              echo "- Matchmaker Durable Object WebSocket確認: ❌ 失敗（exit $WS_CHECK_EXIT）"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$WS_CHECK_EXIT" -ne 0 ]; then
+            echo "::error::Matchmaker Durable Objectへの実WebSocket接続確認に失敗しました（exit $WS_CHECK_EXIT）。"
+            exit 1
+          fi
+          echo "✅ Matchmaker Durable Object + WebSocket Hibernation APIの実Preview上での動作を確認しました。"
+
+      - name: Verify 2-client world battle round trip (identical ProblemSet, DOPA% sync, match resolution) on the real Preview
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
+        run: |
+          # ユーザー要求: 「ローカルE2Eだけで完了扱いにしない」「実際のCloudflare Preview上で
+          # Player A/Player Bの2クライアントによる世界対戦・WebSocket・Durable Object・
+          # 同一ProblemSet・DOPA%同期・勝敗確定までの通し確認」を行う。このサンドボックス自体は
+          # *.workers.devへ直接到達できないため、GitHub Actionsランナー上から本物の2つの
+          # WebSocketクライアント（Player A・Player B）で実際のMatchmaker/BattleRoom
+          # Durable Objectに接続し、マッチング→同一ProblemSet配布→同一startAt→
+          # 相手DOPA%リアルタイム同期（opponent_progress）→両者finished→battle_finish確定
+          # までを本物のCloudflare基盤上で一本通しで検証する。
+          npm install --no-save ws@8 >/dev/null 2>&1
+          WS_URL=$(echo "$PREVIEW_URL" | sed -E 's#^https://#wss://#')
+
+          # 注意: このスクリプトは必ずリポジトリの作業ディレクトリ（cwd）内に.cjsとして書く。
+          # /tmp等の外部に書くと、直前のnpm install --no-save ws@8でこのcwd配下の
+          # node_modulesへ入ったwsをrequire()が解決できず「Cannot find module 'ws'」で
+          # 落ちる（Node的ロード解決はファイルパスのあるスクリプトの場合、そのファイル自身の
+          # ディレクトリから上に辿るため）。拡張子を.cjsにするのは、このリポジトリの
+          # package.jsonがtype:"module"のため、.jsだと既定でESM扱いになりrequireが
+          # 使えなくなるのを避けるため（ローカル動作確認で実際に両方のエラーを再現済み）。
+          cat > battle-preview-e2e.cjs <<'NODESCRIPT'
+          const WebSocket = require('ws')
+          const base = process.argv[2]
+
+          function connect(path, qs) {
+            return new Promise((resolve, reject) => {
+              const ws = new WebSocket(`${base}${path}?${qs}`)
+              ws.once('open', () => resolve(ws))
+              ws.once('error', reject)
+            })
+          }
+
+          function waitForMessage(ws, predicate, timeoutMs, label) {
+            return new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => reject(new Error(`TIMEOUT waiting for ${label}`)), timeoutMs)
+              function onMessage(raw) {
+                const msg = JSON.parse(raw.toString())
+                if (predicate(msg)) {
+                  clearTimeout(timeout)
+                  ws.removeListener('message', onMessage)
+                  resolve(msg)
+                }
+              }
+              ws.on('message', onMessage)
+            })
+          }
+
+          async function main() {
+            const profileA = encodeURIComponent(
+              JSON.stringify({ nickname: 'PlayerA', avatar: { kind: 'preset', iconId: 'bolt' }, equippedTitleId: null }),
+            )
+            const profileB = encodeURIComponent(
+              JSON.stringify({ nickname: 'PlayerB', avatar: { kind: 'preset', iconId: 'flame' }, equippedTitleId: null }),
+            )
+            const idA = 'ci-e2e-a-' + Math.random().toString(36).slice(2)
+            const idB = 'ci-e2e-b-' + Math.random().toString(36).slice(2)
+
+            console.log('Connecting Player A and Player B to the Matchmaker Durable Object...')
+            const [queueA, queueB] = await Promise.all([
+              connect('/api/battles/queue/ws', `playerId=${idA}&profile=${profileA}`),
+              connect('/api/battles/queue/ws', `playerId=${idB}&profile=${profileB}`),
+            ])
+            const matchFoundA = waitForMessage(queueA, (m) => m.type === 'match_found', 15000, 'match_found(A)')
+            const matchFoundB = waitForMessage(queueB, (m) => m.type === 'match_found', 15000, 'match_found(B)')
+            queueA.send(JSON.stringify({ v: 1, type: 'join_world_queue' }))
+            queueB.send(JSON.stringify({ v: 1, type: 'join_world_queue' }))
+            const [foundA, foundB] = await Promise.all([matchFoundA, matchFoundB])
+            if (foundA.matchId !== foundB.matchId) throw new Error(`matchId mismatch: A=${foundA.matchId} B=${foundB.matchId}`)
+            console.log('Both players matched on the real Preview. matchId =', foundA.matchId)
+            queueA.close()
+            queueB.close()
+
+            console.log('Connecting both players to the BattleRoom Durable Object for this match...')
+            const [roomA, roomB] = await Promise.all([
+              connect(`/api/battles/room/${foundA.matchId}/ws`, `playerId=${idA}&profile=${profileA}`),
+              connect(`/api/battles/room/${foundA.matchId}/ws`, `playerId=${idB}&profile=${profileB}`),
+            ])
+            const [countdownA, countdownB] = await Promise.all([
+              waitForMessage(roomA, (m) => m.type === 'countdown', 10000, 'countdown(A)'),
+              waitForMessage(roomB, (m) => m.type === 'countdown', 10000, 'countdown(B)'),
+            ])
+            if (countdownA.startAt !== countdownB.startAt) throw new Error('server-anchored startAt differs between A and B')
+            if (JSON.stringify(countdownA.problemSet) !== JSON.stringify(countdownB.problemSet)) {
+              throw new Error('problemSet distributed to A and B is not identical')
+            }
+            console.log(
+              `CONFIRMED: both players received the identical ProblemSet (${countdownA.problemSet.length} items)` +
+                ` and the same server-anchored startAt (${countdownA.startAt}) from the real BattleRoom Durable Object.`,
+            )
+
+            const progressSeenByB = waitForMessage(
+              roomB,
+              (m) => m.type === 'opponent_progress' && m.percent === 42,
+              10000,
+              'opponent_progress(B sees A at 42%)',
+            )
+            roomA.send(JSON.stringify({ v: 1, type: 'progress', percent: 42 }))
+            await progressSeenByB
+            console.log('CONFIRMED: live opponent DOPA% sync works on the real Preview (B received A=42% via opponent_progress).')
+
+            const perf = { finalDopaPercent: 80, baseDopaPercent: 80, accuracy: 1, maxCombo: 5, medianCorrectReactionMs: 400 }
+            const finishA = waitForMessage(roomA, (m) => m.type === 'battle_finish', 10000, 'battle_finish(A)')
+            const finishB = waitForMessage(roomB, (m) => m.type === 'battle_finish', 10000, 'battle_finish(B)')
+            roomA.send(JSON.stringify({ v: 1, type: 'finished', performance: perf }))
+            roomB.send(JSON.stringify({ v: 1, type: 'finished', performance: perf }))
+            const [resultA, resultB] = await Promise.all([finishA, finishB])
+
+            if (resultA.result.winner !== 'draw' || resultB.result.winner !== 'draw') {
+              throw new Error(`expected a complete-tie DRAW (both reported identical performance), got A=${resultA.result.winner} B=${resultB.result.winner}`)
+            }
+            if (resultA.viewerIsPlayerA === resultB.viewerIsPlayerA) {
+              throw new Error('viewerIsPlayerA should differ between A and B (each client gets its own perspective flag)')
+            }
+            console.log(
+              'CONFIRMED: full 2-client world battle round trip on the real Cloudflare Preview resolved to DRAW for both viewers' +
+                ' (identical performance -> all 5 metrics tie), with correct per-viewer viewerIsPlayerA flags.',
+            )
+
+            roomA.close()
+            roomB.close()
+          }
+
+          main()
+            .then(() => process.exit(0))
+            .catch((err) => {
+              console.error(err)
+              process.exit(1)
+            })
+          NODESCRIPT
+
+          set +e
+          node battle-preview-e2e.cjs "$WS_URL"
+          E2E_EXIT=$?
+          set -e
+          rm -f battle-preview-e2e.cjs
+
+          {
+            echo ""
+            if [ "$E2E_EXIT" -eq 0 ]; then
+              echo "- 実Preview 2クライアント世界対戦E2E: ✅ マッチング→同一ProblemSet→同一startAt→DOPA%同期→battle_finish確定を確認"
+            else
+              echo "- 実Preview 2クライアント世界対戦E2E: ❌ 失敗（exit $E2E_EXIT）"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$E2E_EXIT" -ne 0 ]; then
+            echo "::error::実Preview上での2クライアント世界対戦E2Eに失敗しました（exit $E2E_EXIT）。"
+            exit 1
+          fi
+
+      - name: Verify Battle D1 persistence (migrations/0004) on the real Preview
+        if: steps.d1_setup.outputs.d1_available == 'true' && steps.d1_migrate.outcome == 'success'
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
+        run: |
+          # 世界対戦の公式戦績はCHALLENGE_DB（既存Challengeと同じD1バインディング）に
+          # migrations/0004_create_battle_tables.sqlで追加したテーブルへ保存する。
+          # ここでは未知のplayerIdに対してもゼロ初期値で正常応答することを確認し、
+          # テーブル自体がPreview上で実際に作成・到達可能であることを確かめる。
+          STATS_RESP=$(curl -sS -w '\n%{http_code}' "${PREVIEW_URL}/api/battles/stats/ci-verify-stats-check")
+          STATS_STATUS=$(echo "$STATS_RESP" | tail -1)
+          STATS_BODY=$(echo "$STATS_RESP" | sed '$d')
+          echo "GET /api/battles/stats/ci-verify-stats-check -> HTTP $STATS_STATUS"
+          echo "$STATS_BODY"
+
+          {
+            echo ""
+            echo "- GET /api/battles/stats/ci-verify-stats-check -> HTTP \`$STATS_STATUS\`"
+            echo '```json'
+            echo "$STATS_BODY"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$STATS_STATUS" != "200" ]; then
+            echo "::error::GET /api/battles/stats/:playerId がHTTP $STATS_STATUS を返しました（期待値: 200）。migrations/0004_create_battle_tables.sqlがPreview D1へ正しく適用されていない可能性があります。body: $STATS_BODY"
+            exit 1
+          fi
+          echo "✅ Battle用D1テーブル（migrations/0004）が実PreviewのCHALLENGE_DBバインディング経由で読み取れることを確認しました。"

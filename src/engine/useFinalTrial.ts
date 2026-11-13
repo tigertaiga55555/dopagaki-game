@@ -3,8 +3,28 @@ import { FINAL_TRIAL_CONFIG, tierForQuestionNumber } from '../config/finalTrialC
 import { pickFinalQuestion } from './finalQuestionPicker'
 import { ULTIMATE_QUESTION_POOL } from '../questions/final'
 import { pick } from './random'
-import { trackPerfectClear, trackUltimateReached } from '../utils/analytics'
+import { trackPerfectClear, trackReach200, trackUltimateReached } from '../utils/analytics'
+import type { ChallengeProblemSetItem } from '../challenge/types'
 import type { FinalQuestionResult, FinalQuestionSpec, FinalQuestionTag } from '../types'
+
+/** Ver.6 Phase 5.2（Challenge機能完成）: FINAL DOPA TRIALは最大16問のため実質無制限だが、Worker側validation.tsと揃えておく。 */
+const MAX_RECORDED_PROBLEMS = 300
+
+export function specToProblemSetItem(spec: FinalQuestionSpec): ChallengeProblemSetItem {
+  return { type: spec.type, targetTimeMs: spec.targetTimeMs, tags: spec.tags, data: spec.data }
+}
+
+let replaySpecCounter = 0
+export function problemSetItemToSpec(item: ChallengeProblemSetItem): FinalQuestionSpec {
+  replaySpecCounter += 1
+  return {
+    instanceId: `final-replay-${replaySpecCounter}`,
+    type: item.type,
+    tags: (item.tags as FinalQuestionTag[] | undefined) ?? [],
+    targetTimeMs: item.targetTimeMs ?? 0,
+    data: item.data,
+  }
+}
 
 /**
  * Ver.5.0: FINAL DOPA TRIALのエンジン。120%到達後、全体の残り時間・+10秒延長などの
@@ -61,6 +81,16 @@ export interface FinalTrialFinishPayload {
   /** 成功したFINAL問題数（0〜16）。MISSで終了した場合はその時点までの成功数。 */
   trialsCleared: number
   cleared200: boolean
+  /**
+   * Ver.6 Phase 5.3（Challenge勝敗判定強化）: Challenge用performance計測。
+   * FINAL DOPA TRIALは常にQ1から始まり、MISSした瞬間に即終了する一方通行の進行のため、
+   * maxCombo・accuracyはtrialsCleared/cleared200からそのまま導出できる
+   * （別のCOMBOトラッキングを新設する必要がない）。reactionMsListだけは既存のどこにも
+   * 蓄積されていなかったため新規に追加した（FinalQuestionResult.reactionMsをそのまま
+   * 正解時だけ記録する）。既存の表示用stats（最大COMBO・正答率・最速反応）は
+   * 一切変更しない、Challenge専用の追加データ。
+   */
+  trialPerformance: { maxCombo: number; accuracy: number; reactionMsList: number[] }
 }
 
 /**
@@ -83,7 +113,27 @@ function milestoneLabelFor(clearedNumber: number): string {
   return `${clearedNumber} / ${FINAL_TRIAL_CONFIG.totalQuestions} CLEAR`
 }
 
-export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => void, initialQuestionNumber = 1) {
+export interface UseFinalTrialOptions {
+  /**
+   * Ver.6 Phase 5.2（Challenge機能完成）: 指定されると、pickFinalQuestion/
+   * ULTIMATE_QUESTION_POOLによるランダム出題の代わりにこの配列を順番に出題する
+   * （Q16 ULTIMATE QUESTIONも含め、questionNumberに関わらず配列を優先する）。
+   * 配列を使い切った後は元々の問題生成ロジックへ自動的にフォールバックする。
+   */
+  replayQuestions?: ChallengeProblemSetItem[]
+}
+
+export function useFinalTrial(
+  onFinish: (payload: FinalTrialFinishPayload) => void,
+  initialQuestionNumber = 1,
+  options?: UseFinalTrialOptions,
+) {
+  const replayQuestionsRef = useRef(options?.replayQuestions)
+  const replayIndexRef = useRef(0)
+  const recordedRef = useRef<ChallengeProblemSetItem[]>([])
+  /** Ver.6 Phase 5.3（Challenge勝敗判定強化）: 正解した問題のreaction time一覧（Challenge用）。 */
+  const reactionMsListRef = useRef<number[]>([])
+
   const [snapshot, setSnapshot] = useState<FinalTrialSnapshot>({
     questionNumber: initialQuestionNumber,
     percent: FINAL_TRIAL_CONFIG.startPercent + (initialQuestionNumber - 1) * FINAL_TRIAL_CONFIG.percentPerCorrect,
@@ -105,6 +155,11 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const endTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  /** Ver.6 Phase 5.2: このプレイで実際に出題された問題列（Challenge作成に使う）。 */
+  function getRecordedProblemSet(): ChallengeProblemSetItem[] {
+    return recordedRef.current
+  }
+
   useEffect(() => {
     return () => {
       if (successTimerRef.current) clearTimeout(successTimerRef.current)
@@ -120,6 +175,19 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
    * の階層プールからanti-clusteringで抽選する。
    */
   function buildQuestion(questionNumber: number): FinalQuestionSpec {
+    const replayQuestions = replayQuestionsRef.current
+    if (replayQuestions && replayIndexRef.current < replayQuestions.length) {
+      const spec = problemSetItemToSpec(replayQuestions[replayIndexRef.current])
+      replayIndexRef.current += 1
+      recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, 3)
+      recentTagsRef.current = spec.tags
+      currentSpecRef.current = spec
+      if (recordedRef.current.length < MAX_RECORDED_PROBLEMS) {
+        recordedRef.current = [...recordedRef.current, specToProblemSetItem(spec)]
+      }
+      return spec
+    }
+
     if (questionNumber === FINAL_TRIAL_CONFIG.totalQuestions) {
       const module = pick(ULTIMATE_QUESTION_POOL)
       const data = module.generate()
@@ -134,6 +202,9 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
       recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, 3)
       recentTagsRef.current = spec.tags
       currentSpecRef.current = spec
+      if (recordedRef.current.length < MAX_RECORDED_PROBLEMS) {
+        recordedRef.current = [...recordedRef.current, specToProblemSetItem(spec)]
+      }
       return spec
     }
 
@@ -142,6 +213,9 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
     recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, 3)
     recentTagsRef.current = spec.tags
     currentSpecRef.current = spec
+    if (recordedRef.current.length < MAX_RECORDED_PROBLEMS) {
+      recordedRef.current = [...recordedRef.current, specToProblemSetItem(spec)]
+    }
     return spec
   }
 
@@ -211,11 +285,18 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
       const trialsCleared = questionNumberRef.current - 1
       setSnapshot((s) => ({ ...s, phase: 'failed', currentSpec: null, judgementKey: judgementKeyRef.current }))
       endTimerRef.current = setTimeout(() => {
-        onFinish({ finalPercent: percentRef.current, trialsCleared, cleared200: false })
+        onFinish({
+          finalPercent: percentRef.current,
+          trialsCleared,
+          cleared200: false,
+          // MISSで終了＝正解trialsCleared問＋今回のMISS1問の合計が総回答数。
+          trialPerformance: { maxCombo: trialsCleared, accuracy: trialsCleared / (trialsCleared + 1), reactionMsList: reactionMsListRef.current },
+        })
       }, FAIL_TRANSITION_MS)
       return
     }
 
+    reactionMsListRef.current.push(result.reactionMs)
     const clearedNumber = questionNumberRef.current
     percentRef.current += FINAL_TRIAL_CONFIG.percentPerCorrect
     judgementKeyRef.current += 1
@@ -223,6 +304,7 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
     if (clearedNumber >= FINAL_TRIAL_CONFIG.totalQuestions) {
       endedRef.current = true
       trackPerfectClear()
+      trackReach200()
       setSnapshot((s) => ({
         ...s,
         phase: 'clear200',
@@ -236,6 +318,8 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
           finalPercent: FINAL_TRIAL_CONFIG.clearPercent,
           trialsCleared: FINAL_TRIAL_CONFIG.totalQuestions,
           cleared200: true,
+          // 全問正解＝accuracy 1、maxCombo=totalQuestions。
+          trialPerformance: { maxCombo: FINAL_TRIAL_CONFIG.totalQuestions, accuracy: 1, reactionMsList: reactionMsListRef.current },
         })
       }, CLEAR200_TRANSITION_MS)
       return
@@ -245,5 +329,5 @@ export function useFinalTrial(onFinish: (payload: FinalTrialFinishPayload) => vo
     triggerPostClearFlow(clearedNumber)
   }
 
-  return { snapshot, start, handleResult }
+  return { snapshot, start, handleResult, getRecordedProblemSet }
 }

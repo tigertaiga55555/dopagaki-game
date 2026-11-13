@@ -6,8 +6,13 @@ import { QuestionShell } from './QuestionShell'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
 /**
- * 「緑で離せ！」：HOLDの派生。押し続けるとゲージが進み、緑ゾーン内で指を離せば成功。
- * 早すぎても（緑ゾーン前）、通り過ぎても（緑ゾーン後）MISS。
+ * 「ゾーンで離せ！」：HOLDの派生。押し続けるとゲージが進み、枠で囲まれたゾーン内で
+ * 指を離せば成功。早すぎても（ゾーン前）、通り過ぎても（ゾーン後）MISS。
+ *
+ * Ver.6 Phase 1: 旧実装はゾーンを緑色の塗りつぶしのみで示していたため、色識別が
+ * 実質的に必要になっていた（色の正解条件化は禁止）。白い太枠＋斜めストライプ柄という、
+ * 色を一切使わない形でゾーンの位置を示すよう変更した。ゲージ本体の進捗バー色は
+ * 正解条件に関与しない純粋な演出のため、装飾としてそのまま残している。
  *
  * Ver.4.6の重要な修正：外側の汎用タイムアウトはマウント時にspec.targetTimeMsで一度だけ
  * セットされていたため、反応してから指を置くまでにわずかでも想定より時間がかかると、
@@ -113,7 +118,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction="緑で離せ！">
+    <QuestionShell instruction="枠の中で離せ！">
       <div className="flex flex-col items-center gap-4">
         {/* HoldPressQuestionと同じ根本原因（指のわずかな動きをブラウザがジェスチャーと
             誤認しpointercancelを誤発火させる）に対する修正。touch-action:noneで
@@ -126,10 +131,16 @@ function Component({ spec, onResult }: QuestionComponentProps) {
         >
           {holding ? '' : 'HOLD'}
         </button>
-        <div className="relative h-4 w-64 overflow-hidden rounded-full bg-white/10">
+        <div className="relative h-5 w-64 overflow-hidden rounded-full bg-white/10">
+          {/* ゾーンの位置は白い太枠＋斜めストライプ柄のみで示す（色に依存しない） */}
           <div
-            className="absolute inset-y-0 bg-emerald-500/60"
-            style={{ left: `${zoneStartPct}%`, width: `${zoneEndPct - zoneStartPct}%` }}
+            className="absolute inset-y-0 rounded-sm border-2 border-white"
+            style={{
+              left: `${zoneStartPct}%`,
+              width: `${zoneEndPct - zoneStartPct}%`,
+              backgroundImage:
+                'repeating-linear-gradient(45deg, rgba(255,255,255,0.35) 0px, rgba(255,255,255,0.35) 3px, transparent 3px, transparent 7px)',
+            }}
           />
           <div className="absolute inset-y-0 left-0 bg-fuchsia-400" style={{ width: `${fill}%` }} />
         </div>

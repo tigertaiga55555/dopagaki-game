@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQuestionStartRef } from '../useQuestionStartRef'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { randInt } from '../../engine/random'
 import { createResolveOnce } from '../../engine/resolveOnce'
@@ -35,7 +36,7 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   const [uiPhase, setUiPhase] = useState<Phase>('INPUT')
   const phaseRef = useRef<Phase>('INPUT')
   const countRef = useRef(0)
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const lastTapAtRef = useRef(0)
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)

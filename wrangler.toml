@@ -1,0 +1,54 @@
+name = "dopagaki-game"
+compatibility_date = "2026-10-21"
+main = "src/worker/index.ts"
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+# Ver.6 Phase 5.1（Challengeバックエンド基盤）: /api/* だけをWorkerスクリプトへ渡す。
+# これ以外の全パス（既存のSPA本体）は従来どおり静的アセット優先のまま、一切挙動を変えない。
+run_worker_first = ["/api/*"]
+
+[previews]
+
+# Ver.6 Phase 5.2（Challenge機能完成・バグ修正）: Challengeバックエンド用D1データベース
+# （Preview専用、Productionとは完全に分離した名前・バインディング）。
+#
+# 重要: このファイルに[previews]テーブルが存在する場合、`wrangler preview`は
+# トップレベルの[[d1_databases]]を一切継承しない（wrangler本体の仕様。
+# "Assets, compatibility settings, migrations, and placement stay at the top
+# level"だが、D1などのbindingはpreviewsブロックに明示しないとPreview Workerへ
+# 渡らない）。そのため、GitHub Actions（.github/workflows/cloudflare-preview-ver6.yml）
+# は、Preview D1データベース作成直後に[[previews.d1_databases]]ブロックを
+# このファイルのコピーへ一時的に追記してから`wrangler preview`を実行する
+# （database_idはCI実行ごとに動的取得し、このリポジトリには固定で書き込まない）。
+#
+# [[previews.d1_databases]]
+# binding = "CHALLENGE_DB"
+# database_name = "dopagaki-challenges-preview"
+# database_id = "<CI実行時にCloudflare D1 REST APIから取得した値>"
+
+# Ver.6 Phase 6（1対1リアルタイム対戦）: Durable Object（Matchmaker・BattleRoom）。
+# D1と異なりCloudflare API経由での事前作成は不要（class_nameをexportしてmigrationsタグを
+# 付けるだけで、wrangler preview/deploy時に自動的にプロビジョニングされる）。
+# ただし[previews]テーブルが存在する場合、トップレベルのbindingはここでも継承されない
+# （D1と同じ既知の挙動）ため、previews.durable_objects.bindingsにも明示的に複製する。
+[[durable_objects.bindings]]
+name = "MATCHMAKER"
+class_name = "Matchmaker"
+
+[[durable_objects.bindings]]
+name = "BATTLE_ROOM"
+class_name = "BattleRoom"
+
+[[previews.durable_objects.bindings]]
+name = "MATCHMAKER"
+class_name = "Matchmaker"
+
+[[previews.durable_objects.bindings]]
+name = "BATTLE_ROOM"
+class_name = "BattleRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Matchmaker", "BattleRoom"]

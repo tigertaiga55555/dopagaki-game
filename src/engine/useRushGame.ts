@@ -15,15 +15,35 @@ import {
   nextMomentum,
 } from '../config/scoreConfigV4'
 import { TIMING_SAFETY } from '../config/timingConfig'
-import { trackFinalReached, trackOverdriveReached } from '../utils/analytics'
+import { trackFinalReached, trackOverdriveReached, trackReach100, trackReach120 } from '../utils/analytics'
 import { setCurrentStageIndex } from './difficultyStage'
+import { PRE_COUNTDOWN_MS, preCountdownValueAt } from './preCountdown'
 import { generateNextQuestion } from './questionPicker'
 import { randFloat } from './random'
 import { QUESTION_MODULES } from '../questions'
 import { duckAudio } from '../utils/audioContext'
 import { playLateGameSweetener, playRiser, setBgmProgress, setOverdriveMode, startBgm, stopBgm } from '../utils/bgm'
 import { sfx } from '../utils/sound'
+import type { ChallengeProblemSetItem } from '../challenge/types'
 import type { DifficultyPhaseId, Judgement, PlayStats, QuestionResult, QuestionSpec, QuestionTypeId } from '../types'
+
+/** Ver.6 Phase 5.2（Challenge機能完成）: 1件のChallengeへ保存する問題数の上限（Worker側validation.tsと同じ値）。 */
+const MAX_RECORDED_PROBLEMS = 300
+
+export function specToProblemSetItem(spec: QuestionSpec): ChallengeProblemSetItem {
+  return { type: spec.type, targetTimeMs: spec.targetTimeMs, data: spec.data }
+}
+
+let replaySpecCounter = 0
+export function problemSetItemToSpec(item: ChallengeProblemSetItem): QuestionSpec {
+  replaySpecCounter += 1
+  return {
+    instanceId: `normal-replay-${replaySpecCounter}`,
+    type: item.type as QuestionTypeId,
+    targetTimeMs: item.targetTimeMs ?? 1000,
+    data: item.data,
+  }
+}
 
 /** Ver.4.9: OVERDRIVE正式突入時に一度だけ加算する残り時間ボーナス（秒） */
 const OVERDRIVE_TIME_BONUS_SEC = 10
@@ -31,7 +51,6 @@ const OVERDRIVE_TIME_BONUS_SEC = 10
 const BONUS_TIME_WINDOW_START_SEC = 25
 const BONUS_TIME_WINDOW_END_SEC = 40
 
-const PRE_COUNTDOWN_MS = 1800
 /** 100%/OVERDRIVE到達演出のときだけ、次の問題を意図的に少し遅らせる（それ以外は即座に次へ進む） */
 const MILESTONE_FREEZE_MS = 650
 /** PERFECT/GREAT/GOOD/MISSのオーバーレイ表示時間。次の問題の上に重ねるだけでゲーム進行は止めない。 */
@@ -185,7 +204,7 @@ export interface RushFinishPayload {
   stats: PlayStats
 }
 
-function createStats(): PlayStats {
+export function createStats(): PlayStats {
   return {
     totalAnswered: 0,
     correctCount: 0,
@@ -210,6 +229,7 @@ function createStats(): PlayStats {
     shortVideoSamples: [],
     colorWordFooledCount: 0,
     notifRushSamples: [],
+    bonusGainRaw: 0,
   }
 }
 
@@ -226,7 +246,37 @@ function easeOutCubic(t: number): number {
  * （useFinalTrial）が別エンジンとしてゲームを引き継ぐ。onFinishは非FINALな終了
  * （時間切れ、MISS経験ありでの101〜119%終了など）でのみ呼ばれる。
  */
-export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEnterFinal: (stats: PlayStats) => void) {
+export interface UseRushGameOptions {
+  /**
+   * Ver.6 Phase 5.2（Challenge機能完成）: 指定されると、generateNextQuestionによる
+   * ランダム出題の代わりにこの配列を順番に出題する（DOPA BONUS TIMEの強制挿入も
+   * 含め、Challenge作成者が実際に見た問題をそのままの順番で再生する）。配列を
+   * 使い切った後は元々の問題生成ロジックへ自動的にフォールバックする。
+   * タイマー・COMBO・OVERDRIVE等の進行ロジックは一切変更しない
+   * （挑戦者自身の反応速度・正誤だけがスコアを左右する、という既存の公平性は保つ）。
+   */
+  replayQuestions?: ChallengeProblemSetItem[]
+  /**
+   * Ver.6 Phase 6（1対1リアルタイム対戦）: 1問の判定が確定した直後（tween演出が
+   * 始まる前）に呼ばれる。rawScoreRef（表示用のdisplayPercentとは違い、アニメーションの
+   * 影響を受けない実際のスコア）への加減算量をそのまま渡すだけで、既存の判定・
+   * タイマー・COMBO・OVERDRIVEロジックには一切手を入れない（単機プレイの既存呼び出し元は
+   * 渡さないため挙動は変わらない）。Battle機能がこれをサーバーへのanswerイベント送信に使う。
+   */
+  onQuestionResolved?: (info: { correct: boolean; reactionMs: number; scoreDelta: number; bonusGainDelta: number }) => void
+}
+
+export function useRushGame(
+  onFinish: (payload: RushFinishPayload) => void,
+  onEnterFinal: (stats: PlayStats) => void,
+  options?: UseRushGameOptions,
+) {
+  const onQuestionResolvedRef = useRef(options?.onQuestionResolved)
+  onQuestionResolvedRef.current = options?.onQuestionResolved
+  const replayQuestionsRef = useRef(options?.replayQuestions)
+  const replayIndexRef = useRef(0)
+  const recordedRef = useRef<ChallengeProblemSetItem[]>([])
+
   const [snapshot, setSnapshot] = useState<RushSnapshot>({
     phaseId: 'warmup',
     remainingSec: TOTAL_GAME_SEC,
@@ -332,6 +382,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEn
       overdriveActiveRef.current = true
       overdriveBonusSecRef.current = OVERDRIVE_TIME_BONUS_SEC
       trackOverdriveReached()
+      trackReach100()
     }
     // 非OVERDRIVEは常に100が上限、OVERDRIVE突入後は119（一度でもMISSしている場合）
     // または120（ゲーム開始から完全ノーミスの場合のみ）。
@@ -347,6 +398,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEn
     if (crossingFinalEntry) {
       finalEntryTriggeredRef.current = true
       trackFinalReached()
+      trackReach120()
       // 「120%へ到達した瞬間、ゲーム一時停止」：エンジン自体をここで即座に停止する
       // （以後のtick・出題を一切行わない）。演出・FINAL DOPA TRIALへの引き継ぎは
       // 呼び出し元（PlayScreen）がonEnterFinalを受けて行う。
@@ -403,6 +455,23 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEn
     if (endedRef.current || startTimeRef.current === null) return null
     const elapsedSec = (performance.now() - startTimeRef.current) / 1000
     if (elapsedSec >= totalGameSec()) return null
+
+    // Ver.6 Phase 5.2（Challenge機能完成）: replayQuestionsが残っている間は、経過時間・
+    // DOPA BONUS TIMEのスケジュール・phaseに一切関係なく、記録済みの問題をそのまま
+    // 順番に出す（「同じ問題・同じ順番」を保証する唯一の方法——タイマー・COMBO・
+    // OVERDRIVEなど他のロジックは一切変更しない）。使い切ったら通常の抽選に戻る。
+    const replayQuestions = replayQuestionsRef.current
+    if (replayQuestions && replayIndexRef.current < replayQuestions.length) {
+      const spec = problemSetItemToSpec(replayQuestions[replayIndexRef.current])
+      replayIndexRef.current += 1
+      recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, RECENT_TYPES_LENGTH)
+      currentSpecRef.current = spec
+      if (recordedRef.current.length < MAX_RECORDED_PROBLEMS) {
+        recordedRef.current = [...recordedRef.current, specToProblemSetItem(spec)]
+      }
+      return spec
+    }
+
     const phase = getPhaseAt(elapsedSec)
     let spec: QuestionSpec
     // Ver.4.9: DOPA BONUS TIMEは抽選プールに含めず、1ゲームにつき必ず1回、開始時に決めた
@@ -421,7 +490,15 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEn
     }
     recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, RECENT_TYPES_LENGTH)
     currentSpecRef.current = spec
+    if (recordedRef.current.length < MAX_RECORDED_PROBLEMS) {
+      recordedRef.current = [...recordedRef.current, specToProblemSetItem(spec)]
+    }
     return spec
+  }
+
+  /** Ver.6 Phase 5.2: このプレイで実際に出題された問題列（Challenge作成に使う）。 */
+  function getRecordedProblemSet(): ChallengeProblemSetItem[] {
+    return recordedRef.current
   }
 
   function handleQuestionResult(result: QuestionResult) {
@@ -476,6 +553,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEn
     stats.typeStats[spec.type] = typeEntry
 
     const isBonusTime = spec.type === 'bonusTime'
+    const scoreBeforeResolve = rawScoreRef.current
 
     let comboBrokenFrom = 0
     let comboBreakBig = false
@@ -543,7 +621,11 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEn
       if (isBonusTime) {
         // 「1タップ=1%」のような直接変換はせず、通常問題1〜2問ぶん相当を上限とする
         // firmly cappedなボーナス（COMBO・MOMENTUM倍率は適用しない＝連打の速さそのものだけで評価する）。
-        rawScoreRef.current += computeBonusGain(result.meta?.bonusTapCount ?? 0)
+        const bonusGain = computeBonusGain(result.meta?.bonusTapCount ?? 0)
+        rawScoreRef.current += bonusGain
+        // Ver.6 Phase 5.3: Challenge用「通常獲得DOPA%」算出のため、ボーナス加算量だけを別途記録する
+        // （rawScoreRef自体への加算・既存の最終DOPA%計算には一切影響しない）。
+        stats.bonusGainRaw += bonusGain
       } else {
         const qualityTier = tier as 'PERFECT' | 'GREAT' | 'GOOD'
         // DOPA MOMENTUM。今回の加点にはこの正解「より前」の蓄積分（直近の質の高さ）を
@@ -563,6 +645,16 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEn
         rawScoreRef.current += gain
         momentumRef.current = nextMomentum(momentumRef.current, qualityTier)
       }
+    }
+
+    if (onQuestionResolvedRef.current) {
+      const delta = rawScoreRef.current - scoreBeforeResolve
+      onQuestionResolvedRef.current({
+        correct: tier !== 'MISS',
+        reactionMs: result.reactionMs,
+        scoreDelta: isBonusTime ? 0 : delta,
+        bonusGainDelta: isBonusTime ? delta : 0,
+      })
     }
 
     const { crossingHundred, crossingFinalEntry } = setPercentTarget()
@@ -649,7 +741,7 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEn
       if (startTimeRef.current === null) {
         const elapsed = now - preStartRef.current
         const remaining = Math.max(0, PRE_COUNTDOWN_MS - elapsed)
-        const value = remaining <= 0 ? null : remaining > 1200 ? 3 : remaining > 600 ? 2 : 1
+        const value = preCountdownValueAt(elapsed)
         setSnapshot((s) => (s.preCountdown === value ? s : { ...s, preCountdown: value }))
         // Ver.4.8: START→3・2・1・GOの開始演出。3→2→1と音程が少しずつ上がるビープを鳴らし、
         // GOの瞬間にBGM開始・画面フラッシュ・最初の問題出現を同期させる。
@@ -749,5 +841,16 @@ export function useRushGame(onFinish: (payload: RushFinishPayload) => void, onEn
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return { snapshot, handleQuestionResult }
+  return {
+    snapshot,
+    handleQuestionResult,
+    getRecordedProblemSet,
+    /**
+     * Ver.6 Phase 6（1対1リアルタイム対戦）: replayQuestionsのうち、ここまでに消費した件数。
+     * 120%到達でFinalTrialScreenへ引き継ぐ際、呼び出し側がreplayQuestions.slice(replayIndex)で
+     * 残りを渡せば、FinalTrial側も同じ共有ProblemSetの続きを消費できる
+     * （既存のreplayQuestions未使用の呼び出し元には影響しない）。
+     */
+    replayIndex: replayIndexRef.current,
+  }
 }

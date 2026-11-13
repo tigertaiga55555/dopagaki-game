@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { getOverdriveFrameClass, getOverdriveTier, LimitErrorOverlay, OverdriveAmbience, OverdriveRevealOverlay } from '../components/OverdriveFx'
 import { QuitButton } from '../components/QuitButton'
 import { getVisualLevelDef } from '../config/visualConfig'
@@ -8,11 +9,33 @@ import { useRushGame } from '../engine/useRushGame'
 import { QUESTION_MODULES } from '../questions'
 import { FinalTrialScreen } from './FinalTrialScreen'
 import { isMuted, setMuted } from '../utils/sound'
-import type { FinalResultV4, PlayStats } from '../types'
+import type { ChallengeProblemSetItem, FinalResultV4, PlayStats } from '../types'
 
 interface Props {
   onFinish: (result: FinalResultV4) => void
   onQuit: () => void
+  /**
+   * Ver.6 Phase 5.2（Challenge機能完成）: 指定されると、通常のランダム出題の代わりに
+   * この配列を順番に出題する（Challenge挑戦時、作成者と完全に同じ問題で再生するため）。
+   */
+  replayQuestions?: ChallengeProblemSetItem[]
+  /**
+   * Ver.6 Phase 6（1対1リアルタイム対戦）: 1問ごとの判定確定を外部へ伝える追加フック
+   * （useRushGameのonQuestionResolvedをそのまま橋渡しするだけ）。単機プレイの既存呼び出し元は
+   * 渡さないため挙動は変わらない。
+   */
+  onQuestionResolved?: (info: { correct: boolean; reactionMs: number; scoreDelta: number; bonusGainDelta: number }) => void
+  /**
+   * Ver.6 Phase 6: 120%到達後、内部でFinalTrialScreenへ引き継がれた後の進捗
+   * （FinalTrialScreen自身のonProgressと同じ形）。
+   */
+  onFinalTrialProgress?: (percent: number) => void
+  /**
+   * Ver.6 Phase 6（1対1リアルタイム対戦UI調整）: BattleのRIVAL%表示をQuitButtonの帯に
+   * 差し込むためのスロット。単機プレイ・Endless・Challengeの既存呼び出し元は渡さないため
+   * 挙動は変わらない。
+   */
+  battleHud?: ReactNode
 }
 
 const JUDGEMENT_COLOR: Record<string, string> = {
@@ -24,11 +47,12 @@ const JUDGEMENT_COLOR: Record<string, string> = {
 
 const PARTICLE_POSITIONS = Array.from({ length: 8 }).map((_, i) => ({ x: (i * 12.5) % 100, delay: i * 0.2 }))
 
-export function PlayScreen({ onFinish, onQuit }: Props) {
+export function PlayScreen({ onFinish, onQuit, replayQuestions, onQuestionResolved, onFinalTrialProgress, battleHud }: Props) {
   const [finalEntryStats, setFinalEntryStats] = useState<PlayStats | null>(null)
-  const { snapshot, handleQuestionResult } = useRushGame(
-    (payload) => onFinish(computeFinalResult(payload)),
+  const { snapshot, handleQuestionResult, getRecordedProblemSet, replayIndex } = useRushGame(
+    (payload) => onFinish(computeFinalResult(payload, getRecordedProblemSet())),
     (stats) => setFinalEntryStats(stats),
+    { replayQuestions, onQuestionResolved },
   )
   const [muted, setMutedState] = useState(isMuted())
   const shakeWrapperRef = useRef<HTMLDivElement>(null)
@@ -69,7 +93,16 @@ export function PlayScreen({ onFinish, onQuit }: Props) {
   // （PlayScreenを再マウントさせない＝Question subtreeのkey不変則には抵触しない。
   // 通常ゲームは既にcurrentSpecがnullで問題を表示していないため、切り替えの影響を受けない）。
   if (finalEntryStats) {
-    return <FinalTrialScreen initialStats={finalEntryStats} onFinish={onFinish} onQuit={onQuit} />
+    return (
+      <FinalTrialScreen
+        initialStats={finalEntryStats}
+        onFinish={onFinish}
+        onQuit={onQuit}
+        onProgress={onFinalTrialProgress}
+        replayQuestions={replayQuestions?.slice(replayIndex)}
+        battleHud={battleHud}
+      />
+    )
   }
 
   const overdriveTier = getOverdriveTier(snapshot.displayPercent)
@@ -88,7 +121,7 @@ export function PlayScreen({ onFinish, onQuit }: Props) {
 
   return (
     <div className={`relative flex min-h-dvh flex-col overflow-hidden ${frameClass}`}>
-      <QuitButton onQuit={onQuit} />
+      <QuitButton onQuit={onQuit} leftSlot={battleHud} />
       {visual.particles && (
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           {PARTICLE_POSITIONS.map((p, i) => (

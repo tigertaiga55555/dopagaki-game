@@ -45,6 +45,7 @@ const FAKE_STATS: PlayStats = {
   shortVideoSamples: [],
   colorWordFooledCount: 0,
   notifRushSamples: [],
+  bonusGainRaw: 0,
 }
 
 const MODE_LABEL: Record<FinalPreviewMode, string> = {

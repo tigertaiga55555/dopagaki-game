@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQuestionStartRef } from '../useQuestionStartRef'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { randInt, shuffle } from '../../engine/random'
 import { QuestionShell } from '../QuestionShell'
+import { SelectionOrderBadge, sequenceOrderOf } from '../SelectionOrderBadge'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
 function pickDistinctEven(count: number): number[] {
@@ -36,7 +38,7 @@ function computeTargetTimeMs() {
 function Component({ spec, onResult }: FinalQuestionComponentProps) {
   const { numbers, order } = spec.data as { numbers: number[]; order: number[] }
   const [clearedCount, setClearedCount] = useState(0)
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const guardRef = useRef<ReturnType<typeof createResolveOnce<FinalQuestionResult>> | null>(null)
   if (!guardRef.current) guardRef.current = createResolveOnce(onResult)
   const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -74,15 +76,21 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   return (
     <QuestionShell instruction={'奇数だけ\n小さい順に全て押せ！'}>
       <div className="grid grid-cols-3 gap-3">
-        {numbers.map((n, i) => (
-          <button
-            key={i}
-            onPointerDown={() => handleTap(n)}
-            className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-2xl font-black text-white active:scale-90"
-          >
-            {n}
-          </button>
-        ))}
+        {numbers.map((n, i) => {
+          const orderLabel = sequenceOrderOf(n, order, clearedCount)
+          return (
+            <button
+              key={i}
+              onPointerDown={() => handleTap(n)}
+              className={`relative flex h-16 w-16 items-center justify-center rounded-2xl text-2xl font-black text-white active:scale-90 ${
+                orderLabel !== null ? 'bg-amber-400/25' : 'bg-white/10'
+              }`}
+            >
+              {n}
+              {orderLabel !== null && <SelectionOrderBadge order={orderLabel} />}
+            </button>
+          )
+        })}
       </div>
     </QuestionShell>
   )

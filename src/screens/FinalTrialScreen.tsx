@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import {
   Clear200ImpactOverlay,
   Clear200SlamOverlay,
@@ -15,13 +16,17 @@ import {
 import { Confetti120Overlay, GoldenClearOverlay, RainbowShockwaveOverlay, Sparkle120Overlay, WhiteFlashOverlay } from '../components/OverdriveFx'
 import { QuitButton } from '../components/QuitButton'
 import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
-import { computeFinalTrialResult } from '../engine/resultEngineV4'
+import type { Challenge500State } from '../engine/challenge500Engine'
+import { computeChallenge500Result, computeFinalTrialResult } from '../engine/resultEngineV4'
 import { finalSuccessIntensityFor, useFinalTrial } from '../engine/useFinalTrial'
 import { FINAL_QUESTION_MODULES, ULTIMATE_QUESTION_POOL } from '../questions/final'
+import { Challenge500IntroScreen } from './Challenge500IntroScreen'
+import { Challenge500Screen } from './Challenge500Screen'
+import { LimitBreakUnlockScreen } from './LimitBreakUnlockScreen'
 import { duckAudio, unlockAudio } from '../utils/audioContext'
 import { setFinalIntensity, setFinalMode, setUltimateMode, startBgm, stopBgm } from '../utils/bgm'
 import { isMuted, PERFECT_FANFARE_200_TIMING_MS, setMuted, sfx } from '../utils/sound'
-import type { FinalResultV4, PlayStats } from '../types'
+import type { ChallengeProblemSetItem, FinalResultV4, PlayStats } from '../types'
 
 interface Props {
   initialStats: PlayStats
@@ -46,6 +51,23 @@ interface Props {
    * すぐ確認できるようにするための便宜機能。本番からは絶対に渡されない。
    */
   autoForceCorrectDelayMs?: number
+  /**
+   * Ver.6 Phase 5.2（Challenge機能完成）: 指定されると、通常のランダム出題の代わりに
+   * この配列を順番に出題する（mode='finalTrial'のChallenge挑戦時に使う）。
+   */
+  replayQuestions?: ChallengeProblemSetItem[]
+  /**
+   * Ver.6 Phase 6（1対1リアルタイム対戦）: 指定すると、現在のDOPA%が変化するたび
+   * （=1問ごとの判定確定のたび）に呼ばれる。既存のuseFinalTrial/演出ロジックには
+   * 一切手を入れず、既に公開されているsnapshot.percentをそのまま外部へ伝えるだけの
+   * 追加フック（単機プレイの既存呼び出し元は渡さないため挙動は変わらない）。
+   */
+  onProgress?: (percent: number) => void
+  /**
+   * Ver.6 Phase 6（1対1リアルタイム対戦UI調整）: BattleのRIVAL%表示をQuitButtonの帯に
+   * 差し込むためのスロット。単機プレイの既存呼び出し元は渡さないため挙動は変わらない。
+   */
+  battleHud?: ReactNode
 }
 
 /**
@@ -100,12 +122,38 @@ export function FinalTrialScreen({
   startAtQuestion = 1,
   showForceCorrect = false,
   autoForceCorrectDelayMs,
+  replayQuestions,
+  onProgress,
+  battleHud,
 }: Props) {
   const [entryDone, setEntryDone] = useState(startAtQuestion >= FINAL_TRIAL_CONFIG.totalQuestions)
   const [muted, setMutedState] = useState(isMuted())
-  const { snapshot, start, handleResult } = useFinalTrial((payload) => {
-    onFinish(computeFinalTrialResult(payload, initialStats))
-  }, startAtQuestion)
+  /**
+   * Ver.6 Phase 1: 200% PERFECT CLEAR後、即座に結果画面へ進ませず、必ず「500%に挑戦」
+   * 説明画面を経由させるための分岐。useFinalTrial自体（120〜200%の既存ロジック・演出タイミング）
+   * は一切変更せず、200%到達後のonFinishコールバックの手前でだけ横取りする。
+   * 通常のMISS終了（cleared200===false）は従来通り即座にonFinishを呼ぶため、
+   * 既存の0〜200%の挙動に影響はない。
+   */
+  const [challengePhase, setChallengePhase] = useState<'none' | 'unlock' | 'intro' | 'active'>('none')
+  const clear200ResultRef = useRef<FinalResultV4 | null>(null)
+  const { snapshot, start, handleResult, getRecordedProblemSet } = useFinalTrial(
+    (payload) => {
+      if (payload.cleared200) {
+        clear200ResultRef.current = computeFinalTrialResult(payload, initialStats, getRecordedProblemSet())
+        setChallengePhase('unlock')
+        return
+      }
+      onFinish(computeFinalTrialResult(payload, initialStats, getRecordedProblemSet()))
+    },
+    startAtQuestion,
+    { replayQuestions },
+  )
+
+  useEffect(() => {
+    onProgress?.(snapshot.percent)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot.percent])
 
   // 突入演出の各ビート
   const [showCrack, setShowCrack] = useState(false)
@@ -346,10 +394,31 @@ export function FinalTrialScreen({
   // ULTIMATE QUESTION（突入演出中〜Q16回答中）だけは赤＋黒＋非常警告の専用世界観にする。
   const showUltimateWorld = snapshot.phase === 'ultimateIntro' || (snapshot.phase === 'playing' && isUltimateQuestion)
 
+  if (challengePhase === 'unlock') {
+    return <LimitBreakUnlockScreen onQuit={onQuit} onComplete={() => setChallengePhase('intro')} />
+  }
+
+  if (challengePhase === 'intro') {
+    return <Challenge500IntroScreen onStart={() => setChallengePhase('active')} onQuit={onQuit} />
+  }
+
+  if (challengePhase === 'active') {
+    return (
+      <Challenge500Screen
+        onQuit={onQuit}
+        onFinish={(state: Challenge500State, recordedProblemSet, performanceStats) => {
+          const base = clear200ResultRef.current
+          if (!base) return
+          onFinish(computeChallenge500Result(state, base, true, recordedProblemSet, performanceStats))
+        }}
+      />
+    )
+  }
+
   if (!entryDone) {
     return (
       <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
-        <QuitButton onQuit={onQuit} />
+        <QuitButton onQuit={onQuit} leftSlot={battleHud} />
         {/*
           演出本体（FinalWorldAmbience等）は全てabsolute inset-0で画面全体を覆う。
           このラッパー自体にはpositionを指定しない（static のまま）ことで、
@@ -373,7 +442,7 @@ export function FinalTrialScreen({
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
-      <QuitButton onQuit={onQuit} />
+      <QuitButton onQuit={onQuit} leftSlot={battleHud} />
       {showUltimateWorld ? <UltimateWorldAmbience /> : <FinalWorldAmbience />}
 
       <div className="relative z-30 flex items-start justify-between px-5 pt-3 pb-1">

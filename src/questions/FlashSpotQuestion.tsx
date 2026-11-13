@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { randInt } from '../engine/random'
 import { sfx } from '../utils/sound'
@@ -26,7 +27,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
   const [flashed, setFlashed] = useState(false)
   const [flashing, setFlashing] = useState(false)
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const flashedAtRef = useRef<number | null>(null)
   const doneRef = useRef(false)
 
