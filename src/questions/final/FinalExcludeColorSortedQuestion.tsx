@@ -4,6 +4,7 @@ import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { pick, randInt, shuffle } from '../../engine/random'
 import { QuestionShell } from '../QuestionShell'
+import { SelectionOrderBadge, sequenceOrderOf } from '../SelectionOrderBadge'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
 interface Item {
@@ -87,16 +88,22 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   return (
     <QuestionShell instruction={`${SHAPE_LABELS[excludeShape]}以外を\n小さい順に全て押せ！`}>
       <div className="grid grid-cols-3 gap-3">
-        {items.map((it) => (
-          <button
-            key={it.id}
-            onPointerDown={() => handleTap(it)}
-            className="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-2xl bg-white/10 text-lg font-black text-white active:scale-90"
-          >
-            <ShapeIcon shape={it.shape} size={18} />
-            {it.value}
-          </button>
-        ))}
+        {items.map((it) => {
+          const orderLabel = sequenceOrderOf(it.id, order, clearedCount)
+          return (
+            <button
+              key={it.id}
+              onPointerDown={() => handleTap(it)}
+              className={`relative flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-2xl text-lg font-black text-white active:scale-90 ${
+                orderLabel !== null ? 'bg-amber-400/25' : 'bg-white/10'
+              }`}
+            >
+              <ShapeIcon shape={it.shape} size={18} />
+              {it.value}
+              {orderLabel !== null && <SelectionOrderBadge order={orderLabel} />}
+            </button>
+          )
+        })}
       </div>
     </QuestionShell>
   )

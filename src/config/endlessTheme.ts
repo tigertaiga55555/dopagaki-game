@@ -1,7 +1,8 @@
 import type { EndlessDifficulty } from '../types'
 
 /**
- * Ver.6 Phase 4.1（難易度再設計）: Endless 初級/中級/上級の視覚テーマ。
+ * Ver.6 Phase 4.1（難易度再設計）〜Phase 7（ホーム/ENDLESS実機QA最終改善）: Endless
+ * 初級/中級/上級の視覚テーマ。
  *
  * ユーザー指示: 「難易度を選んだ瞬間に、初級っぽい／中級っぽい／上級っぽいが視覚的に分かること」。
  * challenge500Theme.tsと同じ方針で、このファイルは純粋なデータ定義のみを行う（DOM・Reactに
@@ -10,10 +11,12 @@ import type { EndlessDifficulty } from '../types'
  * 全ソースファイル（.tsも含む）を自動スキャンするため、ここに書いた完全なクラス名文字列も
  * 問題なく生成対象になる（動的な文字列結合は一切していない）。
  *
- * 配色方針（ユーザー指示どおり）:
- *   初級 = 緑〜ミント系（入りやすい・爽やか・安定 = FLOW）
- *   中級 = 青〜シアン系（集中・クール・テクニカル = FOCUS）
- *   上級 = 赤〜オレンジ系（危険・緊張・高難易度 = DANGER）
+ * Phase 7で実機QAにより確定した最終配色（以前の薄い印象を減らし、明るく濃く発光感のある
+ * 方向へ寄せた。また英語ムードラベルをFLOW/FOCUS/DANGER→EASY/HARD/DANGERへ変更。
+ * DANGERのみ「現状ユーザーにも分かりやすい」として維持）:
+ *   初級 = 明るい緑系（EASY）
+ *   中級 = 黄色〜オレンジ系（HARD）——以前の青〜シアン系（FOCUS）から変更
+ *   上級 = 赤系（DANGER）——以前のオレンジ寄りの配色から、より明確な赤主体へ変更
  */
 export interface EndlessThemeParams {
   id: EndlessDifficulty
@@ -38,35 +41,38 @@ export interface EndlessThemeParams {
 export const ENDLESS_THEME: Record<EndlessDifficulty, EndlessThemeParams> = {
   beginner: {
     id: 'beginner',
-    mood: 'FLOW',
-    colorRgb: '52, 211, 153',
-    textClass: 'text-emerald-300',
-    cardClass: 'border border-emerald-400/25 bg-emerald-500/10',
-    timerBarClass: 'bg-emerald-400/80',
-    buttonGradientClass: 'bg-gradient-to-b from-emerald-400 to-teal-500',
-    buttonShadowClass: 'shadow-[0_6px_0_0_rgba(13,148,136,0.8)] active:shadow-[0_2px_0_0_rgba(13,148,136,0.8)]',
-    glowClass: 'drop-shadow-[0_0_16px_rgba(52,211,153,0.75)]',
+    mood: 'EASY',
+    colorRgb: '74, 222, 128',
+    textClass: 'text-green-300',
+    cardClass: 'border-2 border-green-400/60 bg-green-500/20',
+    timerBarClass: 'bg-green-400/90',
+    buttonGradientClass: 'bg-gradient-to-b from-green-400 to-emerald-600',
+    buttonShadowClass:
+      'shadow-[0_6px_0_0_rgba(21,128,61,0.9),0_0_20px_3px_rgba(74,222,128,0.4)] active:shadow-[0_2px_0_0_rgba(21,128,61,0.9)]',
+    glowClass: 'drop-shadow-[0_0_18px_rgba(74,222,128,0.85)]',
   },
   intermediate: {
     id: 'intermediate',
-    mood: 'FOCUS',
-    colorRgb: '34, 211, 238',
-    textClass: 'text-cyan-300',
-    cardClass: 'border border-cyan-400/25 bg-cyan-500/10',
-    timerBarClass: 'bg-cyan-400/80',
-    buttonGradientClass: 'bg-gradient-to-b from-cyan-400 to-blue-500',
-    buttonShadowClass: 'shadow-[0_6px_0_0_rgba(29,78,216,0.8)] active:shadow-[0_2px_0_0_rgba(29,78,216,0.8)]',
-    glowClass: 'drop-shadow-[0_0_16px_rgba(34,211,238,0.75)]',
+    mood: 'HARD',
+    colorRgb: '251, 146, 60',
+    textClass: 'text-amber-300',
+    cardClass: 'border-2 border-amber-400/60 bg-amber-500/20',
+    timerBarClass: 'bg-amber-400/90',
+    buttonGradientClass: 'bg-gradient-to-b from-amber-300 to-orange-600',
+    buttonShadowClass:
+      'shadow-[0_6px_0_0_rgba(154,52,18,0.9),0_0_20px_3px_rgba(251,191,36,0.45)] active:shadow-[0_2px_0_0_rgba(154,52,18,0.9)]',
+    glowClass: 'drop-shadow-[0_0_18px_rgba(251,191,36,0.9)]',
   },
   advanced: {
     id: 'advanced',
     mood: 'DANGER',
     colorRgb: '248, 113, 113',
-    textClass: 'text-orange-300',
-    cardClass: 'border border-red-400/25 bg-red-500/10',
-    timerBarClass: 'bg-red-400/80',
-    buttonGradientClass: 'bg-gradient-to-b from-orange-500 to-red-600',
-    buttonShadowClass: 'shadow-[0_6px_0_0_rgba(153,27,27,0.8)] active:shadow-[0_2px_0_0_rgba(153,27,27,0.8)]',
-    glowClass: 'drop-shadow-[0_0_16px_rgba(248,113,113,0.8)]',
+    textClass: 'text-red-300',
+    cardClass: 'border-2 border-red-400/60 bg-red-600/25',
+    timerBarClass: 'bg-red-400/90',
+    buttonGradientClass: 'bg-gradient-to-b from-red-500 to-red-800',
+    buttonShadowClass:
+      'shadow-[0_6px_0_0_rgba(127,29,29,0.9),0_0_20px_3px_rgba(248,113,113,0.5)] active:shadow-[0_2px_0_0_rgba(127,29,29,0.9)]',
+    glowClass: 'drop-shadow-[0_0_18px_rgba(248,113,113,0.9)]',
   },
 }

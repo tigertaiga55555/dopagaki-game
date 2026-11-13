@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { InversionPrompt, type PromptSegment } from '../../components/InversionPrompt'
 import { opposite, pickAxisWord } from '../../engine/inversion/words'
 import { randInt, shuffle } from '../../engine/random'
+import { SelectionOrderBadge, sequenceOrderOf } from '../SelectionOrderBadge'
 import { useInputGateReady } from '../useInputGateReady'
 import { pickInversionCount } from './inversionPicker'
 import type { Challenge500QuestionComponentProps, Challenge500QuestionModule, Challenge500Tier } from './types'
@@ -121,16 +122,17 @@ function Component({ spec, onResult }: Challenge500QuestionComponentProps) {
   }
 
   function renderButton(it: Item) {
-    const tapped = order.slice(0, clearedCount).includes(it.id)
+    const orderLabel = sequenceOrderOf(it.id, order, clearedCount)
     return (
       <button
         key={it.id}
         onPointerDown={() => tap(it.id)}
-        className={`flex h-16 w-16 items-center justify-center rounded-2xl text-2xl font-black text-white active:scale-90 ${
-          tapped ? 'bg-white/30' : 'bg-white/10'
+        className={`relative flex h-16 w-16 items-center justify-center rounded-2xl text-2xl font-black text-white active:scale-90 ${
+          orderLabel !== null ? 'bg-amber-400/25' : 'bg-white/10'
         }`}
       >
         {it.value}
+        {orderLabel !== null && <SelectionOrderBadge order={orderLabel} />}
       </button>
     )
   }

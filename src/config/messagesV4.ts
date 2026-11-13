@@ -1,7 +1,6 @@
 export const TITLE_TEXT = {
   heading: 'ドパガキゲーム',
   lines: ['60秒で刺激をさばけ。', '目指せ\nドパガキ度100％', '素早く、正確に。\n指示を見逃すな。'],
-  startButton: 'START',
 }
 
 export function getRetryLabel(percent: number): string {

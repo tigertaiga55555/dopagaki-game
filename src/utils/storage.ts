@@ -16,6 +16,30 @@ const ENDLESS_BEST_KEY: Record<EndlessDifficulty, string> = {
   advanced: 'dopagaki:endlessBestAdvancedV1',
 }
 
+/**
+ * Ver.6 Phase 7（ホーム/ENDLESS実機QA最終改善）: ENDLESS上級の「下線反転」ルール説明を
+ * 一度でも見たかどうかのフラグ。他のキーと衝突しない新規キー名（V1）を使う。
+ * 初回は必ずルール全文を見せ、2回目以降はテンポを落とさない短い確認にするためだけに使う。
+ */
+const ENDLESS_ADVANCED_RULE_SEEN_KEY = 'dopagaki:endlessAdvancedRuleSeenV1'
+
+export function hasSeenEndlessAdvancedRule(): boolean {
+  try {
+    return localStorage.getItem(ENDLESS_ADVANCED_RULE_SEEN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function markEndlessAdvancedRuleSeen(): void {
+  try {
+    localStorage.setItem(ENDLESS_ADVANCED_RULE_SEEN_KEY, '1')
+  } catch {
+    // localStorage不可の環境（プライベートモード等）では単に記憶されないだけで、
+    // 毎回ルール説明を見ることになるが機能自体は壊れない。
+  }
+}
+
 function readNumber(key: string): number | null {
   try {
     const raw = localStorage.getItem(key)

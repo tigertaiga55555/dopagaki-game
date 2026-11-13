@@ -4,6 +4,7 @@ import { TIMING_SAFETY } from '../config/timingConfig'
 import { pickExcluding, randInt, shuffle } from '../engine/random'
 import { sfx } from '../utils/sound'
 import { QuestionShell } from './QuestionShell'
+import { SelectionProgress } from './SelectionProgress'
 import { useQuestionStartRef } from './useQuestionStartRef'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
@@ -101,6 +102,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
           </button>
         ))}
       </div>
+      <SelectionProgress done={cleared.size} total={targetCount} />
     </QuestionShell>
   )
 }

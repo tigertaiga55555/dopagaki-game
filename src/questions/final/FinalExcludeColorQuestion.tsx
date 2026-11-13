@@ -4,6 +4,7 @@ import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { pick, shuffle } from '../../engine/random'
 import { QuestionShell } from '../QuestionShell'
+import { SelectionProgress } from '../SelectionProgress'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
 interface Item {
@@ -85,6 +86,7 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
           </button>
         ))}
       </div>
+      <SelectionProgress done={cleared.size} total={requiredCount} />
     </QuestionShell>
   )
 }

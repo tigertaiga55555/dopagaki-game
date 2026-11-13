@@ -1,5 +1,6 @@
 import { AdSlot } from '../components/AdSlot'
 import { AD_START_SCREEN } from '../config/ads'
+import { HOME_MODES, type HomeModeId } from '../config/homeConfig'
 import { TITLE_TEXT } from '../config/messagesV4'
 import { getBestPercent } from '../utils/storage'
 
@@ -16,14 +17,20 @@ interface Props {
 }
 
 /**
- * Ver.6 Phase 6（ホーム画面再設計）: 通常・ENDLESS・BATTLEをゲームモードとして並列に
- * 選べるレイアウトに変更した（以前は通常だけが巨大STARTで、ENDLESS/BATTLEが小さい
- * サブボタンという非対称な構成だった）。通常モードは既定の入口として一番上・一番大きい
- * ままだが、ENDLESS・BATTLEも「サブ導線」ではなく同格のモードカードとして並べる。
+ * Ver.6 Phase 7（ホーム画面最終UI改善、実機QA確定）: 3モード（DOPA RUSH/ENDLESS/
+ * ONLINE BATTLE）を同格のカードとして並べる構成自体はPhase 6から維持しつつ、
+ * 名称・サブコピー・配色をconfig/homeConfig.tsのデータに基づいて描画するよう
+ * 書き換えた（英語タイトルを主役にし、その下に短い日本語説明を添える）。
  * Profile/Achievement/Rankingは従来どおり控えめなテキストリンクのまま維持する。
  */
 export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProfile, onOpenAchievements, onOpenRanking }: Props) {
   const best = getBestPercent()
+
+  const handlers: Record<HomeModeId, () => void> = {
+    rush: onStart,
+    endless: onStartEndless,
+    battle: onStartBattle,
+  }
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-7 px-6 py-10 text-center">
@@ -38,28 +45,20 @@ export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProf
       </div>
 
       <div className="flex w-full max-w-xs flex-col gap-3">
-        <button
-          onClick={onStart}
-          className="w-full rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-5 text-xl font-black tracking-widest text-white shadow-[0_8px_0_0_rgba(126,34,206,0.8)] transition-transform active:translate-y-1 active:shadow-[0_2px_0_0_rgba(126,34,206,0.8)]"
-        >
-          {TITLE_TEXT.startButton}
-        </button>
-
-        <button
-          onClick={onStartEndless}
-          className="w-full rounded-2xl border border-white/15 bg-white/5 py-4 text-base font-black tracking-widest text-white/85 shadow-[0_4px_0_0_rgba(255,255,255,0.08)] transition-transform active:translate-y-1 active:shadow-none"
-        >
-          ENDLESS
-        </button>
-
-        {/* Ver.6 Phase 6: 1対1リアルタイム対戦。対人戦らしい緊張感を出すため、他の2モードとは
-            違う色味（赤〜薔薇色）だけをこのボタンに与える。 */}
-        <button
-          onClick={onStartBattle}
-          className="w-full rounded-2xl bg-gradient-to-b from-rose-500 to-red-700 py-4 text-base font-black tracking-widest text-white shadow-[0_4px_0_0_rgba(136,19,55,0.9)] transition-transform active:translate-y-1 active:shadow-none"
-        >
-          ⚔️ BATTLE
-        </button>
+        {HOME_MODES.map((mode) => (
+          <button
+            key={mode.id}
+            onClick={handlers[mode.id]}
+            className={`w-full rounded-2xl py-4 text-white transition-transform active:translate-y-1 active:shadow-none ${mode.gradientClass} ${mode.shadowClass}`}
+          >
+            <span className="flex flex-col items-center gap-0.5">
+              <span className="text-xl font-black tracking-widest">
+                {mode.icon} {mode.titleEn}
+              </span>
+              <span className="text-[11px] font-bold text-white/90">{mode.subJa}</span>
+            </span>
+          </button>
+        ))}
       </div>
 
       {best > 0 && <p className="text-xs text-white/40">自己ベスト：ドパガキ度 {best}％</p>}

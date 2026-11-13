@@ -4,6 +4,7 @@ import { ShapeIcon, SHAPE_IDS, type ShapeId } from '../../components/ShapeIcon'
 import { ShapeOptionsGrid } from '../../components/ShapeOptionsLayout'
 import { opposite, pickAxisWord } from '../../engine/inversion/words'
 import { pick, pickExcluding, shuffle } from '../../engine/random'
+import { SelectionProgress } from '../SelectionProgress'
 import { useInputGateReady } from '../useInputGateReady'
 import { pickInversionCount } from './inversionPicker'
 import type { Challenge500QuestionComponentProps, Challenge500QuestionModule, Challenge500Tier } from './types'
@@ -99,6 +100,7 @@ function Component({ spec, onResult }: Challenge500QuestionComponentProps) {
           </button>
         ))}
       </ShapeOptionsGrid>
+      <SelectionProgress done={tappedIds.size} total={correctSet.size} />
     </div>
   )
 }

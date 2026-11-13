@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { getEndlessBest, updateEndlessBest } from './storage'
+import { getEndlessBest, hasSeenEndlessAdvancedRule, markEndlessAdvancedRuleSeen, updateEndlessBest } from './storage'
 
 /**
  * vitestはデフォルトでNode環境で動くため、グローバルのlocalStorageが存在しない。
@@ -84,5 +84,33 @@ describe('storage: Endless per-difficulty best', () => {
     expect(updateEndlessBest('advanced', 9)).toBe(false) // lower, not new best
     expect(updateEndlessBest('advanced', 11)).toBe(true) // genuinely new best
     expect(getEndlessBest('advanced')).toBe(11)
+  })
+})
+
+describe('storage: ENDLESS上級ルール説明の既読フラグ（Ver.6 Phase 7）', () => {
+  beforeEach(() => {
+    installFakeLocalStorage()
+  })
+
+  it('defaults to false (not yet seen) before anything is saved', () => {
+    expect(hasSeenEndlessAdvancedRule()).toBe(false)
+  })
+
+  it('markEndlessAdvancedRuleSeen flips hasSeenEndlessAdvancedRule to true', () => {
+    markEndlessAdvancedRuleSeen()
+    expect(hasSeenEndlessAdvancedRule()).toBe(true)
+  })
+
+  it('persists across what simulates a browser refresh', () => {
+    markEndlessAdvancedRuleSeen()
+    expect(hasSeenEndlessAdvancedRule()).toBe(true)
+    expect(hasSeenEndlessAdvancedRule()).toBe(true)
+  })
+
+  it('does not collide with the per-difficulty best keys', () => {
+    updateEndlessBest('advanced', 50)
+    markEndlessAdvancedRuleSeen()
+    expect(getEndlessBest('advanced')).toBe(50)
+    expect(hasSeenEndlessAdvancedRule()).toBe(true)
   })
 })

@@ -17,6 +17,7 @@ import {
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { trackFinalReached, trackOverdriveReached, trackReach100, trackReach120 } from '../utils/analytics'
 import { setCurrentStageIndex } from './difficultyStage'
+import { PRE_COUNTDOWN_MS, preCountdownValueAt } from './preCountdown'
 import { generateNextQuestion } from './questionPicker'
 import { randFloat } from './random'
 import { QUESTION_MODULES } from '../questions'
@@ -50,7 +51,6 @@ const OVERDRIVE_TIME_BONUS_SEC = 10
 const BONUS_TIME_WINDOW_START_SEC = 25
 const BONUS_TIME_WINDOW_END_SEC = 40
 
-const PRE_COUNTDOWN_MS = 1800
 /** 100%/OVERDRIVE到達演出のときだけ、次の問題を意図的に少し遅らせる（それ以外は即座に次へ進む） */
 const MILESTONE_FREEZE_MS = 650
 /** PERFECT/GREAT/GOOD/MISSのオーバーレイ表示時間。次の問題の上に重ねるだけでゲーム進行は止めない。 */
@@ -741,7 +741,7 @@ export function useRushGame(
       if (startTimeRef.current === null) {
         const elapsed = now - preStartRef.current
         const remaining = Math.max(0, PRE_COUNTDOWN_MS - elapsed)
-        const value = remaining <= 0 ? null : remaining > 1200 ? 3 : remaining > 600 ? 2 : 1
+        const value = preCountdownValueAt(elapsed)
         setSnapshot((s) => (s.preCountdown === value ? s : { ...s, preCountdown: value }))
         // Ver.4.8: START→3・2・1・GOの開始演出。3→2→1と音程が少しずつ上がるビープを鳴らし、
         // GOの瞬間にBGM開始・画面フラッシュ・最初の問題出現を同期させる。

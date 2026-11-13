@@ -19,10 +19,16 @@ describe('endlessTheme (Ver.6 Phase 4.1 color design)', () => {
     expect(new Set(moods).size).toBe(3)
   })
 
-  it('beginner uses a green/mint family, intermediate blue/cyan, advanced red/orange (per spec)', () => {
-    expect(ENDLESS_THEME.beginner.textClass).toContain('emerald')
-    expect(ENDLESS_THEME.intermediate.textClass).toContain('cyan')
-    expect(ENDLESS_THEME.advanced.textClass).toMatch(/orange|red/)
+  it('beginner uses a bright green family, intermediate yellow/orange, advanced red (Phase 7実機QA確定配色)', () => {
+    expect(ENDLESS_THEME.beginner.textClass).toContain('green')
+    expect(ENDLESS_THEME.intermediate.textClass).toMatch(/amber|orange|yellow/)
+    expect(ENDLESS_THEME.advanced.textClass).toContain('red')
+  })
+
+  it('mood labels are EASY/HARD/DANGER (Phase 7でFLOW/FOCUSから変更。DANGERのみ維持)', () => {
+    expect(ENDLESS_THEME.beginner.mood).toBe('EASY')
+    expect(ENDLESS_THEME.intermediate.mood).toBe('HARD')
+    expect(ENDLESS_THEME.advanced.mood).toBe('DANGER')
   })
 
   it('every theme defines all class fields as non-empty strings (no missing accent piece)', () => {

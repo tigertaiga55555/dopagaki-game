@@ -1,13 +1,15 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Challenge500TimerBar } from '../components/Challenge500TimerBar'
 import { QuitButton } from '../components/QuitButton'
 import { CHALLENGE500_CONFIG } from '../config/challenge500Config'
 import { ENDLESS_BEGINNER_BGM_STAGE_INDEX, ENDLESS_BEGINNER_PHASE, ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
 import { ENDLESS_THEME } from '../config/endlessTheme'
+import { usePreCountdown } from '../engine/usePreCountdown'
 import { shouldShowEndlessTimerBar, useEndlessGame, type EndlessFinishPayload, type EndlessQuestionOutcome } from '../engine/useEndlessGame'
 import { CHALLENGE500_QUESTION_MODULES } from '../questions/challenge500'
 import { QUESTION_MODULES } from '../questions'
 import { FINAL_QUESTION_MODULES } from '../questions/final'
+import { EndlessAdvancedRuleCard } from './EndlessAdvancedRuleCard'
 import { setBgmProgress, setFinalIntensity, setFinalMode, startBgm, stopBgm } from '../utils/bgm'
 import type { EndlessDifficulty } from '../types'
 
@@ -77,8 +79,15 @@ function finalBgmIntensity(streak: number): number {
  * final/challenge500は、それぞれの出題元（本家FINAL DOPA TRIAL／本家Challenge500）が
  * 元々採用している時間表現（問題内部の演出・焦り音のみ、可視バーなし）にそのまま委ねる。
  */
+type Phase = 'rule' | 'countdown' | 'playing'
+
 export function EndlessPlayScreen({ difficulty, onFinish, onQuit, qaMode = false }: Props) {
   const { snapshot, start, handleResult } = useEndlessGame(difficulty, onFinish, { qaMode })
+  // item 5/7（実機QA最終改善）: 上級だけ開始前にルール説明を挟む。その後（または
+  // 他難易度は最初から）、通常モードと同じ3→2→1→STARTを見せてからplayingへ入る。
+  // phaseが'playing'になるまでstart()を呼ばないため、「カウントダウン中は問題の
+  // タイマーが進まない」が構造的に保証される。
+  const [phase, setPhase] = useState<Phase>(difficulty === 'advanced' ? 'rule' : 'countdown')
   const startedRef = useRef(false)
   const shakeWrapperRef = useRef<HTMLDivElement>(null)
   const shakeAnimRef = useRef<Animation | null>(null)
@@ -86,12 +95,15 @@ export function EndlessPlayScreen({ difficulty, onFinish, onQuit, qaMode = false
   const timerBarRef = useRef<HTMLDivElement>(null)
   const theme = ENDLESS_THEME[difficulty]
 
-  useEffect(() => {
-    if (startedRef.current) return
-    startedRef.current = true
-    start()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const countdownValue = usePreCountdown({
+    enabled: phase === 'countdown',
+    onDone: () => {
+      if (startedRef.current) return
+      startedRef.current = true
+      start()
+      setPhase('playing')
+    },
+  })
 
   // BGM（utils/bgm.ts）は難易度ごとに別の既存アンビエントをそのまま再利用する。
   // 初級＝通常ゲームの6段階エンジン（0〜120%全体を代表する固定stageIndex＋streakで密度アップ）、
@@ -99,12 +111,15 @@ export function EndlessPlayScreen({ difficulty, onFinish, onQuit, qaMode = false
   // そのまま流用し、「本物のFINAL DOPA TRIALと同じ空気感」にする。上級はChallenge500問題も
   // 混在するが、Challenge500専用アンビエント（setChallenge500Mode）までは持ち込まず、
   // 難易度単位の既存の音テーマ割り当て（維持指示どおり）をそのまま使う。新しい音色は作らない。
+  // 通常モード（useRushGame）がGOの瞬間にBGMを開始するのと同じく、Endlessもplayingに
+  // 入った瞬間（カウントダウン完了後）に初めて開始する——ルール説明/カウントダウン中は鳴らさない。
   useEffect(() => {
+    if (phase !== 'playing') return
     startBgm()
     if (difficulty !== 'beginner') setFinalMode(true)
     return () => stopBgm()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [difficulty])
+  }, [difficulty, phase])
   useEffect(() => {
     if (difficulty === 'beginner') {
       setBgmProgress(ENDLESS_BEGINNER_BGM_STAGE_INDEX, snapshot.state.streak)
@@ -148,6 +163,31 @@ export function EndlessPlayScreen({ difficulty, onFinish, onQuit, qaMode = false
       }
     }
     handleResult(result)
+  }
+
+  if (phase === 'rule') {
+    return (
+      <div className="relative min-h-dvh overflow-hidden bg-black">
+        <QuitButton onQuit={onQuit} />
+        <EndlessAdvancedRuleCard onContinue={() => setPhase('countdown')} />
+      </div>
+    )
+  }
+
+  if (phase === 'countdown') {
+    return (
+      <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-black px-6 text-center">
+        <QuitButton onQuit={onQuit} />
+        <div className="flex flex-1 flex-col items-center justify-center gap-3">
+          <p className={`text-xs font-black tracking-[0.3em] ${theme.textClass}`}>
+            ENDLESS ・ {ENDLESS_DIFFICULTY_LABEL[difficulty]}
+          </p>
+          <p key={countdownValue ?? 'go'} className={`anim-pop text-8xl font-black text-white ${theme.glowClass}`}>
+            {countdownValue ?? 'GO'}
+          </p>
+        </div>
+      </div>
+    )
   }
 
   const slot = snapshot.currentSlot
