@@ -58,11 +58,12 @@ export function EndlessResultScreen({
   /**
    * Ver.6 Phase 8（ENDLESS Challenge）: 「この記録で挑戦状を送る」。既存ResultScreen.tsxの
    * handleSendChallengeと同じ流れ（サーバーが実際に保存した正規のChallengeRecordを
-   * 受け取ってからonChallengeSentを呼ぶ）。最低STREAK数未満の場合はchallengeInputが
-   * nullになり、ボタン自体を表示しない（buildCreateEndlessChallengeInput参照）。
+   * 受け取ってからonChallengeSentを呼ぶ）。
+   * Ver.6 Phase 10（実績拡張ラウンド）: 最低STREAK条件は完全撤廃したため、0 STREAKでも
+   * 必ずこのボタンが表示される（buildCreateEndlessChallengeInput参照）。
    */
   async function handleSendChallenge() {
-    if (challengeBusy || !challengeInput || !onChallengeSent) return
+    if (challengeBusy || !onChallengeSent) return
     setChallengeBusy(true)
     setChallengeError(false)
     try {
@@ -104,7 +105,7 @@ export function EndlessResultScreen({
         <p className="text-xs font-bold tabular-nums text-white/50">BEST {best}</p>
       </div>
 
-      {challengeInput && onChallengeSent && (
+      {onChallengeSent && (
         <div className="flex w-full max-w-xs flex-col items-center gap-2">
           <p className={`text-sm font-black tracking-widest ${theme.textClass}`}>{score}連続を超えろ</p>
           <button

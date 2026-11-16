@@ -36,6 +36,15 @@ interface Props {
    * 挙動は変わらない。
    */
   battleHud?: ReactNode
+  /**
+   * Ver.6 Phase 10（実績拡張ラウンド）: 既定true（本番の単機プレイの挙動は不変）。
+   * falseを渡すと、computeFinalResult/computeFinalTrialResultのofficialフラグへそのまま
+   * 伝播し、自己ベスト更新・playCount加算・DOPA%実績判定を一切行わない。Challenge
+   * （ChallengePlayScreen.tsx、mode='normal'/'finalTrial'）・Battle（BattleMatchScreen.tsx）
+   * はどちらもreplayQuestions付きでこのPlayScreenを再利用するが、「公式DOPA RUSHプレイ」
+   * ではないため、呼び出し元が明示的にfalseを渡す。
+   */
+  official?: boolean
 }
 
 const JUDGEMENT_COLOR: Record<string, string> = {
@@ -47,10 +56,10 @@ const JUDGEMENT_COLOR: Record<string, string> = {
 
 const PARTICLE_POSITIONS = Array.from({ length: 8 }).map((_, i) => ({ x: (i * 12.5) % 100, delay: i * 0.2 }))
 
-export function PlayScreen({ onFinish, onQuit, replayQuestions, onQuestionResolved, onFinalTrialProgress, battleHud }: Props) {
+export function PlayScreen({ onFinish, onQuit, replayQuestions, onQuestionResolved, onFinalTrialProgress, battleHud, official = true }: Props) {
   const [finalEntryStats, setFinalEntryStats] = useState<PlayStats | null>(null)
   const { snapshot, handleQuestionResult, getRecordedProblemSet, replayIndex } = useRushGame(
-    (payload) => onFinish(computeFinalResult(payload, getRecordedProblemSet())),
+    (payload) => onFinish(computeFinalResult(payload, getRecordedProblemSet(), official)),
     (stats) => setFinalEntryStats(stats),
     { replayQuestions, onQuestionResolved },
   )
@@ -101,6 +110,7 @@ export function PlayScreen({ onFinish, onQuit, replayQuestions, onQuestionResolv
         onProgress={onFinalTrialProgress}
         replayQuestions={replayQuestions?.slice(replayIndex)}
         battleHud={battleHud}
+        official={official}
       />
     )
   }

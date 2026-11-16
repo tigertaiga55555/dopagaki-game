@@ -9,7 +9,6 @@ import type {
   CreateChallengeAttemptInput,
   CreateChallengeInput,
 } from '../challenge/types'
-import { ENDLESS_CHALLENGE_MIN_STREAK } from '../challenge/endlessChallenge'
 import type { AvatarRef, EndlessDifficulty } from '../types'
 
 const KNOWN_TITLE_IDS = new Set(TITLE_DEFS.map((t) => t.id))
@@ -154,20 +153,16 @@ export function validateCreateChallengeInput(raw: unknown): ValidationResult {
   }
 
   // Ver.6 Phase 8（ENDLESS Challenge）: ENDLESSにはDOPA%/正答率等のperformance概念が
-  // 存在しないため、modeで完全に分岐する。creatorScoreはホストのSTREAK数（整数）として扱い、
-  // 難易度ごとの最低作成条件（初級10／中級5／上級3）もここで強制する
-  // （結果画面のボタン非表示判定はクライアント側の親切さにすぎず、ここが最終防衛）。
+  // 存在しないため、modeで完全に分岐する。creatorScoreはホストのSTREAK数（整数）として扱う。
+  // Ver.6 Phase 10（実績拡張ラウンド）: 旧来の最低STREAK作成条件（初級10／中級5／上級3）は
+  // 完全撤廃した。0 STREAK（TARGET 0）でも必ずChallengeを作成できる——低記録・クソプレイも
+  // ネタとして共有できることに価値がある、というユーザー指示による。
   if (input.mode === 'endless') {
     if (input.performance !== null && input.performance !== undefined) {
       return { ok: false, message: 'performance must be null for endless challenges' }
     }
     if (!Number.isInteger(input.creatorScore)) {
       return { ok: false, message: 'creatorScore (host streak) must be an integer for endless challenges' }
-    }
-    const difficulty = (input.conditions as ChallengeConditions).endlessDifficulty as EndlessDifficulty
-    const minStreak = ENDLESS_CHALLENGE_MIN_STREAK[difficulty]
-    if ((input.creatorScore as number) < minStreak) {
-      return { ok: false, message: `creatorScore must be at least ${minStreak} for ${difficulty} endless challenges` }
     }
   } else if (!validateChallengePerformance(input.performance)) {
     return { ok: false, message: 'performance is invalid' }

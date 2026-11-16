@@ -2,12 +2,35 @@ import { useEffect, useRef, useState } from 'react'
 import { resolveAvatarEmoji } from '../../config/profileConfig'
 import { connectToBattleRoom, type BattleSocket } from '../../battle/battleClient'
 import { buildBattleRoomUrl } from '../../battle/battleUrl'
-import { recordWorldBattleOutcome } from '../../utils/battleStatsStorage'
+import {
+  checkBattleComebackAchievement,
+  checkBattleDecidingStatAchievement,
+  checkBattleMirrorAchievement,
+  checkFriendBattleFirstPlayAchievement,
+  checkFriendBattlePlayAchievements,
+  checkGrindAchievements,
+  checkWorldBattleFirstDrawAchievement,
+  checkWorldBattleFirstPlayAchievement,
+  checkWorldBattleStreakAchievements,
+  checkWorldBattleWinAchievements,
+} from '../../utils/achievementStorage'
+import { incrementFriendBattlePlayCount, recordWorldBattleOutcome } from '../../utils/battleStatsStorage'
+import { getOfficialPlayCount, incrementOfficialPlayCount } from '../../utils/storage'
 import { PlayScreen } from '../PlayScreen'
 import { BattleResultScreen } from './BattleResultScreen'
 import { trackBattleDisconnect, trackBattleForfeit, trackBattleMatchEnd, trackBattleMatchStart } from '../../utils/analytics'
 import type { BattleFinishResult, BattleMode, BattleOpponentProfile } from '../../battle/types'
-import type { ChallengeProblemSetItem, FinalResultV4 } from '../../types'
+import type { AchievementId, ChallengeProblemSetItem, FinalResultV4 } from '../../types'
+
+/**
+ * Ver.6 Phase 10（実績拡張ラウンド、大逆転）: 現在取得可能な試合中データ（myPercent＝自分の
+ * 現在%、opponentPercent＝直近のopponent_progressで受け取った相手の%）を調査した結果、
+ * 「試合中、相手に何%差を付けられていたか」はこの2つのstateの差分として安全に計算できる
+ * （どちらも既存のRIVAL% HUD表示に実際に使われている値そのもので、新しい推測値ではない）。
+ * 10%・20%の両方を検討し、20%を採用した: 10%は1〜2問の反応差だけでも発生しうる頻出差で
+ * あるのに対し、20%は「はっきり離されていた」と言える、テストでも誤判定しにくい閾値。
+ */
+const COMEBACK_DEFICIT_THRESHOLD = 20
 
 interface Props {
   matchId: string
@@ -41,12 +64,19 @@ export function BattleMatchScreen({ matchId, mode, roomCode, playerId, myProfile
   const [opponentPercent, setOpponentPercent] = useState(0)
   const [opponentUnstable, setOpponentUnstable] = useState(false)
   const [finishPayload, setFinishPayload] = useState<{ result: BattleFinishResult; viewerIsPlayerA: boolean } | null>(null)
+  const [newlyUnlocked, setNewlyUnlocked] = useState<AchievementId[]>([])
 
   const socketRef = useRef<BattleSocket | null>(null)
   const questionIndexRef = useRef(0)
   const lastEventAtRef = useRef(Date.now())
   const lastTrialPercentRef = useRef<number | null>(null)
   const matchStartTrackedRef = useRef(false)
+  /** Ver.6 Phase 10（大逆転）: 試合中、相手に最大何%差を付けられていたか（opponentPercent-myPercentの最大値）。 */
+  const maxDeficitRef = useRef(0)
+
+  useEffect(() => {
+    maxDeficitRef.current = Math.max(maxDeficitRef.current, opponentPercent - myPercent)
+  }, [myPercent, opponentPercent])
 
   useEffect(() => {
     const socket = connectToBattleRoom(
@@ -71,11 +101,46 @@ export function BattleMatchScreen({ matchId, mode, roomCode, playerId, myProfile
           trackBattleDisconnect()
         } else if (msg.type === 'battle_finish') {
           trackBattleMatchEnd(mode, msg.result.finishReason)
+          const myOutcome: 'win' | 'lose' | 'draw' =
+            msg.result.winner === 'draw' ? 'draw' : (msg.result.winner === 'playerA') === msg.viewerIsPlayerA ? 'win' : 'lose'
+          // Ver.6 Phase 10（実績拡張ラウンド）: Grind実績の公式プレイ回数は世界対戦・フレンド
+          // 対戦どちらも加算する（Challenge/ENDLESS Challengeは含まない、という既存方針どおり）。
+          incrementOfficialPlayCount()
+          let unlocked: AchievementId[] = checkGrindAchievements(getOfficialPlayCount())
           if (mode === 'world') {
-            const myOutcome =
-              msg.result.winner === 'draw' ? 'draw' : (msg.result.winner === 'playerA') === msg.viewerIsPlayerA ? 'win' : 'lose'
-            recordWorldBattleOutcome(myOutcome)
+            const stats = recordWorldBattleOutcome(myOutcome)
+            unlocked = [
+              ...unlocked,
+              ...checkWorldBattleFirstPlayAchievement(),
+              ...checkWorldBattleWinAchievements(stats.wins),
+              ...checkWorldBattleStreakAchievements(stats.maxStreak),
+              ...(myOutcome === 'draw' ? checkWorldBattleFirstDrawAchievement() : []),
+            ]
+            // Ver.6 Phase 10: decidedByが実際に比較された項目（baseDopaPercent/accuracy/
+            // maxCombo/medianCorrectReactionMs）で、かつその項目が決勝要因になってWINした
+            // 場合のみ「ボーナスに頼らない/正確無比/連鎖の鬼/反射神経バケモノ」を解除する
+            // （finalDopaPercentで既に決着していた場合はここに来ない＝誤判定しない）。
+            const decidedBy = msg.result.decidedBy
+            if (
+              myOutcome === 'win' &&
+              decidedBy &&
+              (decidedBy === 'baseDopaPercent' || decidedBy === 'accuracy' || decidedBy === 'maxCombo' || decidedBy === 'medianCorrectReactionMs')
+            ) {
+              unlocked = [...unlocked, ...checkBattleDecidingStatAchievement(decidedBy)]
+            }
+            // Ver.6 Phase 10: 5項目完全一致DRAW（鏡写し）。
+            if (myOutcome === 'draw' && decidedBy === 'exactTie') {
+              unlocked = [...unlocked, ...checkBattleMirrorAchievement()]
+            }
+            // Ver.6 Phase 10: 大逆転（試合中に一定以上のビハインドから最終WIN、forfeit/disconnect等の不戦勝は対象外）。
+            if (myOutcome === 'win' && msg.result.finishReason === 'completed' && maxDeficitRef.current >= COMEBACK_DEFICIT_THRESHOLD) {
+              unlocked = [...unlocked, ...checkBattleComebackAchievement()]
+            }
+          } else {
+            const friendPlays = incrementFriendBattlePlayCount()
+            unlocked = [...unlocked, ...checkFriendBattleFirstPlayAchievement(), ...checkFriendBattlePlayAchievements(friendPlays)]
           }
+          setNewlyUnlocked(unlocked)
           setFinishPayload({ result: msg.result, viewerIsPlayerA: msg.viewerIsPlayerA })
           setPhase('result')
         }
@@ -166,6 +231,7 @@ export function BattleMatchScreen({ matchId, mode, roomCode, playerId, myProfile
         myProfile={myProfile}
         opponent={opponent}
         onHome={onExit}
+        newlyUnlockedAchievements={newlyUnlocked}
       />
     )
   }
@@ -193,6 +259,7 @@ export function BattleMatchScreen({ matchId, mode, roomCode, playerId, myProfile
         onFinish={handleFinish}
         onQuit={handleForfeit}
         battleHud={battleHud}
+        official={false}
       />
     )
   }

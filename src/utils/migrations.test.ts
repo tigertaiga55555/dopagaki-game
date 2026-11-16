@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getAchievementCount, isAchievementUnlocked } from './achievementStorage'
+import { recordWorldBattleOutcome } from './battleStatsStorage'
 import { runMigrationsOnce } from './migrations'
 import { updateBestPercent, updateEndlessBest } from './storage'
 
@@ -96,5 +97,46 @@ describe('migrations (Ver.6 Phase 5.1: 既存記録からAchievement遡及解除
     // storage.tsの各getter経由で読み直しても値が変わっていないことを確認
     expect(updateBestPercent(0)).toBe(false) // 0は247より小さいため更新されない＝元の値がまだ247のまま残っている証拠
     expect(updateEndlessBest('beginner', 0)).toBe(false) // 同様に42が保持されている証拠
+  })
+
+  it('v3（Ver.6 Phase 10実績拡張ラウンド）: ENDLESS追加3段（初級150/中級75/上級50）が既存BESTから遡及解除される', () => {
+    updateEndlessBest('beginner', 150)
+    updateEndlessBest('intermediate', 80)
+    updateEndlessBest('advanced', 49)
+
+    runMigrationsOnce()
+
+    expect(isAchievementUnlocked('endlessBeginner150')).toBe(true)
+    expect(isAchievementUnlocked('endlessIntermediate75')).toBe(true)
+    expect(isAchievementUnlocked('endlessAdvanced50')).toBe(false) // 49は50未満
+  })
+
+  it('v3: 既存の世界対戦battleStatsStorage（wins/maxStreak）から勝利数ladder・連勝ladderが遡及解除される', () => {
+    // 既存ユーザーが既に10勝・最大5連勝まで記録していた状態を模す。
+    for (let i = 0; i < 10; i++) recordWorldBattleOutcome('win')
+
+    runMigrationsOnce()
+
+    expect(isAchievementUnlocked('worldBattleWin1')).toBe(true)
+    expect(isAchievementUnlocked('worldBattleWin10')).toBe(true)
+    expect(isAchievementUnlocked('worldBattleWin25')).toBe(false)
+    expect(isAchievementUnlocked('worldBattleStreak3')).toBe(true)
+    expect(isAchievementUnlocked('worldBattleStreak5')).toBe(true)
+    expect(isAchievementUnlocked('worldBattleStreak10')).toBe(true)
+    expect(isAchievementUnlocked('worldBattleStreak20')).toBe(false)
+  })
+
+  it('v3: 世界対戦の初プレイ/初DRAW・ノーミス/完全体・Challenge/Grind系は推測で解除しない（保存されていない事実のため）', () => {
+    updateBestPercent(500) // ノーミスの閾値（100/200%）は超えているが、正答率100%だったかは保存されていない
+    for (let i = 0; i < 3; i++) recordWorldBattleOutcome('win')
+
+    runMigrationsOnce()
+
+    expect(isAchievementUnlocked('worldBattleFirstPlay')).toBe(false)
+    expect(isAchievementUnlocked('worldBattleFirstDraw')).toBe(false)
+    expect(isAchievementUnlocked('noMiss100')).toBe(false)
+    expect(isAchievementUnlocked('noMiss200')).toBe(false)
+    expect(isAchievementUnlocked('challengeCreatedFirst')).toBe(false)
+    expect(isAchievementUnlocked('grindPlay10')).toBe(false)
   })
 })

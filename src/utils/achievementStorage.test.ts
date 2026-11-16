@@ -1,13 +1,31 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  checkBattleComebackAchievement,
+  checkBattleDecidingStatAchievement,
+  checkBattleMirrorAchievement,
+  checkChallengeCreatedAchievement,
+  checkChallengeDefenseAchievements,
+  checkChallengeParticipatedAchievement,
+  checkChallengeWantedAchievement,
+  checkChallengeWinAchievements,
   checkDopaPercentAchievements,
   checkEndlessAchievements,
   checkEndlessChallengeDefenseAchievement,
   checkEndlessChallengeWinAchievement,
   checkFinalQuestionAchievement,
+  checkFriendBattleFirstPlayAchievement,
+  checkFriendBattlePlayAchievements,
+  checkGrindAchievements,
+  checkNoMissAchievements,
+  checkWorldBattleFirstDrawAchievement,
+  checkWorldBattleFirstPlayAchievement,
+  checkWorldBattleStreakAchievements,
+  checkWorldBattleWinAchievements,
   getAchievementCount,
+  getUnseenUnlockedAchievementIds,
   isAchievementUnlocked,
   isTitleUnlocked,
+  markAllUnlockedAchievementsSeen,
   unlockAchievement,
 } from './achievementStorage'
 
@@ -181,5 +199,205 @@ describe('achievementStorage (Ver.6 Phase 5.1: DOPA%実績12個＋Endless実績1
     checkEndlessAchievements('advanced', 30)
     expect(isAchievementUnlocked('endlessChallengeFirstWin')).toBe(false)
     expect(isAchievementUnlocked('endlessChallengeFirstDefense')).toBe(false)
+  })
+})
+
+describe('Ver.6 Phase 10（実績拡張ラウンド）: DOPA%境界値の再確認', () => {
+  beforeEach(() => {
+    installFakeLocalStorage()
+  })
+
+  it('DOPA 49%はfalse、50%はtrue', () => {
+    expect(checkDopaPercentAchievements(49)).toEqual([])
+    expect(isAchievementUnlocked('dopa50')).toBe(false)
+    checkDopaPercentAchievements(50)
+    expect(isAchievementUnlocked('dopa50')).toBe(true)
+  })
+
+  it('DOPA 499%はfalse、500%はtrue', () => {
+    checkDopaPercentAchievements(499)
+    expect(isAchievementUnlocked('dopa500')).toBe(false)
+    checkDopaPercentAchievements(500)
+    expect(isAchievementUnlocked('dopa500')).toBe(true)
+  })
+})
+
+describe('checkNoMissAchievements (Ver.6 Phase 10: ノーミス/完全体)', () => {
+  beforeEach(() => {
+    installFakeLocalStorage()
+  })
+
+  it('正答率100%未満なら、percentがいくつでも解除しない', () => {
+    expect(checkNoMissAchievements(500, 0.99)).toEqual([])
+    expect(isAchievementUnlocked('noMiss100')).toBe(false)
+  })
+
+  it('正答率100%・100%未満のpercentなら解除しない', () => {
+    expect(checkNoMissAchievements(99, 1)).toEqual([])
+  })
+
+  it('正答率100%・100%以上ならノーミスを解除、200%以上なら完全体も解除', () => {
+    expect(checkNoMissAchievements(100, 1)).toEqual(['noMiss100'])
+    expect(checkNoMissAchievements(200, 1)).toEqual(['noMiss200'])
+  })
+})
+
+describe('Challenge系実績 (Ver.6 Phase 10: 作成/参加/勝利ladder/防衛ladder/指名手配)', () => {
+  beforeEach(() => {
+    installFakeLocalStorage()
+  })
+
+  it('checkChallengeCreatedAchievement: 初回のみ解除され、2回目以降は何も起きない', () => {
+    expect(checkChallengeCreatedAchievement()).toEqual(['challengeCreatedFirst'])
+    expect(checkChallengeCreatedAchievement()).toEqual([])
+  })
+
+  it('checkChallengeParticipatedAchievement: 初回のみ解除される', () => {
+    expect(checkChallengeParticipatedAchievement()).toEqual(['challengeParticipatedFirst'])
+    expect(checkChallengeParticipatedAchievement()).toEqual([])
+  })
+
+  it('checkChallengeWinAchievements: 1勝/5勝/20勝/50勝の境界値', () => {
+    expect(checkChallengeWinAchievements(0)).toEqual([])
+    expect(checkChallengeWinAchievements(1)).toEqual(['challengeWin1'])
+    expect(checkChallengeWinAchievements(4)).toEqual([])
+    expect(checkChallengeWinAchievements(5)).toEqual(['challengeWin5'])
+    expect(checkChallengeWinAchievements(19)).toEqual([])
+    expect(checkChallengeWinAchievements(20)).toEqual(['challengeWin20'])
+    expect(checkChallengeWinAchievements(49)).toEqual([])
+    expect(checkChallengeWinAchievements(50)).toEqual(['challengeWin50'])
+  })
+
+  it('checkChallengeDefenseAchievements: 初防衛/10防衛/25防衛の境界値', () => {
+    expect(checkChallengeDefenseAchievements(0)).toEqual([])
+    expect(checkChallengeDefenseAchievements(1)).toEqual(['challengeDefense1'])
+    expect(checkChallengeDefenseAchievements(9)).toEqual([])
+    expect(checkChallengeDefenseAchievements(10)).toEqual(['challengeDefense10'])
+    expect(checkChallengeDefenseAchievements(24)).toEqual([])
+    expect(checkChallengeDefenseAchievements(25)).toEqual(['challengeDefense25'])
+  })
+
+  it('checkChallengeWantedAchievement: 9人はfalse（何も解除しない）、10人はtrue（指名手配を解除）', () => {
+    expect(checkChallengeWantedAchievement(9)).toEqual([])
+    expect(isAchievementUnlocked('challengeWanted10')).toBe(false)
+    expect(checkChallengeWantedAchievement(10)).toEqual(['challengeWanted10'])
+  })
+})
+
+describe('World Battle系実績 (Ver.6 Phase 10)', () => {
+  beforeEach(() => {
+    installFakeLocalStorage()
+  })
+
+  it('初プレイ・初DRAWは呼ぶたびに（1回目だけ）解除される', () => {
+    expect(checkWorldBattleFirstPlayAchievement()).toEqual(['worldBattleFirstPlay'])
+    expect(checkWorldBattleFirstPlayAchievement()).toEqual([])
+    expect(checkWorldBattleFirstDrawAchievement()).toEqual(['worldBattleFirstDraw'])
+    expect(checkWorldBattleFirstDrawAchievement()).toEqual([])
+  })
+
+  it('勝利数ladder: 9勝はfalse、10勝はtrue（1/10/25/50/100/250の境界）', () => {
+    expect(checkWorldBattleWinAchievements(9)).toEqual(['worldBattleWin1'])
+    expect(isAchievementUnlocked('worldBattleWin10')).toBe(false)
+    expect(checkWorldBattleWinAchievements(10)).toEqual(['worldBattleWin10'])
+    expect(checkWorldBattleWinAchievements(25)).toEqual(['worldBattleWin25'])
+    expect(checkWorldBattleWinAchievements(50)).toEqual(['worldBattleWin50'])
+    expect(checkWorldBattleWinAchievements(100)).toEqual(['worldBattleWin100'])
+    expect(checkWorldBattleWinAchievements(250)).toEqual(['worldBattleWin250'])
+  })
+
+  it('連勝ladder: 3/5/10/20の境界', () => {
+    expect(checkWorldBattleStreakAchievements(2)).toEqual([])
+    expect(checkWorldBattleStreakAchievements(3)).toEqual(['worldBattleStreak3'])
+    expect(checkWorldBattleStreakAchievements(5)).toEqual(['worldBattleStreak5'])
+    expect(checkWorldBattleStreakAchievements(10)).toEqual(['worldBattleStreak10'])
+    expect(checkWorldBattleStreakAchievements(20)).toEqual(['worldBattleStreak20'])
+  })
+})
+
+describe('Friend Battle系実績 (Ver.6 Phase 10)', () => {
+  beforeEach(() => {
+    installFakeLocalStorage()
+  })
+
+  it('初プレイは1回目だけ解除される', () => {
+    expect(checkFriendBattleFirstPlayAchievement()).toEqual(['friendBattleFirstPlay'])
+    expect(checkFriendBattleFirstPlayAchievement()).toEqual([])
+  })
+
+  it('累計プレイ回数ladder: 10/50/100の境界', () => {
+    expect(checkFriendBattlePlayAchievements(9)).toEqual([])
+    expect(checkFriendBattlePlayAchievements(10)).toEqual(['friendBattlePlay10'])
+    expect(checkFriendBattlePlayAchievements(50)).toEqual(['friendBattlePlay50'])
+    expect(checkFriendBattlePlayAchievements(100)).toEqual(['friendBattlePlay100'])
+  })
+
+  it('世界対戦の戦績とは完全に独立している', () => {
+    checkFriendBattlePlayAchievements(100)
+    expect(isAchievementUnlocked('worldBattleWin1')).toBe(false)
+    expect(isAchievementUnlocked('worldBattleFirstPlay')).toBe(false)
+  })
+})
+
+describe('Skill/Special: 世界対戦decidedBy系実績・鏡写し・大逆転 (Ver.6 Phase 10)', () => {
+  beforeEach(() => {
+    installFakeLocalStorage()
+  })
+
+  it('checkBattleDecidingStatAchievement: statごとに対応する実績だけが解除される（取り違えない）', () => {
+    expect(checkBattleDecidingStatAchievement('baseDopaPercent')).toEqual(['battleWinByBaseDopa'])
+    expect(checkBattleDecidingStatAchievement('accuracy')).toEqual(['battleWinByAccuracy'])
+    expect(checkBattleDecidingStatAchievement('maxCombo')).toEqual(['battleWinByMaxCombo'])
+    expect(checkBattleDecidingStatAchievement('medianCorrectReactionMs')).toEqual(['battleWinByReaction'])
+  })
+
+  it('鏡写し: checkBattleMirrorAchievementを呼んだ場合のみ解除される（exactTie以外では呼び出し側が呼ばない設計）', () => {
+    expect(isAchievementUnlocked('battleMirrorMatch')).toBe(false)
+    expect(checkBattleMirrorAchievement()).toEqual(['battleMirrorMatch'])
+  })
+
+  it('大逆転: checkBattleComebackAchievementを呼んだ場合のみ解除される', () => {
+    expect(isAchievementUnlocked('battleComeback')).toBe(false)
+    expect(checkBattleComebackAchievement()).toEqual(['battleComeback'])
+  })
+})
+
+describe('Grind実績 (Ver.6 Phase 10)', () => {
+  beforeEach(() => {
+    installFakeLocalStorage()
+  })
+
+  it('10/50/100/500/1000回の境界', () => {
+    expect(checkGrindAchievements(9)).toEqual([])
+    expect(checkGrindAchievements(10)).toEqual(['grindPlay10'])
+    expect(checkGrindAchievements(50)).toEqual(['grindPlay50'])
+    expect(checkGrindAchievements(100)).toEqual(['grindPlay100'])
+    expect(checkGrindAchievements(500)).toEqual(['grindPlay500'])
+    expect(checkGrindAchievements(1000)).toEqual(['grindPlay1000'])
+  })
+})
+
+describe('NEW状態の管理 (Ver.6 Phase 10: Achievement画面のNEWバッジ)', () => {
+  beforeEach(() => {
+    installFakeLocalStorage()
+  })
+
+  it('解除済みだが未確認の実績がgetUnseenUnlockedAchievementIdsに含まれる', () => {
+    checkDopaPercentAchievements(100)
+    const unseen = getUnseenUnlockedAchievementIds()
+    expect(unseen.sort()).toEqual(['dopa100', 'dopa50'].sort())
+  })
+
+  it('markAllUnlockedAchievementsSeenを呼ぶと、その時点の解除済み実績は全てunseenから消える', () => {
+    checkDopaPercentAchievements(100)
+    markAllUnlockedAchievementsSeen()
+    expect(getUnseenUnlockedAchievementIds()).toEqual([])
+  })
+
+  it('markAllUnlockedAchievementsSeenの後に新しく解除された実績だけがunseenに残る', () => {
+    checkDopaPercentAchievements(100)
+    markAllUnlockedAchievementsSeen()
+    checkDopaPercentAchievements(120)
+    expect(getUnseenUnlockedAchievementIds()).toEqual(['dopa120'])
   })
 })

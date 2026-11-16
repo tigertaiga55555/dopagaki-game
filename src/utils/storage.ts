@@ -2,6 +2,18 @@ import type { EndlessDifficulty } from '../types'
 
 const BEST_PERCENT_KEY = 'dopagaki:bestPercentV4'
 const PLAY_COUNT_KEY = 'dopagaki:playCountV4'
+/**
+ * Ver.6 Phase 10（実績拡張ラウンド、Grind実績）: PLAY_COUNT_KEY（既存、通常モード/FINAL DOPA
+ * TRIAL/500%チャレンジの単機プレイだけが対象）とは別に、Grind実績専用の累計カウンタ。
+ * 「公式プレイ」の定義（DOPA RUSH・ENDLESS・世界対戦・フレンド対戦を含み、Challenge・
+ * ENDLESS Challenge・QA/Previewは含まない）に厳密に合わせるため、新しいキーで独立して
+ * 持つ——既存PLAY_COUNT_KEYはisFirstPlay等の既存UI文言の判定にしか使われておらず、
+ * 意味を変えると既存の挙動（「初回プレイですか」の判定）に影響するため触らない。
+ * インクリメントはresultEngineV4.ts（official=trueの時のみ）・useEndlessGame.ts
+ * （qaMode=falseの時のみ）・BattleMatchScreen.tsx（battle_finish時、world/friend両方）の
+ * 4箇所からだけ呼ばれる。
+ */
+const OFFICIAL_PLAY_COUNT_KEY = 'dopagaki:officialPlayCountV1'
 
 /**
  * Ver.6 Phase 4: Endlessモードの自己ベスト（連続正解数）は難易度ごとに別々に保存する
@@ -80,6 +92,20 @@ export function incrementPlayCount(): number {
     return next
   } catch {
     return getPlayCount()
+  }
+}
+
+export function getOfficialPlayCount(): number {
+  return readNumber(OFFICIAL_PLAY_COUNT_KEY) ?? 0
+}
+
+export function incrementOfficialPlayCount(): number {
+  try {
+    const next = getOfficialPlayCount() + 1
+    localStorage.setItem(OFFICIAL_PLAY_COUNT_KEY, String(next))
+    return next
+  } catch {
+    return getOfficialPlayCount()
   }
 }
 

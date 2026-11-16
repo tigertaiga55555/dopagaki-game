@@ -1,6 +1,13 @@
 import { CHALLENGE500_CONFIG } from '../config/challenge500Config'
 import { ENDLESS_DIFFICULTIES } from '../config/endlessConfig'
-import { checkDopaPercentAchievements, checkEndlessAchievements, checkFinalQuestionAchievement } from './achievementStorage'
+import {
+  checkDopaPercentAchievements,
+  checkEndlessAchievements,
+  checkFinalQuestionAchievement,
+  checkWorldBattleStreakAchievements,
+  checkWorldBattleWinAchievements,
+} from './achievementStorage'
+import { getWorldBattleStats } from './battleStatsStorage'
 import { getBestPercent, getEndlessBest } from './storage'
 
 /**
@@ -27,9 +34,30 @@ import { getBestPercent, getEndlessBest } from './storage'
  *     （engine/challenge500Engine.ts参照）から安全に推論して解除する。
  *   - checkEndlessAchievements: Endless初級/中級/上級それぞれの既存BEST記録から、
  *     新設した12個のSTREAK実績を遡及解除する。
+ *
+ * v3（Ver.6 Phase 10: 実績拡張ラウンド、68個化）: 既存v1/v2のロジックは一切変更せず、
+ * 追加のステップとしてのみ以下を行う。
+ *   - checkEndlessAchievements: 新設したENDLESS追加3段（初級150/中級75/上級50）を、
+ *     既存BEST記録に対して再チェックする（v2と同じ関数呼び出しを安全に繰り返すだけ）。
+ *   - checkWorldBattleWinAchievements/checkWorldBattleStreakAchievements: 既存の
+ *     battleStatsStorage（wins/maxStreak、Ver.6 Phase 6で導入済み）から、世界対戦の
+ *     勝利数ladder・連勝ladderを遡及解除する。
+ *
+ * v3では意図的に遡及解除しないもの（保存されていない事実を推測しないため）:
+ *   - ノーミス/完全体（過去のプレイで正答率100%だったかどうかは保存されていない）。
+ *   - Challenge作成/参加/勝利/防衛・指名手配（このラウンド以前はローカルに累計を
+ *     一切持っていなかった。既存のcreatedChallengeIds/participatedChallengeIdsは
+ *     「IDの一覧」であって「勝敗の累計」ではないため、件数から勝敗数を推測しない）。
+ *   - 世界対戦の初プレイ/初DRAW（battleStatsStorageはwins/maxStreakしか保存して
+ *     おらず、「プレイしたが一度も勝っていない」「一度もDRAWしていない」場合との
+ *     区別がつかない）。
+ *   - フレンド対戦（累計プレイ回数はこのラウンド以前は一切保存されていなかった）。
+ *   - Grind（公式プレイ回数はこのラウンドで新設したofficialPlayCountV1が0から
+ *     始まる。既存のplayCountV4は「Challenge/Battleリプレイも誤って加算していた」
+ *     汚染済みの値のため、これをそのままコピーして使わない）。
  */
 const MIGRATION_VERSION_KEY = 'dopagaki:migrationVersionV1'
-const CURRENT_MIGRATION_VERSION = 2
+const CURRENT_MIGRATION_VERSION = 3
 
 function readMigrationVersion(): number {
   try {
@@ -67,6 +95,15 @@ export function runMigrationsOnce(): void {
     for (const difficulty of ENDLESS_DIFFICULTIES) {
       checkEndlessAchievements(difficulty, getEndlessBest(difficulty))
     }
+  }
+
+  if (current < 3) {
+    for (const difficulty of ENDLESS_DIFFICULTIES) {
+      checkEndlessAchievements(difficulty, getEndlessBest(difficulty))
+    }
+    const battleStats = getWorldBattleStats()
+    checkWorldBattleWinAchievements(battleStats.wins)
+    checkWorldBattleStreakAchievements(battleStats.maxStreak)
   }
 
   writeMigrationVersion(CURRENT_MIGRATION_VERSION)

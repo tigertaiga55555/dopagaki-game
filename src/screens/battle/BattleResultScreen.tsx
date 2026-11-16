@@ -1,7 +1,9 @@
 import { describeBattleDecidedBy } from '../../challenge/formatPerformance'
+import { AchievementUnlockBanner } from '../../components/AchievementUnlockBanner'
 import { PerformanceComparisonTable } from '../../components/PerformanceComparisonTable'
 import { resolveAvatarEmoji } from '../../config/profileConfig'
 import type { BattleFinishResult, BattleOpponentProfile } from '../../battle/types'
+import type { AchievementId } from '../../types'
 
 interface Props {
   result: BattleFinishResult
@@ -9,6 +11,8 @@ interface Props {
   myProfile: BattleOpponentProfile
   opponent: BattleOpponentProfile
   onHome: () => void
+  /** Ver.6 Phase 10（実績拡張ラウンド）: BattleMatchScreen.tsxがbattle_finish受信時に判定した新規解除実績。 */
+  newlyUnlockedAchievements?: AchievementId[]
 }
 
 /**
@@ -16,7 +20,7 @@ interface Props {
  * 既存のPerformanceComparisonTable（Challengeと共通）で5指標比較・勝敗を決めた項目の
  * 強調・通常獲得DOPA%の補足文を表示する。Challengeの既存動作には一切触れていない。
  */
-export function BattleResultScreen({ result, viewerIsPlayerA, myProfile, opponent, onHome }: Props) {
+export function BattleResultScreen({ result, viewerIsPlayerA, myProfile, opponent, onHome, newlyUnlockedAchievements = [] }: Props) {
   const myPerformance = viewerIsPlayerA ? result.playerA.performance : result.playerB.performance
   const opponentPerformance = viewerIsPlayerA ? result.playerB.performance : result.playerA.performance
 
@@ -44,6 +48,7 @@ export function BattleResultScreen({ result, viewerIsPlayerA, myProfile, opponen
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 py-10 text-center">
+      <AchievementUnlockBanner newlyUnlocked={newlyUnlockedAchievements} />
       <p className="text-xs font-black tracking-[0.3em] text-white/40">BATTLE RESULT</p>
       <p className={`anim-pop text-5xl font-black tracking-widest ${outcomeClass}`}>{outcomeLabel}</p>
       {finishNote && <p className="text-xs font-bold text-white/50">{finishNote}</p>}

@@ -181,6 +181,8 @@ export interface ChallengeSummary {
   attemptCount: number
   /** 一度でもWINした（突破した）ユニークプレイヤー数。 */
   clearedCount: number
+  /** Ver.6 Phase 10（実績拡張ラウンド）: result='lose'だった挑戦の総数（＝このChallengeでの防衛回数）。Challenge防衛系実績の累計に使う。 */
+  defeatedCount: number
   /** Ver.6 Phase 8（ENDLESS Challenge）: mode==='endless'の場合のみ設定される。一覧で「ENDLESS EASY/HARD/DANGER」のように表示するため。 */
   endlessDifficulty?: EndlessDifficulty
 }

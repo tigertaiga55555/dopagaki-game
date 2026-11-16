@@ -68,6 +68,13 @@ interface Props {
    * 差し込むためのスロット。単機プレイの既存呼び出し元は渡さないため挙動は変わらない。
    */
   battleHud?: ReactNode
+  /**
+   * Ver.6 Phase 10（実績拡張ラウンド）: 既定true。PlayScreen.tsxのofficialと同じ意味
+   * （falseならcomputeFinalTrialResult/computeChallenge500Resultのofficial/persistへ
+   * そのまま伝播し、自己ベスト更新・playCount加算・DOPA%実績判定を一切行わない）。
+   * ChallengePlayScreen.tsx（mode='finalTrial'のリプレイ）が明示的にfalseを渡す。
+   */
+  official?: boolean
 }
 
 /**
@@ -125,6 +132,7 @@ export function FinalTrialScreen({
   replayQuestions,
   onProgress,
   battleHud,
+  official = true,
 }: Props) {
   const [entryDone, setEntryDone] = useState(startAtQuestion >= FINAL_TRIAL_CONFIG.totalQuestions)
   const [muted, setMutedState] = useState(isMuted())
@@ -140,11 +148,11 @@ export function FinalTrialScreen({
   const { snapshot, start, handleResult, getRecordedProblemSet } = useFinalTrial(
     (payload) => {
       if (payload.cleared200) {
-        clear200ResultRef.current = computeFinalTrialResult(payload, initialStats, getRecordedProblemSet())
+        clear200ResultRef.current = computeFinalTrialResult(payload, initialStats, getRecordedProblemSet(), official)
         setChallengePhase('unlock')
         return
       }
-      onFinish(computeFinalTrialResult(payload, initialStats, getRecordedProblemSet()))
+      onFinish(computeFinalTrialResult(payload, initialStats, getRecordedProblemSet(), official))
     },
     startAtQuestion,
     { replayQuestions },
@@ -409,7 +417,7 @@ export function FinalTrialScreen({
         onFinish={(state: Challenge500State, recordedProblemSet, performanceStats) => {
           const base = clear200ResultRef.current
           if (!base) return
-          onFinish(computeChallenge500Result(state, base, true, recordedProblemSet, performanceStats))
+          onFinish(computeChallenge500Result(state, base, official, recordedProblemSet, performanceStats))
         }}
       />
     )

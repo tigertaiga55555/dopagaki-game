@@ -58,7 +58,7 @@ export function ChallengePlayScreen({ challenge, onFinish, onFinishEndless, onQu
   }))
 
   if (challenge.mode === 'normal') {
-    return <PlayScreen onFinish={onFinish} onQuit={onQuit} replayQuestions={challenge.problemSet.items} />
+    return <PlayScreen onFinish={onFinish} onQuit={onQuit} replayQuestions={challenge.problemSet.items} official={false} />
   }
 
   if (challenge.mode === 'finalTrial') {
@@ -68,6 +68,7 @@ export function ChallengePlayScreen({ challenge, onFinish, onFinishEndless, onQu
         onFinish={onFinish}
         onQuit={onQuit}
         replayQuestions={challenge.problemSet.items}
+        official={false}
       />
     )
   }
@@ -78,7 +79,10 @@ export function ChallengePlayScreen({ challenge, onFinish, onFinishEndless, onQu
         onQuit={onQuit}
         replayQuestions={challenge.problemSet.items}
         onFinish={(state: Challenge500State, recordedProblemSet, performanceStats) => {
-          onFinish(computeChallenge500Result(state, challenge500BaseResult, true, recordedProblemSet, performanceStats))
+          // Ver.6 Phase 10（実績拡張ラウンド）: official=falseに修正（旧来はtrue固定で、
+          // Challenge500リプレイのたびに自己ベスト更新・playCount加算・DOPA%実績判定が
+          // 誤って発火していた既存バグ）。
+          onFinish(computeChallenge500Result(state, challenge500BaseResult, false, recordedProblemSet, performanceStats))
         }}
       />
     )

@@ -162,10 +162,15 @@ export interface ChallengeAttemptRepository {
    * Ver.6 Phase 5.3（送った挑戦状一覧）: 複数challengeIdぶんの挑戦者数・総attempt数・突破者数を
    * 一括集計する（N+1回避。GROUP BYで1回のクエリにまとめる）。見つからないchallengeIdは
    * 結果に含めない（0件として扱われる＝未挑戦と同じ表示になる）。
+   * Ver.6 Phase 10（実績拡張ラウンド）: defeatedCount（result='lose'の行数＝そのChallengeで
+   * 作成者が防衛できた回数）を追加した。Challenge防衛系実績（初防衛/10防衛/25防衛）の
+   * 累計を、SentChallengesScreen.tsxが自分の全Challenge分のdefeatedCountを合算するだけで
+   * 求められるようにするための拡張——新しいテーブル・migrationは不要（既存のGROUP BY
+   * クエリへ1列追加するだけ）。
    */
   getAggregatesByChallengeIds(
     challengeIds: string[],
-  ): Promise<Record<string, { challengerCount: number; attemptCount: number; clearedCount: number }>>
+  ): Promise<Record<string, { challengerCount: number; attemptCount: number; clearedCount: number; defeatedCount: number }>>
   /**
    * Ver.6 Phase 5.4（実機QA最終修正）: 「参加したChallenge」一覧向け。複数challengeIdのうち、
    * 指定したplayerId自身の挑戦回数・最新attemptのresult（挑戦者視点のまま）を一括取得する
@@ -301,20 +306,22 @@ export function createD1ChallengeAttemptRepository(db: D1Database): ChallengeAtt
           `SELECT challenge_id,
              COUNT(DISTINCT player_id) as challenger_count,
              COUNT(*) as attempt_count,
-             COUNT(DISTINCT CASE WHEN result = 'win' THEN player_id END) as cleared_count
+             COUNT(DISTINCT CASE WHEN result = 'win' THEN player_id END) as cleared_count,
+             COUNT(CASE WHEN result = 'lose' THEN 1 END) as defeated_count
            FROM challenge_attempts
            WHERE challenge_id IN (${placeholders})
            GROUP BY challenge_id`,
         )
         .bind(...challengeIds)
-        .all<{ challenge_id: string; challenger_count: number; attempt_count: number; cleared_count: number }>()
+        .all<{ challenge_id: string; challenger_count: number; attempt_count: number; cleared_count: number; defeated_count: number }>()
 
-      const aggregates: Record<string, { challengerCount: number; attemptCount: number; clearedCount: number }> = {}
+      const aggregates: Record<string, { challengerCount: number; attemptCount: number; clearedCount: number; defeatedCount: number }> = {}
       for (const row of result.results ?? []) {
         aggregates[row.challenge_id] = {
           challengerCount: row.challenger_count,
           attemptCount: row.attempt_count,
           clearedCount: row.cleared_count,
+          defeatedCount: row.defeated_count,
         }
       }
       return aggregates

@@ -466,6 +466,60 @@ export type AchievementId =
    */
   | 'endlessChallengeFirstWin'
   | 'endlessChallengeFirstDefense'
+  /**
+   * Ver.6 Phase 10（実績拡張ラウンド、Achievement/Title 68個化）: 以下、既存26個に
+   * 追加した42個。各カテゴリの件数はconfig/achievements.tsのコメント・テスト
+   * （achievements.test.ts）で68ちょうどであることを保証する。
+   *
+   * ENDLESS追加3個（初級150/中級75/上級50、既存4段階ラダーへの5段目追加）。
+   */
+  | 'endlessBeginner150'
+  | 'endlessIntermediate75'
+  | 'endlessAdvanced50'
+  /** Challenge追加10個（通常Challenge・ENDLESS Challenge双方を合算するladder系＋指名手配）。 */
+  | 'challengeCreatedFirst'
+  | 'challengeParticipatedFirst'
+  | 'challengeWin1'
+  | 'challengeWin5'
+  | 'challengeWin20'
+  | 'challengeWin50'
+  | 'challengeDefense1'
+  | 'challengeDefense10'
+  | 'challengeDefense25'
+  | 'challengeWanted10'
+  /** World Battle 12個（新規カテゴリ）。 */
+  | 'worldBattleFirstPlay'
+  | 'worldBattleWin1'
+  | 'worldBattleWin10'
+  | 'worldBattleWin25'
+  | 'worldBattleWin50'
+  | 'worldBattleWin100'
+  | 'worldBattleWin250'
+  | 'worldBattleStreak3'
+  | 'worldBattleStreak5'
+  | 'worldBattleStreak10'
+  | 'worldBattleStreak20'
+  | 'worldBattleFirstDraw'
+  /** Friend Battle 4個（新規カテゴリ）。 */
+  | 'friendBattleFirstPlay'
+  | 'friendBattlePlay10'
+  | 'friendBattlePlay50'
+  | 'friendBattlePlay100'
+  /** Skill/Special 8個（新規カテゴリ）。 */
+  | 'noMiss100'
+  | 'noMiss200'
+  | 'battleWinByBaseDopa'
+  | 'battleWinByAccuracy'
+  | 'battleWinByMaxCombo'
+  | 'battleWinByReaction'
+  | 'battleMirrorMatch'
+  | 'battleComeback'
+  /** Grind 5個（新規カテゴリ）。 */
+  | 'grindPlay10'
+  | 'grindPlay50'
+  | 'grindPlay100'
+  | 'grindPlay500'
+  | 'grindPlay1000'
 
 /**
  * 実績の解除条件。
@@ -475,6 +529,24 @@ export type AchievementId =
  * - challenge500FinalQuestion: 490%（FINAL QUESTION、あと1問で500%）到達という一度きりの
  *   イベント。bestPercentの閾値では表現できない（490はMISSなら400へ、正解なら500へ
  *   瞬時に遷移し、記録される最終%として490そのものが残ることがないため）、専用の種別。
+ *
+ * Ver.6 Phase 10（実績拡張ラウンド）追加分：
+ * - challengeCreated/challengeParticipated: Challenge作成／参加（挑戦者側）が初めて成立した。
+ * - challengeWinCount/challengeDefenseCount: 通常Challenge・ENDLESS Challenge双方を合算した
+ *   累計（挑戦者としての勝利数／作成者としての防衛数）がthreshold以上。
+ * - challengeWanted: 自分が作成したいずれか1つのChallengeに、10人以上の異なる挑戦者が挑んだ。
+ * - worldBattleFirstPlay/worldBattleFirstDraw: 世界対戦で初めてプレイ／初めてDRAWになった。
+ * - worldBattleWinCount/worldBattleStreak: 世界対戦の累計勝利数／自己最大連勝数がthreshold以上。
+ * - friendBattleFirstPlay/friendBattlePlayCount: フレンド対戦の初プレイ／累計プレイ回数。
+ * - noMiss: 公式DOPA RUSHプレイでthreshold%以上に到達し、かつ正答率100%だった
+ *   （Challenge/Battle経由のリプレイは対象外、officialフラグで判定）。
+ * - battleDecidingStat: 世界対戦で、この項目（baseDopaPercent/accuracy/maxCombo/
+ *   medianCorrectReactionMs）が実際の勝敗決定要因（decidedBy）になってWINした。
+ * - battleMirror: 世界対戦で5項目（finalDopaPercent含む）が完全一致しDRAW（decidedBy==='exactTie'）。
+ * - battleComeback: 世界対戦で、試合中に一定以上のDOPA%差を付けられた状態から最終的にWINした
+ *   （BattleMatchScreen.tsxが試合中のopponentPercent-myPercentの最大値を追跡して判定）。
+ * - officialPlayCount: 公式プレイ（DOPA RUSH・ENDLESS・世界対戦・フレンド対戦。Challenge・
+ *   ENDLESS Challenge・QA/Preview専用モードは含まない）の累計回数がthreshold以上。
  */
 export type AchievementUnlockCondition =
   | { type: 'dopaPercent'; threshold: number }
@@ -484,11 +556,37 @@ export type AchievementUnlockCondition =
   | { type: 'endlessChallengeWin' }
   /** Ver.6 Phase 8（ENDLESS Challenge）: ホストとして初めて自分のENDLESS Challengeの防衛（相手のLOSE/DRAW）に成功した。 */
   | { type: 'endlessChallengeDefense' }
+  | { type: 'challengeCreated' }
+  | { type: 'challengeParticipated' }
+  | { type: 'challengeWinCount'; threshold: number }
+  | { type: 'challengeDefenseCount'; threshold: number }
+  | { type: 'challengeWanted' }
+  | { type: 'worldBattleFirstPlay' }
+  | { type: 'worldBattleWinCount'; threshold: number }
+  | { type: 'worldBattleStreak'; threshold: number }
+  | { type: 'worldBattleFirstDraw' }
+  | { type: 'friendBattleFirstPlay' }
+  | { type: 'friendBattlePlayCount'; threshold: number }
+  | { type: 'noMiss'; threshold: number }
+  | { type: 'battleDecidingStat'; stat: 'baseDopaPercent' | 'accuracy' | 'maxCombo' | 'medianCorrectReactionMs' }
+  | { type: 'battleMirror' }
+  | { type: 'battleComeback' }
+  | { type: 'officialPlayCount'; threshold: number }
 
-/** 実績のカテゴリ（Achievement画面のALL/DOPA/ENDLESSフィルタに使う）。 */
-export type AchievementCategory = 'dopa' | 'endless'
+/**
+ * 実績のカテゴリ（Achievement画面のフィルタタブに使う）。
+ * Ver.6 Phase 10（実績拡張ラウンド）: 'dopa'/'endless'の既存2値は維持しつつ（既存実績の
+ * categoryフィールドを書き換える必要がないようにするため）、新規5カテゴリを追加した。
+ */
+export type AchievementCategory = 'dopa' | 'endless' | 'challenge' | 'worldBattle' | 'friendBattle' | 'special' | 'grind'
 
-/** 実績定義（config/achievements.ts）。id/name/description/unlockConditionを分離し、名称だけの差し替えを容易にする。 */
+/**
+ * 実績定義（config/achievements.ts）。id/name/description/unlockConditionを分離し、名称だけの差し替えを容易にする。
+ * Ver.6 Phase 10（実績拡張ラウンド）: rarity/secretを追加。
+ * - rarity: 'rare'は解除演出を強化する対象（500%・100勝・250勝・20連勝・1000プレイ・Secret系）。
+ * - secret: trueの場合、未解除時はAchievement画面で名称・条件を「？？？」に隠す
+ *   （鏡写し・大逆転など、条件を知らない方が面白いもの限定。基本的な進捗系実績は対象外）。
+ */
 export interface AchievementDef {
   id: AchievementId
   name: string
@@ -497,6 +595,8 @@ export interface AchievementDef {
   category: AchievementCategory
   /** categoryが'endless'の場合のみ存在。Achievement画面のカード上に難易度バッジを出すために使う。 */
   endlessDifficulty?: EndlessDifficulty
+  rarity?: 'rare'
+  secret?: boolean
 }
 
 /**

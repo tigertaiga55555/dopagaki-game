@@ -5,7 +5,8 @@ import { addParticipatedChallengeId } from '../challenge/participatedChallengesS
 import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
 import { PerformanceComparisonTable } from '../components/PerformanceComparisonTable'
 import { trackChallengeWin } from '../utils/analytics'
-import { checkEndlessChallengeWinAchievement } from '../utils/achievementStorage'
+import { checkChallengeParticipatedAchievement, checkChallengeWinAchievements, checkEndlessChallengeWinAchievement } from '../utils/achievementStorage'
+import { recordChallengeAttemptResult } from '../utils/challengeStatsStorage'
 import { getProfile } from '../utils/profileStorage'
 import type { ChallengeApiError, ChallengeAttemptRecord, ChallengeRecord } from '../challenge/types'
 import type { AchievementId, FinalResultV4 } from '../types'
@@ -63,10 +64,16 @@ export function ChallengeResultScreen({ challenge, myResult, myEndlessStreak, on
         if (res.ok) {
           setState({ status: 'done', attempt: res.value })
           addParticipatedChallengeId(challenge.id)
-          if (res.value.result === 'win') {
-            trackChallengeWin(challenge.mode)
-            setNewlyUnlocked(checkEndlessChallengeWinAchievement(true))
-          }
+          if (res.value.result === 'win') trackChallengeWin(challenge.mode)
+          // Ver.6 Phase 10（実績拡張ラウンド）: 「受けて立つ」「記録破り/刺客/破壊者/挑戦状
+          // クラッシャー」（通常Challenge・ENDLESS Challenge合算のladder）に加え、ENDLESS
+          // Challenge専用の「終わらない挑戦者」もここで一緒に判定する。
+          const stats = recordChallengeAttemptResult(res.value.result)
+          setNewlyUnlocked([
+            ...checkChallengeParticipatedAchievement(),
+            ...checkChallengeWinAchievements(stats.winCount),
+            ...checkEndlessChallengeWinAchievement(res.value.result === 'win'),
+          ])
         } else {
           setState({ status: 'error', error: res.error })
         }
@@ -96,6 +103,10 @@ export function ChallengeResultScreen({ challenge, myResult, myEndlessStreak, on
         // 情報は保存せず、IDだけを記録する（createdChallengeIdsと同じ方針）。
         addParticipatedChallengeId(challenge.id)
         if (res.value.result === 'win') trackChallengeWin(challenge.mode)
+        // Ver.6 Phase 10（実績拡張ラウンド）: 通常Challengeも同じladder（受けて立つ/記録破り/
+        // 刺客/破壊者/挑戦状クラッシャー）へ合算する。
+        const stats = recordChallengeAttemptResult(res.value.result)
+        setNewlyUnlocked([...checkChallengeParticipatedAchievement(), ...checkChallengeWinAchievements(stats.winCount)])
       } else {
         setState({ status: 'error', error: res.error })
       }

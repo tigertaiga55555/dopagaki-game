@@ -17,9 +17,9 @@ import { pickFinalQuestion } from './finalQuestionPicker'
 import { generateNextQuestion } from './questionPicker'
 import { pick } from './random'
 import { pickChallenge500Question } from '../questions/challenge500'
-import { checkEndlessAchievements } from '../utils/achievementStorage'
+import { checkEndlessAchievements, checkGrindAchievements } from '../utils/achievementStorage'
 import { trackEndlessEnd, trackEndlessStart } from '../utils/analytics'
-import { getEndlessBest, updateEndlessBest } from '../utils/storage'
+import { getEndlessBest, getOfficialPlayCount, incrementOfficialPlayCount, updateEndlessBest } from '../utils/storage'
 import { sfx } from '../utils/sound'
 import type { ChallengeProblemSetItem } from '../challenge/types'
 import type { Challenge500QuestionSpec, Challenge500Tier } from '../questions/challenge500/types'
@@ -300,7 +300,12 @@ export function useEndlessGame(
     if (isNewBest) sfx.endlessNewBest()
     if (!qaMode) trackEndlessEnd(difficulty, next.streak, isNewBest)
     // Ver.6 Phase 5.1: Endless STREAK実績。qaModeではDOPA%実績・自己ベスト更新と同様、一切解除しない。
-    const newlyUnlockedAchievements = qaMode ? [] : checkEndlessAchievements(difficulty, next.streak)
+    // Ver.6 Phase 10: Grind実績（公式プレイ回数）もqaMode=falseの公式ENDLESSプレイだけで加算する
+    // （ENDLESS Challenge・ChallengeリプレイはqaMode=trueで呼ばれるため、ここには含まれない）。
+    if (!qaMode) incrementOfficialPlayCount()
+    const newlyUnlockedAchievements = qaMode
+      ? []
+      : [...checkEndlessAchievements(difficulty, next.streak), ...checkGrindAchievements(getOfficialPlayCount())]
     setSnapshot((s) => ({ ...s, state: next, currentSlot: null, milestoneLabel: null }))
     onFinish({
       score: next.streak,

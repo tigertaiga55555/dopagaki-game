@@ -155,11 +155,13 @@ export function createFakeD1Database() {
             const rowsForChallenge = attemptRows.filter((r) => r.challenge_id === challengeId)
             const challengerCount = new Set(rowsForChallenge.map((r) => r.player_id)).size
             const clearedPlayers = new Set(rowsForChallenge.filter((r) => r.result === 'win').map((r) => r.player_id))
+            const defeatedCount = rowsForChallenge.filter((r) => r.result === 'lose').length
             return {
               challenge_id: challengeId,
               challenger_count: challengerCount,
               attempt_count: rowsForChallenge.length,
               cleared_count: clearedPlayers.size,
+              defeated_count: defeatedCount,
             }
           })
           // 本物のGROUP BYと同じく、1件もattemptが無いchallengeIdは結果に含めない。

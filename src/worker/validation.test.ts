@@ -191,37 +191,14 @@ describe('Ver.6 Phase 8: ENDLESS Challengeの入力検証', () => {
     expect(result.value?.creatorScore).toBe(37)
   })
 
-  it('初級は10連続未満ならinvalid、10以上ならok', () => {
-    const below = validateCreateChallengeInput(
-      validEndlessInput({ conditions: { mode: 'endless', endlessDifficulty: 'beginner' }, creatorScore: 9 }),
-    )
-    expect(below.ok).toBe(false)
-    const atMin = validateCreateChallengeInput(
-      validEndlessInput({ conditions: { mode: 'endless', endlessDifficulty: 'beginner' }, creatorScore: 10 }),
-    )
-    expect(atMin.ok).toBe(true)
-  })
-
-  it('中級は5連続未満ならinvalid、5以上ならok', () => {
-    const below = validateCreateChallengeInput(
-      validEndlessInput({ conditions: { mode: 'endless', endlessDifficulty: 'intermediate' }, creatorScore: 4 }),
-    )
-    expect(below.ok).toBe(false)
-    const atMin = validateCreateChallengeInput(
-      validEndlessInput({ conditions: { mode: 'endless', endlessDifficulty: 'intermediate' }, creatorScore: 5 }),
-    )
-    expect(atMin.ok).toBe(true)
-  })
-
-  it('上級は3連続未満ならinvalid、3以上ならok', () => {
-    const below = validateCreateChallengeInput(
-      validEndlessInput({ conditions: { mode: 'endless', endlessDifficulty: 'advanced' }, creatorScore: 2 }),
-    )
-    expect(below.ok).toBe(false)
-    const atMin = validateCreateChallengeInput(
-      validEndlessInput({ conditions: { mode: 'endless', endlessDifficulty: 'advanced' }, creatorScore: 3 }),
-    )
-    expect(atMin.ok).toBe(true)
+  it('Ver.6 Phase 10（実績拡張ラウンド）: 最低STREAK条件は完全撤廃したため、0 STREAKでもどの難易度でもokで通る', () => {
+    for (const difficulty of ['beginner', 'intermediate', 'advanced'] as const) {
+      const result = validateCreateChallengeInput(
+        validEndlessInput({ conditions: { mode: 'endless', endlessDifficulty: difficulty }, creatorScore: 0 }),
+      )
+      expect(result.ok).toBe(true)
+      expect(result.value?.creatorScore).toBe(0)
+    }
   })
 
   it('conditions.endlessDifficultyが不正な値ならinvalid', () => {

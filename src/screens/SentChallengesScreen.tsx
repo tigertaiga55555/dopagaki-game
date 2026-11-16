@@ -4,7 +4,10 @@ import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSourc
 import { getCreatedChallengeIds } from '../challenge/createdChallengesStorage'
 import { trackChallengeSentListView } from '../utils/analytics'
 import { ENDLESS_THEME } from '../config/endlessTheme'
+import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
+import { checkChallengeDefenseAchievements, checkChallengeWantedAchievement } from '../utils/achievementStorage'
 import type { ChallengeApiError, ChallengeRecord, ChallengeSummary } from '../challenge/types'
+import type { AchievementId } from '../types'
 
 interface Props {
   onBack: () => void
@@ -42,6 +45,7 @@ function describeMode(summary: ChallengeSummary): string {
 export function SentChallengesScreen({ onBack, onOpenHistory }: Props) {
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [openingId, setOpeningId] = useState<string | null>(null)
+  const [newlyUnlocked, setNewlyUnlocked] = useState<AchievementId[]>([])
 
   useEffect(() => {
     trackChallengeSentListView()
@@ -56,6 +60,13 @@ export function SentChallengesScreen({ onBack, onOpenHistory }: Props) {
       if (res.ok) {
         // サーバーから返った順に依存せず、常に新しい順で表示する。
         setState({ status: 'ready', summaries: [...res.value].sort((a, b) => b.createdAt - a.createdAt) })
+        // Ver.6 Phase 10（実績拡張ラウンド）: 防衛数ladder（初防衛/10防衛/25防衛、通常Challenge・
+        // ENDLESS Challenge合算）はこの端末が作成した全ChallengeのdefeatedCountを合算して判定する。
+        // 指名手配（1つのChallengeに10人以上の異なる挑戦者）は各ChallengeのchallengerCountの
+        // 最大値で判定する（全Challengeのchallenger総数ではなく、1つで10人以上が条件）。
+        const totalDefeated = res.value.reduce((sum, s) => sum + s.defeatedCount, 0)
+        const maxChallengerCount = res.value.reduce((max, s) => Math.max(max, s.challengerCount), 0)
+        setNewlyUnlocked([...checkChallengeDefenseAchievements(totalDefeated), ...checkChallengeWantedAchievement(maxChallengerCount)])
       } else {
         setState({ status: 'error', error: res.error })
       }
@@ -76,6 +87,7 @@ export function SentChallengesScreen({ onBack, onOpenHistory }: Props) {
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
       <BackButton onBack={onBack} label="ホーム" />
+      <AchievementUnlockBanner newlyUnlocked={newlyUnlocked} />
 
       <p className="relative z-10 mt-2 text-center text-sm font-black tracking-widest text-white/80">作成したChallenge</p>
 

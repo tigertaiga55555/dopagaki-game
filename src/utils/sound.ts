@@ -674,6 +674,18 @@ export const sfx = {
   /** Ver.6 Phase 4.1: Endless自己ベスト更新時の着地音。既存のcomboMilestone最大強度(5)をそのまま再利用する。 */
   endlessNewBest: () => comboMilestone(5),
 
+  /** Ver.6 Phase 10（実績拡張ラウンド）: 通常Achievement解除の軽いSE。プレイを止めないよう短く済ませる。 */
+  achievementUnlock: () => {
+    beep(1100, 90, 'sine', 0.1)
+    setTimeout(() => beep(1500, 110, 'sine', 0.09), 70)
+  },
+  /** Ver.6 Phase 10: レアAchievement（500%/100勝/250勝/20連勝/1000プレイ/Secret系）専用の強めのSE。 */
+  achievementUnlockRare: () => {
+    beep(1300, 110, 'sine', 0.14)
+    setTimeout(() => beep(1700, 140, 'sine', 0.13), 90)
+    setTimeout(() => beep(2200, 220, 'triangle', 0.11), 200)
+  },
+
   challenge500Clear500: () => {
     megaImpact()
     setTimeout(() => {

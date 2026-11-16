@@ -494,50 +494,54 @@ describe('worker fetch handler: ENDLESS Challenge (Ver.6 Phase 8)', () => {
     return body.value
   }
 
-  it('POST /api/challenges: 上級はSTREAK3未満だと400、3以上なら201でmode=endless・performance=nullが保存される', async () => {
+  it('POST /api/challenges: Ver.6 Phase 10（実績拡張ラウンド）最低STREAK条件は完全撤廃済み。0 STREAKでも201でmode=endless・performance=nullが保存される', async () => {
     const db = createFakeD1Database()
     const env = { CHALLENGE_DB: db as never }
 
-    const tooLow = await worker.fetch(
-      new Request('https://example.com/api/challenges', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(sampleEndlessCreateBody({ creatorScore: 2 })),
-      }),
-      env,
-    )
-    expect(tooLow.status).toBe(400)
-
-    const challenge = await createEndlessChallenge(env, { creatorScore: 3 })
+    const challenge = await createEndlessChallenge(env, { creatorScore: 0 })
     expect(challenge.mode).toBe('endless')
     expect(challenge.performance).toBeNull()
-    expect(challenge.creatorScore).toBe(3)
+    expect(challenge.creatorScore).toBe(0)
     expect(challenge.conditions).toEqual({ mode: 'endless', endlessDifficulty: 'advanced' })
   })
 
-  it('POST /api/challenges: 初級10・中級5・上級3の最低条件がそれぞれ強制される', async () => {
+  it('POST /api/challenges: Ver.6 Phase 10: 初級・中級とも0 STREAKで作成できる（最低条件は全難易度で撤廃済み）', async () => {
     const db = createFakeD1Database()
     const env = { CHALLENGE_DB: db as never }
 
-    const beginnerLow = await worker.fetch(
+    const beginnerZero = await worker.fetch(
       new Request('https://example.com/api/challenges', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(sampleEndlessCreateBody({ conditions: { mode: 'endless', endlessDifficulty: 'beginner' }, creatorScore: 9 })),
+        body: JSON.stringify(sampleEndlessCreateBody({ conditions: { mode: 'endless', endlessDifficulty: 'beginner' }, creatorScore: 0 })),
       }),
       env,
     )
-    expect(beginnerLow.status).toBe(400)
+    expect(beginnerZero.status).toBe(201)
 
-    const intermediateLow = await worker.fetch(
+    const intermediateZero = await worker.fetch(
       new Request('https://example.com/api/challenges', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(sampleEndlessCreateBody({ conditions: { mode: 'endless', endlessDifficulty: 'intermediate' }, creatorScore: 4 })),
+        body: JSON.stringify(sampleEndlessCreateBody({ conditions: { mode: 'endless', endlessDifficulty: 'intermediate' }, creatorScore: 0 })),
       }),
       env,
     )
-    expect(intermediateLow.status).toBe(400)
+    expect(intermediateZero.status).toBe(201)
+  })
+
+  it('WIN/DRAW判定（TARGET 0）: ホスト0 STREAKに対し、挑戦者0 STREAKはDRAW、1 STREAKは即WIN', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createEndlessChallenge(env, { creatorScore: 0 })
+
+    const drawAttempt = await postEndlessAttempt(env, challenge.id, { score: 0 })
+    expect(drawAttempt.result).toBe('draw')
+    expect(drawAttempt.decidedBy).toBe('streak')
+
+    const winAttempt = await postEndlessAttempt(env, challenge.id, { score: 1 })
+    expect(winAttempt.result).toBe('win')
+    expect(winAttempt.decidedBy).toBe('streak')
   })
 
   it('GET /api/challenges/:id: 作成したENDLESS Challengeを同じ内容で取得できる', async () => {
@@ -622,7 +626,7 @@ describe('worker fetch handler: POST /api/challenges/summaries (Ver.6 Phase 5.3:
     )
     expect(res.status).toBe(200)
     const body = (await res.json()) as ChallengeApiResult<
-      { id: string; creatorScore: number; challengerCount: number; attemptCount: number; clearedCount: number }[]
+      { id: string; creatorScore: number; challengerCount: number; attemptCount: number; clearedCount: number; defeatedCount: number }[]
     >
     expect(body.ok).toBe(true)
     if (!body.ok) throw new Error('expected summaries fetch to succeed')
@@ -636,6 +640,7 @@ describe('worker fetch handler: POST /api/challenges/summaries (Ver.6 Phase 5.3:
       challengerCount: 2,
       attemptCount: 3,
       clearedCount: 1,
+      defeatedCount: 2,
     })
     expect(summaryB).toEqual({
       id: challengeB.id,
@@ -645,6 +650,7 @@ describe('worker fetch handler: POST /api/challenges/summaries (Ver.6 Phase 5.3:
       challengerCount: 0,
       attemptCount: 0,
       clearedCount: 0,
+      defeatedCount: 0,
     })
     expect(body.value.find((s) => s.id === 'does-not-exist')).toBeUndefined()
   })

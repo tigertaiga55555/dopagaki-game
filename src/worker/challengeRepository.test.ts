@@ -213,7 +213,7 @@ describe('createD1ChallengeAttemptRepository (Ver.6 Phase 5.2/5.3: challenge_att
     expect(totalCount > rows.length).toBe(true)
   })
 
-  it('Ver.6 Phase 5.3（送った挑戦状一覧）: getAggregatesByChallengeIdsは挑戦者数・総attempt数・突破者数を一括集計する', async () => {
+  it('Ver.6 Phase 5.3（送った挑戦状一覧）/Ver.6 Phase 10（防衛数ladder）: getAggregatesByChallengeIdsは挑戦者数・総attempt数・突破者数・防衛数を一括集計する', async () => {
     const db = createFakeD1Database()
     const repo = createD1ChallengeAttemptRepository(db as never)
     // challenge-x: pid-a が LOSE→WIN、pid-b が LOSE の3 attempt、挑戦者2人、突破者1人。
@@ -223,7 +223,7 @@ describe('createD1ChallengeAttemptRepository (Ver.6 Phase 5.2/5.3: challenge_att
     // challenge-y: 挑戦者なし（0件のままaggregatesに含まれないことを確認する）。
 
     const aggregates = await repo.getAggregatesByChallengeIds(['challenge-x', 'challenge-y'])
-    expect(aggregates['challenge-x']).toEqual({ challengerCount: 2, attemptCount: 3, clearedCount: 1 })
+    expect(aggregates['challenge-x']).toEqual({ challengerCount: 2, attemptCount: 3, clearedCount: 1, defeatedCount: 2 })
     expect(aggregates['challenge-y']).toBeUndefined()
   })
 

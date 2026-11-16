@@ -205,7 +205,7 @@ async function handleGetSummaries(request: Request, db: D1Database): Promise<Res
     const [challenges, aggregates] = await Promise.all([challengeRepo.getByIds(ids), attemptRepo.getAggregatesByChallengeIds(ids)])
 
     const summaries: ChallengeSummary[] = challenges.map((challenge) => {
-      const aggregate = aggregates[challenge.id] ?? { challengerCount: 0, attemptCount: 0, clearedCount: 0 }
+      const aggregate = aggregates[challenge.id] ?? { challengerCount: 0, attemptCount: 0, clearedCount: 0, defeatedCount: 0 }
       return {
         id: challenge.id,
         mode: challenge.mode,
@@ -214,6 +214,7 @@ async function handleGetSummaries(request: Request, db: D1Database): Promise<Res
         challengerCount: aggregate.challengerCount,
         attemptCount: aggregate.attemptCount,
         clearedCount: aggregate.clearedCount,
+        defeatedCount: aggregate.defeatedCount,
         endlessDifficulty: challenge.conditions.endlessDifficulty,
       }
     })

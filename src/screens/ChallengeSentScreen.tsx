@@ -4,6 +4,8 @@ import { buildChallengeUrl } from '../challenge/url'
 import { BASE_DOPA_PERCENT_NOTE, formatAccuracyPercent } from '../challenge/formatPerformance'
 import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
 import { ENDLESS_THEME } from '../config/endlessTheme'
+import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
+import { checkChallengeCreatedAchievement } from '../utils/achievementStorage'
 import type { ChallengeRecord } from '../challenge/types'
 import type { EndlessDifficulty } from '../types'
 
@@ -28,6 +30,10 @@ const MODE_LABEL: Record<ChallengeRecord['mode'], string> = {
 export function ChallengeSentScreen({ challenge, onDone }: Props) {
   const [copied, setCopied] = useState(false)
   const url = buildChallengeUrl(challenge.id)
+  // Ver.6 Phase 10（実績拡張ラウンド）: このRPC画面に到達した時点で、サーバーへの
+  // Challenge作成は既に成功している（通常・ENDLESS問わず）。「挑戦状、投函」は
+  // unlockAchievement自体が冪等なため、毎回呼んでも2回目以降は何も起きない。
+  const [newlyUnlocked] = useState(() => checkChallengeCreatedAchievement())
   const isEndless = challenge.mode === 'endless'
   const endlessDifficulty = challenge.conditions.endlessDifficulty as EndlessDifficulty | undefined
   const endlessTheme = endlessDifficulty ? ENDLESS_THEME[endlessDifficulty] : null
@@ -62,6 +68,7 @@ export function ChallengeSentScreen({ challenge, onDone }: Props) {
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 py-10 text-center">
+      <AchievementUnlockBanner newlyUnlocked={newlyUnlocked} />
       <p className="anim-pop text-2xl font-black tracking-widest text-amber-300">⚔️ 挑戦状が完成！</p>
 
       <div className="flex w-full max-w-xs flex-col items-center gap-2 rounded-3xl border border-amber-300/25 bg-amber-400/10 px-6 py-6">

@@ -1,8 +1,8 @@
 import { getNearMissComment } from '../config/messagesV4'
 import { NORMAL_TYPES, TYPE_THRESHOLDS, getOverdriveTitle } from '../config/resultTypesV4'
 import { OVERDRIVE_CONFIG } from '../config/overdriveConfig'
-import { checkDopaPercentAchievements, checkFinalQuestionAchievement } from '../utils/achievementStorage'
-import { getBestPercent, getPlayCount, incrementPlayCount, updateBestPercent } from '../utils/storage'
+import { checkDopaPercentAchievements, checkFinalQuestionAchievement, checkGrindAchievements, checkNoMissAchievements } from '../utils/achievementStorage'
+import { getBestPercent, getOfficialPlayCount, getPlayCount, incrementOfficialPlayCount, incrementPlayCount, updateBestPercent } from '../utils/storage'
 import { computeMedian } from '../challenge/performance'
 import type { Challenge500PerformanceStats } from './useChallenge500'
 import type { Challenge500State } from './challenge500Engine'
@@ -223,7 +223,24 @@ function buildNormalChallengePerformance(payload: RushFinishPayload, finalPercen
   }
 }
 
-export function computeFinalResult(payload: RushFinishPayload, recordedProblemSet?: ChallengeProblemSetItem[]): FinalResultV4 {
+/**
+ * Ver.6 Phase 10（実績拡張ラウンド）: official（既定true、本番の単機プレイの挙動は不変）を
+ * falseにすると、自己ベスト更新・playCount加算・DOPA%実績判定を一切行わない。
+ *
+ * 根本修正: このofficialフラグが存在する以前は、PlayScreen.tsxが replayQuestions の
+ * 有無に関わらず常にこの関数を無条件に呼んでいたため、Challenge（mode='normal'の
+ * リプレイ）・Battle（世界対戦・フレンド対戦の対局、どちらもPlayScreenをreplayQuestions
+ * 付きで再利用する）の最中にも、本来「公式DOPA RUSHプレイ」だけに閉じるべき
+ * incrementPlayCount/updateBestPercent/checkDopaPercentAchievementsが毎回発火していた
+ * （Challengeに何度もリトライするだけでGrind実績やDOPA%実績を稼げてしまい、自己ベストも
+ * リプレイのスコアで汚染されてしまう既存バグ）。呼び出し側（PlayScreen.tsx）は
+ * replayQuestionsが無いとき（＝正真正銘の単機プレイ）だけofficial=trueを渡す。
+ */
+export function computeFinalResult(
+  payload: RushFinishPayload,
+  recordedProblemSet?: ChallengeProblemSetItem[],
+  official = true,
+): FinalResultV4 {
   const { finalPercent, overdriveActive, stats } = payload
   const type = determineType(finalPercent, overdriveActive, stats)
   const crimeRecords = buildCrimeRecords(stats)
@@ -231,12 +248,24 @@ export function computeFinalResult(payload: RushFinishPayload, recordedProblemSe
 
   const isFirstPlay = getPlayCount() === 0
   const bestBefore = getBestPercent()
-  const isNewBest = updateBestPercent(finalPercent)
-  incrementPlayCount()
+  const isNewBest = official && updateBestPercent(finalPercent)
+  const accuracy = stats.totalAnswered > 0 ? stats.correctCount / stats.totalAnswered : 0
+  if (official) {
+    incrementPlayCount()
+    incrementOfficialPlayCount()
+  }
   // Ver.6 Phase 5: DOPA%実績（100/120%はこの通常プレイ経路で到達しうる）の判定。
   // 300/400チェックポイント等の既存演出と競合しないよう、ここでは解除するだけで
   // 通知はしない——結果画面（ResultScreen.tsx）がnewlyUnlockedAchievementsをまとめて表示する。
-  const newlyUnlockedAchievements = checkDopaPercentAchievements(finalPercent)
+  // Ver.6 Phase 10: ノーミス/完全体（DOPA%以上かつ正答率100%）・Grind（公式プレイ回数）も
+  // 同じofficial経路でのみ判定する。
+  const newlyUnlockedAchievements = official
+    ? [
+        ...checkDopaPercentAchievements(finalPercent),
+        ...checkNoMissAchievements(finalPercent, accuracy),
+        ...checkGrindAchievements(getOfficialPlayCount()),
+      ]
+    : []
 
   return {
     percent: finalPercent,
@@ -247,7 +276,7 @@ export function computeFinalResult(payload: RushFinishPayload, recordedProblemSe
     crimeRecords,
     maxCombo: stats.maxCombo,
     fastestReactionMs: stats.fastestReactionMs,
-    accuracy: stats.totalAnswered > 0 ? stats.correctCount / stats.totalAnswered : 0,
+    accuracy,
     isFirstPlay,
     isNewBest,
     bestPercent: isNewBest ? finalPercent : bestBefore,
@@ -270,6 +299,7 @@ export function computeFinalTrialResult(
   payload: FinalTrialFinishPayload,
   stats: PlayStats,
   recordedProblemSet?: ChallengeProblemSetItem[],
+  official = true,
 ): FinalResultV4 {
   const { finalPercent, trialsCleared, cleared200 } = payload
   const type = getOverdriveTitle(finalPercent)
@@ -278,11 +308,23 @@ export function computeFinalTrialResult(
 
   const isFirstPlay = getPlayCount() === 0
   const bestBefore = getBestPercent()
-  const isNewBest = updateBestPercent(finalPercent)
-  incrementPlayCount()
+  const isNewBest = official && updateBestPercent(finalPercent)
+  const accuracy = stats.totalAnswered > 0 ? stats.correctCount / stats.totalAnswered : 0
+  if (official) {
+    incrementPlayCount()
+    incrementOfficialPlayCount()
+  }
   // Ver.6 Phase 5: DOPA%実績（120/200%はこの経路で到達しうる）の判定。490 FINAL QUESTION・
   // 200% PERFECT CLEAR等の既存演出と競合しないよう、ここでは解除するだけで通知はしない。
-  const newlyUnlockedAchievements = checkDopaPercentAchievements(finalPercent)
+  // Ver.6 Phase 10: official=false（Challenge/Battleのリプレイ経路）では一切解除しない。
+  // ノーミス/完全体・Grindも同じofficial経路でのみ判定する。
+  const newlyUnlockedAchievements = official
+    ? [
+        ...checkDopaPercentAchievements(finalPercent),
+        ...checkNoMissAchievements(finalPercent, accuracy),
+        ...checkGrindAchievements(getOfficialPlayCount()),
+      ]
+    : []
 
   return {
     percent: finalPercent,
@@ -293,7 +335,7 @@ export function computeFinalTrialResult(
     crimeRecords,
     maxCombo: stats.maxCombo,
     fastestReactionMs: stats.fastestReactionMs,
-    accuracy: stats.totalAnswered > 0 ? stats.correctCount / stats.totalAnswered : 0,
+    accuracy,
     isFirstPlay,
     isNewBest,
     bestPercent: isNewBest ? finalPercent : bestBefore,

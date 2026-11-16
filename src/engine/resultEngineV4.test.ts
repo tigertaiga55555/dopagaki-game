@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { computeChallenge500Result, computeFinalResult, computeFinalTrialResult } from './resultEngineV4'
 import { createStats } from './useRushGame'
+import { isAchievementUnlocked } from '../utils/achievementStorage'
+import { getBestPercent, getOfficialPlayCount, getPlayCount } from '../utils/storage'
 import type { Challenge500State } from './challenge500Engine'
 import type { Challenge500PerformanceStats } from './useChallenge500'
 import type { FinalResultV4 } from '../types'
@@ -181,5 +183,107 @@ describe('computeChallenge500Result: 限界突破チャレンジのChallengePerf
     const result = computeChallenge500Result(challengeState(200), baseResultFixture(), false, undefined, performanceStats)
     expect(result.challengePerformance?.accuracy).toBe(0)
     expect(result.challengePerformance?.medianCorrectReactionMs).toBeNull()
+  })
+})
+
+describe('official フラグ（Ver.6 Phase 10実績拡張ラウンド）: Challenge/Battleリプレイが公式記録を汚染しないことの検証', () => {
+  beforeEach(() => {
+    installFakeLocalStorage()
+  })
+
+  it('computeFinalResult: official=false（既定undefined=trueとの比較）ではplayCount加算・自己ベスト更新・DOPA%実績解除を一切行わない', () => {
+    const stats = createStats()
+    stats.totalAnswered = 10
+    stats.correctCount = 10
+    const result = computeFinalResult({ rawPercent: 100, finalPercent: 100, overdriveActive: false, stats }, undefined, false)
+    expect(getPlayCount()).toBe(0)
+    expect(getBestPercent()).toBe(0)
+    expect(getOfficialPlayCount()).toBe(0) // Ver.6 Phase 10: Grind専用カウンタも加算されない
+    expect(result.newlyUnlockedAchievements).toEqual([])
+    expect(result.isNewBest).toBe(false)
+    expect(isAchievementUnlocked('dopa100')).toBe(false)
+  })
+
+  it('computeFinalResult: official=true（既定値、単機プレイ）ではplayCount加算・自己ベスト更新・DOPA%実績解除が従来通り発生する', () => {
+    const stats = createStats()
+    const result = computeFinalResult({ rawPercent: 100, finalPercent: 100, overdriveActive: false, stats })
+    expect(getPlayCount()).toBe(1)
+    expect(getBestPercent()).toBe(100)
+    expect(getOfficialPlayCount()).toBe(1)
+    expect(result.newlyUnlockedAchievements).toEqual(['dopa50', 'dopa100'])
+    expect(isAchievementUnlocked('dopa100')).toBe(true)
+  })
+
+  it('computeFinalResult: official=true・正答率100%・100%到達でノーミスも一緒に解除される', () => {
+    const stats = createStats()
+    stats.totalAnswered = 20
+    stats.correctCount = 20
+    const result = computeFinalResult({ rawPercent: 100, finalPercent: 100, overdriveActive: false, stats })
+    expect(result.newlyUnlockedAchievements).toEqual(['dopa50', 'dopa100', 'noMiss100'])
+    expect(isAchievementUnlocked('noMiss100')).toBe(true)
+    expect(isAchievementUnlocked('noMiss200')).toBe(false)
+  })
+
+  it('computeFinalTrialResult: official=falseではplayCount加算・自己ベスト更新・DOPA%実績解除を一切行わない', () => {
+    const stats = createStats()
+    const payload = { finalPercent: 150, trialsCleared: 10, cleared200: false, trialPerformance: { maxCombo: 1, accuracy: 1, reactionMsList: [] } }
+    const result = computeFinalTrialResult(payload, stats, undefined, false)
+    expect(getPlayCount()).toBe(0)
+    expect(getBestPercent()).toBe(0)
+    expect(getOfficialPlayCount()).toBe(0)
+    expect(result.newlyUnlockedAchievements).toEqual([])
+    expect(isAchievementUnlocked('dopa150')).toBe(false)
+  })
+
+  it('computeFinalTrialResult: official=true・正答率100%・200%到達で完全体も一緒に解除される', () => {
+    const stats = createStats()
+    stats.totalAnswered = 15
+    stats.correctCount = 15
+    const payload = { finalPercent: 200, trialsCleared: 15, cleared200: true, trialPerformance: { maxCombo: 15, accuracy: 1, reactionMsList: [] } }
+    const result = computeFinalTrialResult(payload, stats, undefined, true)
+    expect(getOfficialPlayCount()).toBe(1)
+    expect(result.newlyUnlockedAchievements).toContain('noMiss100')
+    expect(result.newlyUnlockedAchievements).toContain('noMiss200')
+  })
+
+  it('Grind不正防止統合テスト: Challengeリプレイ相当のofficial=false呼び出しを何度繰り返してもGrind実績カウントに一切反映されない（ChallengePlayScreen.tsxの呼び方の再現）', () => {
+    const stats = createStats()
+    // ChallengePlayScreen.tsxがPlayScreen/FinalTrialScreenへ渡すのと同じ official=false を、
+    // 挑戦状への何度ものリプレイを模して9回繰り返す。
+    for (let i = 0; i < 9; i++) {
+      computeFinalResult({ rawPercent: 100, finalPercent: 100, overdriveActive: false, stats: createStats() }, undefined, false)
+    }
+    expect(getOfficialPlayCount()).toBe(0)
+    expect(isAchievementUnlocked('grindPlay10')).toBe(false)
+
+    // 公式プレイ（official=true）を1回だけ行うと、Grindは「1回だけ」増える。
+    const result = computeFinalResult({ rawPercent: 100, finalPercent: 100, overdriveActive: false, stats }, undefined, true)
+    expect(getOfficialPlayCount()).toBe(1)
+    expect(result.newlyUnlockedAchievements).not.toContain('grindPlay10')
+    expect(isAchievementUnlocked('grindPlay10')).toBe(false) // 1回ではまだ10回に届かない
+  })
+
+  it('computeChallenge500Result: 第3引数（official/persist）がfalseなら自己ベスト更新・DOPA%実績・FINAL QUESTION実績を一切行わない（ChallengePlayScreen.tsxのリプレイ経路と同じ呼び方）', () => {
+    const base: FinalResultV4 = {
+      percent: 200,
+      rawPercent: 200,
+      overdriveActive: true,
+      type: { id: 'test', name: 'テスト' },
+      comment: '',
+      crimeRecords: [],
+      maxCombo: 0,
+      fastestReactionMs: null,
+      accuracy: 0,
+      isFirstPlay: false,
+      isNewBest: false,
+      bestPercent: 200,
+      playCount: 1,
+    }
+    const state: Challenge500State = { percent: 500, floor: 490, ended: true, cleared: true, reached490: true }
+    const result = computeChallenge500Result(state, base, false)
+    expect(getBestPercent()).toBe(0)
+    expect(result.newlyUnlockedAchievements).toEqual([])
+    expect(isAchievementUnlocked('dopa500')).toBe(false)
+    expect(isAchievementUnlocked('dopa490')).toBe(false)
   })
 })

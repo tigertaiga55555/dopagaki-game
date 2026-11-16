@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { getEndlessBest, hasSeenEndlessAdvancedRule, markEndlessAdvancedRuleSeen, updateEndlessBest } from './storage'
+import {
+  getEndlessBest,
+  getOfficialPlayCount,
+  hasSeenEndlessAdvancedRule,
+  incrementOfficialPlayCount,
+  markEndlessAdvancedRuleSeen,
+  updateEndlessBest,
+} from './storage'
 
 /**
  * vitestはデフォルトでNode環境で動くため、グローバルのlocalStorageが存在しない。
@@ -112,5 +119,22 @@ describe('storage: ENDLESS上級ルール説明の既読フラグ（Ver.6 Phase 
     markEndlessAdvancedRuleSeen()
     expect(getEndlessBest('advanced')).toBe(50)
     expect(hasSeenEndlessAdvancedRule()).toBe(true)
+  })
+})
+
+describe('storage: officialPlayCount (Ver.6 Phase 10実績拡張ラウンド、Grind実績専用カウンタ)', () => {
+  beforeEach(() => {
+    installFakeLocalStorage()
+  })
+
+  it('初期状態は0', () => {
+    expect(getOfficialPlayCount()).toBe(0)
+  })
+
+  it('呼ぶたびに+1され、戻り値と読み取り値が一致する', () => {
+    incrementOfficialPlayCount()
+    incrementOfficialPlayCount()
+    expect(incrementOfficialPlayCount()).toBe(3)
+    expect(getOfficialPlayCount()).toBe(3)
   })
 })
