@@ -29,6 +29,9 @@ export function usePreCountdown({ enabled, onDone }: Options): number | null {
 
   useEffect(() => {
     if (!enabled) return
+    // Ver.6 Phase 9設計メモ（今回は実装しない）: この時点（enabled=trueになった瞬間、
+    // カウントダウンが実際に進み始める瞬間）が将来のDOPA HEART消費トリガーの想定地点
+    // （詳細はengine/preCountdown.tsのコメント参照）。
     let raf: number
 
     function tick() {

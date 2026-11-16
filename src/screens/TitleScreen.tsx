@@ -1,5 +1,5 @@
 import { AdSlot } from '../components/AdSlot'
-import { AD_START_SCREEN } from '../config/ads'
+import { AD_START_SCREEN, ADS_ENABLED_V6 } from '../config/ads'
 import { HOME_MODES, type HomeModeId } from '../config/homeConfig'
 import { TITLE_TEXT } from '../config/messagesV4'
 import { getBestPercent } from '../utils/storage'
@@ -33,7 +33,13 @@ export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProf
   }
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center gap-5 px-6 py-8 text-center">
+    <div className="flex min-h-dvh flex-col items-center gap-5 px-6 py-8 text-center">
+      {/* Ver.6 Phase 9（実機QA反映）: 広告（下部100px枠）を非表示にしたことで、タイトル〜
+          PROFILE/ACHIEVEMENT/RANKINGのまとまり全体がjustify-centerのままだと画面上寄りに
+          見えるようになった。カード自体のサイズ・配色・フォントサイズは一切変えず、
+          上下の余白比率だけを変えて「まとまり全体の重心」を少し下へ動かす
+          （上スペーサーより下スペーサーを大きくすることで、まとまりは下方向にシフトする）。 */}
+      <div aria-hidden="true" className="flex-[1.6]" />
       <h1 className="text-4xl font-black tracking-tight">{TITLE_TEXT.heading}</h1>
 
       <div className="space-y-2 text-base font-bold leading-relaxed text-white/85">
@@ -83,7 +89,10 @@ export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProf
         </button>
       </div>
 
-      <AdSlot adTag={AD_START_SCREEN.tag} width={AD_START_SCREEN.width} height={AD_START_SCREEN.height} label={AD_START_SCREEN.slotName} />
+      {ADS_ENABLED_V6 && (
+        <AdSlot adTag={AD_START_SCREEN.tag} width={AD_START_SCREEN.width} height={AD_START_SCREEN.height} label={AD_START_SCREEN.slotName} />
+      )}
+      <div aria-hidden="true" className="flex-[1]" />
     </div>
   )
 }

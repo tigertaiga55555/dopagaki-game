@@ -277,7 +277,7 @@ export default function App() {
           {screen === 'result' && result && (
             <ResultScreen result={result} onRetry={() => startPlay('retry')} onChallengeSent={handleChallengeSent} />
           )}
-          {screen === 'endlessSelect' && <EndlessSelectScreen onSelect={startEndless} onQuit={quitToHome} />}
+          {screen === 'endlessSelect' && <EndlessSelectScreen onSelect={startEndless} onBack={quitToHome} />}
           {screen === 'endlessPlaying' && (
             <EndlessPlayScreen key={endlessPlayKey} difficulty={endlessDifficulty} onFinish={handleEndlessFinish} onQuit={quitToHome} />
           )}

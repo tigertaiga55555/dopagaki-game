@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
 import { AdSlot } from '../components/AdSlot'
 import { ResultCard } from '../components/ResultCard'
-import { AD_RESULT_SCREEN } from '../config/ads'
+import { AD_RESULT_SCREEN, ADS_ENABLED_V6 } from '../config/ads'
 import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
 import { getRetryLabel } from '../config/messagesV4'
 import { buildCreateChallengeInput } from '../challenge/createChallengeFromResult'
@@ -201,7 +201,9 @@ export function ResultScreen({ result, onRetry, onChallengeSent }: Props) {
         {getRetryLabel(result.percent)}
       </button>
 
-      <AdSlot adTag={AD_RESULT_SCREEN.tag} width={AD_RESULT_SCREEN.width} height={AD_RESULT_SCREEN.height} label={AD_RESULT_SCREEN.slotName} />
+      {ADS_ENABLED_V6 && (
+        <AdSlot adTag={AD_RESULT_SCREEN.tag} width={AD_RESULT_SCREEN.width} height={AD_RESULT_SCREEN.height} label={AD_RESULT_SCREEN.slotName} />
+      )}
     </div>
   )
 }
