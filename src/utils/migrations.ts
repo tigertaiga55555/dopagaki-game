@@ -9,6 +9,7 @@ import {
 } from './achievementStorage'
 import { getWorldBattleStats } from './battleStatsStorage'
 import { getBestPercent, getEndlessBest } from './storage'
+import type { AchievementId } from '../types'
 
 /**
  * Ver.6 Phase 5（Profile/Achievement/Ranking基盤）: バージョン管理されたマイグレーション。
@@ -80,31 +81,40 @@ function writeMigrationVersion(version: number): void {
 /**
  * アプリ起動時に1回呼ぶ。CURRENT_MIGRATION_VERSIONに到達済みなら即座に何もしない
  * （冪等。何度呼んでも安全）。
+ *
+ * Ver.6 Phase 10（実績拡張ラウンド、item 18）: 遡及解除で新たに解除された実績ID一覧を
+ * 戻り値として返す（各checkX関数はunlockMatching経由で「今回新たに解除したID」だけを
+ * 返すため、重複解除分は自然に混ざらない）。呼び出し元（App.tsx）はこれを他の実績解除と
+ * 同じAchievementUnlockBannerへそのまま渡すことで、1〜3件は順番表示・4件以上は
+ * 「実績をN個解除！」サマリーへ自動的にまとまる（個別の仕組みを別途作らない）。
  */
-export function runMigrationsOnce(): void {
+export function runMigrationsOnce(): AchievementId[] {
   const current = readMigrationVersion()
-  if (current >= CURRENT_MIGRATION_VERSION) return
+  if (current >= CURRENT_MIGRATION_VERSION) return []
+
+  const unlocked: AchievementId[] = []
 
   if (current < 1) {
-    checkDopaPercentAchievements(getBestPercent())
+    unlocked.push(...checkDopaPercentAchievements(getBestPercent()))
   }
 
   if (current < 2) {
-    checkDopaPercentAchievements(getBestPercent())
-    checkFinalQuestionAchievement(getBestPercent() >= CHALLENGE500_CONFIG.clearPercent)
+    unlocked.push(...checkDopaPercentAchievements(getBestPercent()))
+    unlocked.push(...checkFinalQuestionAchievement(getBestPercent() >= CHALLENGE500_CONFIG.clearPercent))
     for (const difficulty of ENDLESS_DIFFICULTIES) {
-      checkEndlessAchievements(difficulty, getEndlessBest(difficulty))
+      unlocked.push(...checkEndlessAchievements(difficulty, getEndlessBest(difficulty)))
     }
   }
 
   if (current < 3) {
     for (const difficulty of ENDLESS_DIFFICULTIES) {
-      checkEndlessAchievements(difficulty, getEndlessBest(difficulty))
+      unlocked.push(...checkEndlessAchievements(difficulty, getEndlessBest(difficulty)))
     }
     const battleStats = getWorldBattleStats()
-    checkWorldBattleWinAchievements(battleStats.wins)
-    checkWorldBattleStreakAchievements(battleStats.maxStreak)
+    unlocked.push(...checkWorldBattleWinAchievements(battleStats.wins))
+    unlocked.push(...checkWorldBattleStreakAchievements(battleStats.maxStreak))
   }
 
   writeMigrationVersion(CURRENT_MIGRATION_VERSION)
+  return unlocked
 }

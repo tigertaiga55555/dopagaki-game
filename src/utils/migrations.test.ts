@@ -139,4 +139,23 @@ describe('migrations (Ver.6 Phase 5.1: 既存記録からAchievement遡及解除
     expect(isAchievementUnlocked('challengeCreatedFirst')).toBe(false)
     expect(isAchievementUnlocked('grindPlay10')).toBe(false)
   })
+
+  it('item 18: runMigrationsOnceは新たに解除した実績IDの配列を返す（App.tsx側がAchievementUnlockBannerへそのまま渡し、1〜3件は順番表示・4件以上はサマリーへ自動的にまとまる）', () => {
+    updateBestPercent(350) // dopa50/100/120/150/200/250/300/350の8件が同時に解除される→4件以上のサマリー経路
+    const unlocked = runMigrationsOnce()
+    expect(unlocked.length).toBeGreaterThanOrEqual(4)
+    expect(unlocked).toContain('dopa50')
+    expect(unlocked).toContain('dopa350')
+  })
+
+  it('item 18: 遡及解除が1件も発生しない（新規ユーザー）場合は空配列を返す', () => {
+    expect(runMigrationsOnce()).toEqual([])
+  })
+
+  it('item 18: 既にCURRENT_MIGRATION_VERSIONへ到達済みの場合、2回目の呼び出しは何も新規解除せず空配列を返す（冪等性）', () => {
+    updateBestPercent(350)
+    const firstRun = runMigrationsOnce()
+    expect(firstRun.length).toBeGreaterThan(0)
+    expect(runMigrationsOnce()).toEqual([])
+  })
 })

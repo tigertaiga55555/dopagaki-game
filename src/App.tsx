@@ -43,7 +43,8 @@ import { getOrCreatePlayerId, getProfile } from './utils/profileStorage'
 import { sfx } from './utils/sound'
 import type { BattleMode, BattleOpponentProfile } from './battle/types'
 import type { ChallengeRecord } from './challenge/types'
-import type { EndlessDifficulty, FinalResultV4, ScreenName } from './types'
+import type { AchievementId, EndlessDifficulty, FinalResultV4, ScreenName } from './types'
+import { AchievementUnlockBanner } from './components/AchievementUnlockBanner'
 
 function toBattleProfile(profile: ReturnType<typeof getProfile>): BattleOpponentProfile {
   return { nickname: profile.nickname, avatar: profile.avatar, equippedTitleId: profile.equippedTitleId }
@@ -98,10 +99,18 @@ export default function App() {
    * Ver.6 Phase 5（Profile/Achievement/Ranking基盤）: アプリ起動時に1回だけ、匿名
    * player_idを確保し（なければ生成）、既存記録からのAchievement遡及マイグレーションを
    * 走らせる。どちらも冪等（何度呼んでも安全）で、既存のBEST等のキーには一切書き込まない。
+   *
+   * Ver.6 Phase 10（実績拡張ラウンド、item 18）: runMigrationsOnce()が新たに解除した
+   * 実績IDをmigrationUnlockedへ保持し、最初に表示される画面（title）の上に既存の
+   * AchievementUnlockBannerをそのまま重ねて表示する。質問応答中には絶対に表示されない
+   * （マイグレーションはプレイ開始前の起動時にしか走らないため、構造的にプレイ中と
+   * 重なることがない）。1〜3件は順番表示・4件以上は要約カードへ、という既存の
+   * バッチング仕様をここでも別実装せず共有する。
    */
+  const [migrationUnlocked, setMigrationUnlocked] = useState<AchievementId[]>([])
   useEffect(() => {
     getOrCreatePlayerId()
-    runMigrationsOnce()
+    setMigrationUnlocked(runMigrationsOnce())
   }, [])
 
   /**
@@ -264,14 +273,23 @@ export default function App() {
       ) : (
         <>
           {screen === 'title' && (
-            <TitleScreen
-              onStart={() => startPlay('title')}
-              onStartEndless={openEndlessSelect}
-              onStartBattle={openBattleHome}
-              onOpenProfile={openProfile}
-              onOpenAchievements={openAchievements}
-              onOpenRanking={openRanking}
-            />
+            <>
+              <TitleScreen
+                onStart={() => startPlay('title')}
+                onStartEndless={openEndlessSelect}
+                onStartBattle={openBattleHome}
+                onOpenProfile={openProfile}
+                onOpenAchievements={openAchievements}
+                onOpenRanking={openRanking}
+              />
+              {migrationUnlocked.length > 0 && (
+                <div className="pointer-events-none fixed inset-x-0 top-6 z-50 flex flex-col items-center px-6">
+                  <div className="pointer-events-auto">
+                    <AchievementUnlockBanner newlyUnlocked={migrationUnlocked} />
+                  </div>
+                </div>
+              )}
+            </>
           )}
           {screen === 'playing' && <PlayScreen key={playKey} onFinish={handleFinish} onQuit={quitToHome} />}
           {screen === 'result' && result && (
