@@ -300,9 +300,10 @@ export function useRushGame(
     showGoFlash: false,
   })
 
-  // Ver.6 Phase 9設計メモ（今回は実装しない）: このRef初期化時点（このフックがマウントされ、
-  // カウントダウンが実際に進み始める瞬間）が将来のDOPA HEART消費トリガーの想定地点
-  // （詳細はengine/preCountdown.tsのコメント参照）。
+  // 次フェーズ（DOPA HEART本実装）: このRef初期化時点（このフックがマウントされ、
+  // カウントダウンが実際に進み始める瞬間）が、実際のHeart消費トリガー地点と一致する
+  // （実装はこのhookではなく、呼び出し元のPlayScreen.tsx側のマウント時useEffectで行う
+  // ——PlayScreenとuseRushGameは同時にマウントされるため基準点は完全に一致する）。
   const preStartRef = useRef(performance.now())
   const startTimeRef = useRef<number | null>(null)
   const endedRef = useRef(false)

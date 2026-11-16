@@ -144,6 +144,56 @@ export function decideStartIfReady(state: BattleRoomState, nowMs: number, countd
   return { ...state, phase: 'in_progress', startAt: nowMs + countdownMs }
 }
 
+export interface CountdownPayload {
+  startAt: number
+  problemSet: ChallengeProblemSetItem[]
+  opponent: BattleOpponentProfile
+}
+
+/**
+ * 次フェーズ（世界対戦countdown(B) timeoutの根治）: 試合が既にin_progress（startAt確定済み）
+ * なら、そのプレイヤーへ今すぐ送るべきcountdown payloadを返す（まだなら null）。
+ *
+ * 根本原因の調査で判明した事実: 旧実装はmaybeStartCountdown()が「startAtをちょうど
+ * 今決めた瞬間」にだけ、ctx.getWebSockets()経由のソケット検索（socketFor）で両者へ
+ * 一度だけbroadcastしていた。しかし、2人目（例: Player B）はまさにこの決定を引き起こした
+ * 本人であり、その本人のWebSocketは同じリクエストハンドラ内でctx.acceptWebSocket()に
+ * よって「たった今」acceptされたばかりのソケットである。ctx.getWebSockets()がこの
+ * ソケットを検索可能な一覧へ反映するタイミングと、同一関数内でのその後すぐの検索
+ * （await解決後）の間に、何らかの遅延（内部的な登録の確定が次のmicrotask/tick跨ぎになる
+ * 等）が万一あれば、socketForはこの「自分自身の、たった今acceptしたソケット」をnullで
+ * 返し、this.send()が黒く失敗せず（エラーなし）メッセージを静かに取り落とす
+ * （private send()の`if (!ws) return`仕様）。これは常に「後から接続した側＝今まさにその
+ * リクエストを処理している本人」でだけ起こり得る非対称な取り落としであり、既に別の
+ * （完了済みの）リクエストで確立されていたA側のソケット検索は毎回確実に成功するため、
+ * 観測された「countdown(B)だけが繰り返しtimeoutする」という非対称なパターンと一致する。
+ *
+ * この関数はdecidedの判定を一切行わず（decideStartIfReady専任）、「今の状態がすでに
+ * in_progressなら、このプレイヤー向けのcountdown payloadをそのまま返す」という復元
+ * （state restoration）だけに専念する。呼び出し側（battleRoom.ts）は、
+ * (1) maybeStartCountdown()による既存のbroadcast（対戦相手など、既に確立済みの別ソケットへの
+ * 配信には今まで通り確実に機能する）はそのまま維持しつつ、
+ * (2) handleWebSocketUpgrade側で「たった今acceptしたローカルのWebSocketオブジェクト参照」へ
+ * 直接この関数の戻り値を送ることで、ctx.getWebSockets()のソケット検索を一切経由しない
+ * 確実な配信経路を追加する。
+ * これは同時に「試合開始後に切断→再接続したプレイヤーへcountdownが再配信されない」という
+ * 別の既存ギャップ（旧実装はdecideStartIfReadyが一度startAtを確定した後は
+ * `state.startAt !== before`が常にfalseになるため、再接続時に一切再送されなかった）も
+ * 同じ経路で自然に解消する——再接続時もこの関数は一貫してcountdown payloadを返すため、
+ * サーバーの状態（startAt／problem_set）を正とした復元が常に効く。
+ *
+ * 冪等性（item 6: 二重countdown・二重STARTなし）: クライアント側（BattleMatchScreen.tsx）は
+ * 受信したstartAt/problemSetをただのReact stateとして設定するだけなので、同一の値を
+ * 複数回受信しても追加の副作用は発生しない（値が変化しない限りuseEffectは再実行されない）。
+ * そのため、既存のbroadcastとこの直接送信が同じ相手へ重複して届いても安全である。
+ */
+export function buildCountdownPayloadFor(state: BattleRoomState, playerId: string): CountdownPayload | null {
+  if (state.phase !== 'in_progress' || state.startAt === null) return null
+  const opponent = getOpponentOf(state, playerId)
+  if (!opponent) return null
+  return { startAt: state.startAt, problemSet: state.problemSet, opponent: opponent.profile }
+}
+
 export type SubmitAnswerResult = { ok: true; state: BattleRoomState } | { ok: false; reason: string }
 
 /**

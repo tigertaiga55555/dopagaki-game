@@ -11,6 +11,7 @@ import { QUESTION_MODULES } from '../questions'
 import { FINAL_QUESTION_MODULES } from '../questions/final'
 import { EndlessAdvancedRuleCard } from './EndlessAdvancedRuleCard'
 import { setBgmProgress, setFinalIntensity, setFinalMode, startBgm, stopBgm } from '../utils/bgm'
+import { localHeartRepository } from '../utils/heartRepository'
 import type { ChallengeProblemSetItem } from '../challenge/types'
 import type { EndlessDifficulty } from '../types'
 
@@ -116,6 +117,20 @@ export function EndlessPlayScreen({ difficulty, onFinish, onQuit, qaMode = false
       setPhase('playing')
     },
   })
+
+  /**
+   * 次フェーズ（DOPA HEART本実装、item 9）: phaseが最初に'countdown'になった瞬間
+   * （初級/中級は画面マウント直後、上級はルール説明を閉じた直後）がHeart消費トリガー地点
+   * （engine/preCountdown.tsの基準点と同じ）。qaMode（ENDLESS Challenge挑戦時の
+   * replayQuestions付き呼び出し、またはPreview専用QA起動）では一切消費しない
+   * （item 7/13——既存のqaMode遮断機構を official同様そのまま再利用する）。
+   */
+  const heartConsumedRef = useRef(false)
+  useEffect(() => {
+    if (phase !== 'countdown' || qaMode || heartConsumedRef.current) return
+    heartConsumedRef.current = true
+    localHeartRepository.consumeHeart()
+  }, [phase, qaMode])
 
   // BGM（utils/bgm.ts）は難易度ごとに別の既存アンビエントをそのまま再利用する。
   // 初級＝通常ゲームの6段階エンジン（0〜120%全体を代表する固定stageIndex＋streakで密度アップ）、

@@ -7,8 +7,29 @@
 -- そのままコピーするだけ（データの推測変換はしない。新しいmode/result値は
 -- このmigration以降に作られる新規行だけが持つ）。
 -- 他の列・既存データ・既存のperformance_*列は一切変更しない。
-
-PRAGMA foreign_keys = OFF;
+--
+-- 次フェーズ（ENDLESS Challenge作成失敗の実機不具合調査）で判明した事実：当初の実装は
+-- 冒頭で`PRAGMA foreign_keys = OFF`を発行してから`DROP TABLE challenges`していたが、
+-- SQLiteの仕様上`PRAGMA foreign_keys`はトランザクション内では変更できない
+-- （No-opで静かに無視される）。`wrangler d1 migrations apply`は1ファイルを1トランザクションで
+-- 実行するため、このPRAGMAは実際には一切効いておらず、まだchallenge_attempts（旧テーブル）
+-- からFK参照されているchallengesを`DROP TABLE`した時点で
+-- `FOREIGN KEY constraint failed (SQLITE_CONSTRAINT_FOREIGNKEY)`となり、このmigrationは
+-- 実際のリモートD1上では一度も成功していなかった（ローカルのwrangler/D1エミュレーションは
+-- デフォルトでforeign_keys enforcementが無効なため、ローカルでは問題なく「成功」して見え、
+-- この不整合に気づけなかった）。結果としてmode='endless'のCHECK制約緩和が本番Preview
+-- D1へ一度も反映されず、ENDLESS Challengeの作成が（STREAK数に関係なく）常にD1の
+-- CHECK制約違反で失敗していた。
+--
+-- 修正方針：PRAGMAに依存せず、SQLite標準のFK整合性だけで安全な順序に組み直す。
+-- 「まだ何かから参照されているテーブルをDROPしない」という制約そのものを満たすため、
+-- 新しいchallenge_attempts_newを（旧challengesをDROPする前に）先にchallenges_newへの
+-- 参照で作成・移行してしまい、古いchallenge_attempts・古いchallengesの両方を
+-- 「どちらも既に何からも参照されなくなった後」でDROPする。SQLiteはテーブルの
+-- RENAME時、他テーブルのREFERENCES句の参照先テーブル名も自動的に追従させるため
+-- （legacy_alter_table=OFFが既定のモダンなSQLite/D1の挙動）、
+-- challenge_attempts_newのREFERENCES challenges_new (id)は、challenges_newを
+-- challengesへRENAMEした時点で自動的にREFERENCES challenges (id)へ更新される。
 
 CREATE TABLE challenges_new (
   id TEXT PRIMARY KEY,
@@ -42,15 +63,11 @@ SELECT
   performance_max_combo, performance_median_reaction_ms
 FROM challenges;
 
-DROP TABLE challenges;
-ALTER TABLE challenges_new RENAME TO challenges;
-
-CREATE INDEX IF NOT EXISTS idx_challenges_creator_player_id ON challenges (creator_player_id);
-CREATE INDEX IF NOT EXISTS idx_challenges_created_at ON challenges (created_at);
-
+-- challenge_attempts_newはまだ存在するchallenges_new（新テーブル）だけを参照する。
+-- この時点では旧challenges・旧challenge_attemptsのどちらもまだDROPしていない。
 CREATE TABLE challenge_attempts_new (
   id TEXT PRIMARY KEY,
-  challenge_id TEXT NOT NULL REFERENCES challenges (id),
+  challenge_id TEXT NOT NULL REFERENCES challenges_new (id),
   player_id TEXT NOT NULL,
   nickname TEXT NOT NULL,
   icon_kind TEXT NOT NULL CHECK (icon_kind IN ('preset', 'remoteCustom')),
@@ -78,10 +95,17 @@ SELECT
   performance_max_combo, performance_median_reaction_ms, decided_by
 FROM challenge_attempts;
 
+-- 旧challenge_attempts（旧challengesへのFKを持つ唯一のテーブル）を先にDROPする。
+-- これでもう何も旧challengesを参照していないため、安全にDROPできる。
 DROP TABLE challenge_attempts;
+DROP TABLE challenges;
+
+-- RENAME時にSQLiteがchallenge_attempts_newのREFERENCES challenges_newを
+-- 自動的にREFERENCES challengesへ書き換える。
+ALTER TABLE challenges_new RENAME TO challenges;
 ALTER TABLE challenge_attempts_new RENAME TO challenge_attempts;
 
+CREATE INDEX IF NOT EXISTS idx_challenges_creator_player_id ON challenges (creator_player_id);
+CREATE INDEX IF NOT EXISTS idx_challenges_created_at ON challenges (created_at);
 CREATE INDEX IF NOT EXISTS idx_challenge_attempts_challenge_id ON challenge_attempts (challenge_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_challenge_attempts_challenge_player ON challenge_attempts (challenge_id, player_id, created_at);
-
-PRAGMA foreign_keys = ON;

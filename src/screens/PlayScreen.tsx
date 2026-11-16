@@ -8,6 +8,7 @@ import { computeFinalResult } from '../engine/resultEngineV4'
 import { useRushGame } from '../engine/useRushGame'
 import { QUESTION_MODULES } from '../questions'
 import { FinalTrialScreen } from './FinalTrialScreen'
+import { localHeartRepository } from '../utils/heartRepository'
 import { isMuted, setMuted } from '../utils/sound'
 import type { ChallengeProblemSetItem, FinalResultV4, PlayStats } from '../types'
 
@@ -65,6 +66,23 @@ export function PlayScreen({ onFinish, onQuit, replayQuestions, onQuestionResolv
   )
   const [muted, setMutedState] = useState(isMuted())
   const shakeWrapperRef = useRef<HTMLDivElement>(null)
+
+  /**
+   * 次フェーズ（DOPA HEART本実装、item 9）: このマウント自体が「START→3・2・1→GO」の
+   * カウントダウンが実際に進み始める瞬間（useRushGame.tsのpreStartRefと同じ基準点、
+   * engine/preCountdown.tsの設計メモ参照）。official=trueの場合（本番のHome「START」
+   * 経由のみ）だけ消費する——Challenge（official=false、replayQuestions付き）・
+   * Battle（official=false）はここを経由しても一切消費しない（item 7/13）。
+   * 120%→FinalTrialScreen・200%→Challenge500Screenへの内部引き継ぎはこのPlayScreen自身を
+   * 再マウントしないため、1プレイにつき必ず1回だけ消費される（二重消費なし）。
+   */
+  const heartConsumedRef = useRef(false)
+  useEffect(() => {
+    if (!official || heartConsumedRef.current) return
+    heartConsumedRef.current = true
+    localHeartRepository.consumeHeart()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const visual = getVisualLevelDef(snapshot.visualLevel)
   const CurrentQuestion = snapshot.currentSpec ? QUESTION_MODULES[snapshot.currentSpec.type].Component : null

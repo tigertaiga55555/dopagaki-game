@@ -8,14 +8,14 @@
  * ユーザー指示に対応するための抽出。
  */
 /**
- * Ver.6 Phase 9（実機QA反映・設計メモ、今回は実装しない）: 将来のDOPA HEART消費タイミングの
- * 設計前提。「STARTボタンを押した瞬間」ではなく、このカウントダウンが実際に進み始める瞬間
- * （elapsedMs=0、すなわちこのファイルのpreCountdownValueAtが初めて呼ばれる基準点）を
- * HEART消費のトリガーにする想定。カウントダウン開始後は、途中でやめる／離脱する／ブラウザを
- * 閉じてもHEARTの返却はしない。カウントダウンが始まる前（START押下直後の準備段階）までは、
- * まだ外に戻れる余地を残すUIにする。今回のラウンドではHEART自体の実処理コードは一切追加しない
- * （useRushGame.ts・usePreCountdown.tsの各呼び出し箇所に、同じ前提を指す短いコメントのみ
- * 置いている）。
+ * 次フェーズ（DOPA HEART本実装）: DOPA HEART消費タイミングの実装基準点。
+ * 「STARTボタンを押した瞬間」ではなく、このカウントダウンが実際に進み始める瞬間
+ * （elapsedMs=0、すなわちこのファイルのpreCountdownValueAtが初めて呼ばれる基準点）で
+ * HEARTを消費する（実際の消費コードはPlayScreen.tsx/EndlessPlayScreen.tsx側、
+ * utils/heartRepository.ts参照）。カウントダウン開始後は、途中でやめる／離脱する／
+ * ブラウザを閉じてもHEARTの返却はしない。カウントダウンが始まる前（ENDLESS上級の
+ * ルール説明画面等、まだこのカウントダウンが始まっていない段階）までは、誤タップしても
+ * 戻れる余地が構造的に残る（usePreCountdownのenabledがまだfalseのため）。
  */
 export const PRE_COUNTDOWN_MS = 1800
 

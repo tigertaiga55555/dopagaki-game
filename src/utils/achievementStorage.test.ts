@@ -153,6 +153,27 @@ describe('achievementStorage (Ver.6 Phase 5.1: DOPA%実績12個＋Endless実績1
     expect(checkEndlessAchievements('advanced', 30)).toEqual(['endlessAdvanced10', 'endlessAdvanced20', 'endlessAdvanced30'])
   })
 
+  it('次フェーズ（実機不具合修正ラウンド）再確認: 初級は9 STREAKでは解除されず、10 STREAKで解除される', () => {
+    expect(checkEndlessAchievements('beginner', 9)).toEqual([])
+    expect(isAchievementUnlocked('endlessBeginner10')).toBe(false)
+    expect(checkEndlessAchievements('beginner', 10)).toEqual(['endlessBeginner10'])
+    expect(isAchievementUnlocked('endlessBeginner10')).toBe(true)
+  })
+
+  it('次フェーズ（実機不具合修正ラウンド）再確認: 中級は4 STREAKでは解除されず、5 STREAKで解除される', () => {
+    expect(checkEndlessAchievements('intermediate', 4)).toEqual([])
+    expect(isAchievementUnlocked('endlessIntermediate5')).toBe(false)
+    expect(checkEndlessAchievements('intermediate', 5)).toEqual(['endlessIntermediate5'])
+    expect(isAchievementUnlocked('endlessIntermediate5')).toBe(true)
+  })
+
+  it('次フェーズ（実機不具合修正ラウンド）再確認: 上級は2 STREAKでは解除されず、3 STREAKで解除される', () => {
+    expect(checkEndlessAchievements('advanced', 2)).toEqual([])
+    expect(isAchievementUnlocked('endlessAdvanced3')).toBe(false)
+    expect(checkEndlessAchievements('advanced', 3)).toEqual(['endlessAdvanced3'])
+    expect(isAchievementUnlocked('endlessAdvanced3')).toBe(true)
+  })
+
   it('Endless実績は難易度ごとに独立している（他難易度のstreakに影響しない）', () => {
     checkEndlessAchievements('beginner', 100)
     expect(isAchievementUnlocked('endlessIntermediate5')).toBe(false)

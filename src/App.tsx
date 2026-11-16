@@ -41,10 +41,12 @@ import { unlockAudio } from './utils/audioContext'
 import { runMigrationsOnce } from './utils/migrations'
 import { getOrCreatePlayerId, getProfile } from './utils/profileStorage'
 import { sfx } from './utils/sound'
+import { localHeartRepository } from './utils/heartRepository'
 import type { BattleMode, BattleOpponentProfile } from './battle/types'
 import type { ChallengeRecord } from './challenge/types'
 import type { AchievementId, EndlessDifficulty, FinalResultV4, ScreenName } from './types'
 import { AchievementUnlockBanner } from './components/AchievementUnlockBanner'
+import { HeartEmptyModal } from './components/HeartEmptyModal'
 
 function toBattleProfile(profile: ReturnType<typeof getProfile>): BattleOpponentProfile {
   return { nickname: profile.nickname, avatar: profile.avatar, equippedTitleId: profile.equippedTitleId }
@@ -119,7 +121,21 @@ export default function App() {
    * 区別するためだけの引数で、ゲームの開始処理自体（unlockAudio/sfx/画面遷移）は
    * sourceに関わらず完全に同一。
    */
+  /**
+   * 次フェーズ（DOPA HEART本実装、item 12）: DOPA RUSH/ENDLESSの開始直前にだけ所持数を
+   * 確認する。0ならゲームを一切開始せず（音声unlock・GA4・画面遷移のいずれも発生させない）
+   * HeartEmptyModalを表示するだけに留める。実際の消費（1個減らす）はここでは行わない
+   * ——消費はPlayScreen/EndlessPlayScreen側で、カウントダウンが実際に進み始める瞬間に
+   * だけ行う（item 9）。Challenge/Battle系のstartはこのチェックを一切経由しない
+   * （item 13）。
+   */
+  const [heartEmptyEtaMs, setHeartEmptyEtaMs] = useState<number | null>(null)
+
   const startPlay = useCallback((source: 'title' | 'retry') => {
+    if (localHeartRepository.getHeartCount() <= 0) {
+      setHeartEmptyEtaMs(localHeartRepository.getNextRecoveryEtaMs() ?? 0)
+      return
+    }
     // iPhone SafariはAudioContextの生成/resumeをユーザー操作の同期コールバック内でしか許可しないため、
     // START/リトライの両方で使われるこのハンドラの中で必ず呼ぶ。
     unlockAudio()
@@ -159,6 +175,10 @@ export default function App() {
   }, [])
 
   const startEndless = useCallback((difficulty: EndlessDifficulty) => {
+    if (localHeartRepository.getHeartCount() <= 0) {
+      setHeartEmptyEtaMs(localHeartRepository.getNextRecoveryEtaMs() ?? 0)
+      return
+    }
     setEndlessDifficulty(difficulty)
     setEndlessPlayKey((k) => k + 1)
     setScreen('endlessPlaying')
@@ -388,6 +408,7 @@ export default function App() {
           )}
         </>
       )}
+      {heartEmptyEtaMs !== null && <HeartEmptyModal initialEtaMs={heartEmptyEtaMs} onClose={() => setHeartEmptyEtaMs(null)} />}
     </div>
   )
 }

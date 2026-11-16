@@ -2,6 +2,7 @@ import {
   addPlayer,
   applyDisconnect,
   applyForfeit,
+  buildCountdownPayloadFor,
   createRoom,
   decideStartIfReady,
   finalizeResult,
@@ -160,6 +161,21 @@ export class BattleRoom implements DurableObject {
     }
     await this.maybeStartCountdown()
 
+    // 次フェーズ（世界対戦countdown(B) timeoutの根治、battleRoomEngine.ts
+    // buildCountdownPayloadFor参照）: 上のmaybeStartCountdown()内のbroadcastは
+    // ctx.getWebSockets()経由のソケット検索（socketFor）に依存しており、「たった今
+    // acceptしたばかりの自分自身のソケット」の検索だけが稀に取り落とされる可能性がある。
+    // ここでは検索を一切経由せず、このリクエストの中で直接accept済みのローカル変数
+    // `server`へ、最新状態から見て今まさに送るべきcountdown payloadがあれば直接送る
+    // （既にbroadcast側で届いていた場合も、クライアント側は同一startAtの再設定を
+    // 安全に無視するため、二重送信は害にならない）。試合開始後に切断→再接続した
+    // プレイヤーに対しても、この同じ経路でstartAt/problemSetが正しく復元される。
+    const latestState = await this.loadState()
+    if (latestState) {
+      const payload = buildCountdownPayloadFor(latestState, playerId)
+      if (payload) this.send(server, { v: 1, type: 'countdown', ...payload })
+    }
+
     return new Response(null, { status: 101, webSocket: client })
   }
 
@@ -205,6 +221,13 @@ export class BattleRoom implements DurableObject {
       state = markReady(state, playerId)
       await this.saveState(state)
       await this.maybeStartCountdown()
+      // handleWebSocketUpgradeと同じ理由（battleRoomEngine.ts buildCountdownPayloadFor参照）で、
+      // readyを送った本人（フレンド対戦のゲスト等）へも、既に確立済みの`ws`へ直接確実に送る。
+      const latestState = await this.loadState()
+      if (latestState) {
+        const payload = buildCountdownPayloadFor(latestState, playerId)
+        if (payload) this.send(ws, { v: 1, type: 'countdown', ...payload })
+      }
       return
     }
 

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getAchievementCount, isAchievementUnlocked } from './achievementStorage'
 import { recordWorldBattleOutcome } from './battleStatsStorage'
+import { localHeartRepository } from './heartRepository'
 import { runMigrationsOnce } from './migrations'
 import { updateBestPercent, updateEndlessBest } from './storage'
 
@@ -157,5 +158,17 @@ describe('migrations (Ver.6 Phase 5.1: 既存記録からAchievement遡及解除
     const firstRun = runMigrationsOnce()
     expect(firstRun.length).toBeGreaterThan(0)
     expect(runMigrationsOnce()).toEqual([])
+  })
+
+  it('v4（次フェーズ: DOPA HEART本実装、item 18）: Heartデータを持たない既存/新規ユーザーは、移行後に5 Heartから開始する', () => {
+    runMigrationsOnce()
+    expect(localHeartRepository.getHeartCount()).toBe(5)
+  })
+
+  it('v4: 既にHeartを消費済みのユーザーの状態は、マイグレーションで一切書き換えられない', () => {
+    localHeartRepository.consumeHeart()
+    expect(localHeartRepository.getHeartCount()).toBe(4)
+    runMigrationsOnce()
+    expect(localHeartRepository.getHeartCount()).toBe(4)
   })
 })

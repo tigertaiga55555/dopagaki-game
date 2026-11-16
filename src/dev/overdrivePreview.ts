@@ -63,3 +63,13 @@ export function isChallenge500QaPreviewRequested(): boolean {
 export function isEndlessPreviewRequested(): boolean {
   return previewParam() === 'endless'
 }
+
+/**
+ * 次フェーズ（DOPA HEART本実装）QA補助: ?preview=heart — ホーム画面（本番の実画面）に
+ * Heart所持数を0/1/5へ即時セットできる小さなQAパネルを重ねて表示する（item 15）。
+ * パネル自体は__DOPAGAKI_PREVIEW_ENABLED__がfalseなProductionビルドでは常にfalseを
+ * 返すこの関数の戻り値で描画を止めているため、Productionに露出することはない。
+ */
+export function isHeartQaPanelRequested(): boolean {
+  return previewParam() === 'heart'
+}

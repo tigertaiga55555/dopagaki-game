@@ -8,6 +8,7 @@ import {
   checkWorldBattleWinAchievements,
 } from './achievementStorage'
 import { getWorldBattleStats } from './battleStatsStorage'
+import { localHeartRepository } from './heartRepository'
 import { getBestPercent, getEndlessBest } from './storage'
 import type { AchievementId } from '../types'
 
@@ -56,9 +57,16 @@ import type { AchievementId } from '../types'
  *   - Grind（公式プレイ回数はこのラウンドで新設したofficialPlayCountV1が0から
  *     始まる。既存のplayCountV4は「Challenge/Battleリプレイも誤って加算していた」
  *     汚染済みの値のため、これをそのままコピーして使わない）。
+ *
+ * v4（次フェーズ: DOPA HEART本実装、item 18）: 既存ユーザー・新規ユーザーの区別なく、
+ * Heartデータ（utils/heartRepository.ts）をまだ一度も読んでいなければ、この時点で
+ * 5 Heartから開始する状態を作る（heartRepository.ts自身も未保存時に同じ初期化を行う
+ * 遅延初期化を持つため、実質的にはここでgetHeartCount()を1回呼ぶだけで十分——
+ * 既存のProfile/Achievement/record等は一切読み書きしないため、それらを壊す余地が
+ * ない）。
  */
 const MIGRATION_VERSION_KEY = 'dopagaki:migrationVersionV1'
-const CURRENT_MIGRATION_VERSION = 3
+const CURRENT_MIGRATION_VERSION = 4
 
 function readMigrationVersion(): number {
   try {
@@ -113,6 +121,10 @@ export function runMigrationsOnce(): AchievementId[] {
     const battleStats = getWorldBattleStats()
     unlocked.push(...checkWorldBattleWinAchievements(battleStats.wins))
     unlocked.push(...checkWorldBattleStreakAchievements(battleStats.maxStreak))
+  }
+
+  if (current < 4) {
+    localHeartRepository.getHeartCount()
   }
 
   writeMigrationVersion(CURRENT_MIGRATION_VERSION)

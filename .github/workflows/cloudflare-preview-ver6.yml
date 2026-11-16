@@ -350,6 +350,62 @@ jobs:
             echo "::warning::POST /api/challenges/:id/attempts がHTTP $ATTEMPT_STATUS を返しました。create/getは確認済みのため続行しますが、確認してください。body: $ATTEMPT_BODY"
           fi
 
+      - name: Verify ENDLESS Challenge creation on the real Preview (0 STREAK / 6 STREAK)
+        if: steps.d1_setup.outputs.d1_available == 'true' && steps.d1_migrate.outcome == 'success'
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
+        run: |
+          # 次フェーズ: 実機で「ENDLESS初級6 STREAKで挑戦状を送る→作成失敗」が報告された。
+          # 上の「Verify Challenge API」ステップはmode='challenge500'しか検証しておらず、
+          # mode='endless'（performance=null・creatorScore=STREAK数・conditions.endlessDifficulty必須）
+          # を実際のPreview D1に対して一度も検証していなかったため、migrations/0005が
+          # 実リモートD1で一度も成功していなかった不具合（FOREIGN KEY constraint failed）が
+          # 検知できずにいた。ここで0 STREAKと6 STREAKの両方を直接作成し、二度と同種の
+          # 見落としが起きないようにする。
+          if [ -z "$PREVIEW_URL" ]; then
+            echo "::error::Preview URLを取得できなかったため、ENDLESS Challenge作成の確認をスキップできません。"
+            exit 1
+          fi
+          echo "Verifying ENDLESS Challenge creation against: $PREVIEW_URL"
+
+          {
+            echo "## ENDLESS Challenge作成確認（実際のCloudflare Preview URLに対して実行）"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for STREAK in 0 6; do
+            ENDLESS_PAYLOAD='{"creatorPlayerId":"ci-verify-endless-creator","creatorNickname":"CI Verify","creatorIcon":{"kind":"preset","iconId":"bolt"},"creatorEquippedTitle":null,"mode":"endless","problemSet":{"version":1,"items":[{"type":"numberPick","data":{"answer":3}}]},"conditions":{"mode":"endless","endlessDifficulty":"beginner"},"creatorScore":STREAK_PLACEHOLDER,"performance":null}'
+            ENDLESS_PAYLOAD=${ENDLESS_PAYLOAD/STREAK_PLACEHOLDER/$STREAK}
+            ENDLESS_RESP=$(curl -sS -w '\n%{http_code}' -X POST "${PREVIEW_URL}/api/challenges" \
+              -H "Content-Type: application/json" \
+              --data "$ENDLESS_PAYLOAD")
+            ENDLESS_STATUS=$(echo "$ENDLESS_RESP" | tail -1)
+            ENDLESS_BODY=$(echo "$ENDLESS_RESP" | sed '$d')
+            echo "POST /api/challenges (mode=endless, creatorScore=${STREAK}) -> HTTP $ENDLESS_STATUS"
+            echo "$ENDLESS_BODY"
+
+            {
+              echo "- STREAK=${STREAK}: POST /api/challenges -> HTTP \`$ENDLESS_STATUS\`"
+              echo '```json'
+              echo "$ENDLESS_BODY"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            if [ "$ENDLESS_STATUS" != "201" ]; then
+              echo "::error::ENDLESS Challenge作成（STREAK=${STREAK}）がHTTP $ENDLESS_STATUS を返しました（期待値: 201）。body: $ENDLESS_BODY"
+              exit 1
+            fi
+
+            ENDLESS_OK=$(echo "$ENDLESS_BODY" | jq -r '.ok // false')
+            ENDLESS_ID=$(echo "$ENDLESS_BODY" | jq -r '.value.id // empty')
+            if [ "$ENDLESS_OK" != "true" ] || [ -z "$ENDLESS_ID" ]; then
+              echo "::error::ENDLESS Challenge作成（STREAK=${STREAK}）のレスポンスにidが含まれていません: $ENDLESS_BODY"
+              exit 1
+            fi
+            echo "Created ENDLESS Challenge (STREAK=${STREAK}): $ENDLESS_ID"
+          done
+          echo "✅ ENDLESS Challengeの作成が0 STREAK・6 STREAKの両方で実Preview上で成功することを確認しました。"
+
       - name: Verify Battle Durable Object bindings on the real Preview (rooms + WebSocket)
         env:
           PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
@@ -481,7 +537,7 @@ jobs:
           fi
           echo "✅ Matchmaker Durable Object + WebSocket Hibernation APIの実Preview上での動作を確認しました。"
 
-      - name: Verify 2-client world battle round trip (identical ProblemSet, DOPA% sync, match resolution) on the real Preview
+      - name: Verify 2-client world battle round trip on the real Preview (10 consecutive runs, countdown(B) race regression)
         env:
           PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
         run: |
@@ -493,6 +549,16 @@ jobs:
           # Durable Objectに接続し、マッチング→同一ProblemSet配布→同一startAt→
           # 相手DOPA%リアルタイム同期（opponent_progress）→両者finished→battle_finish確定
           # までを本物のCloudflare基盤上で一本通しで検証する。
+          #
+          # 次フェーズ（countdown(B) timeoutの根治）: 過去複数ラウンドでPlayer B側に限って
+          # 再発していたため、単なるCI flakeとして扱わず、battleRoomEngine.ts
+          # buildCountdownPayloadForによるstate restoration方式へ修正した
+          # （handleWebSocketUpgrade/webSocketMessageのready分岐で、ctx.getWebSockets()
+          # 経由のソケット検索に依存せず、直接保持しているWebSocketオブジェクト参照へ
+          # 確実に再送する）。この修正の安定性を1回の成功だけで判断しないため、本物の
+          # Cloudflare Preview上で同じ2クライアントE2Eを10回連続実行し、countdown(B)
+          # timeout・A/B startAt不一致・二重countdown（同一ソケットが異なるstartAtの
+          # countdownを複数回受信）・二重battle_finishのいずれも発生しないことを確認する。
           npm install --no-save ws@8 >/dev/null 2>&1
           WS_URL=$(echo "$PREVIEW_URL" | sed -E 's#^https://#wss://#')
 
@@ -506,10 +572,20 @@ jobs:
           cat > battle-preview-e2e.cjs <<'NODESCRIPT'
           const WebSocket = require('ws')
           const base = process.argv[2]
+          const RUNS = 10
 
           function connect(path, qs) {
             return new Promise((resolve, reject) => {
               const ws = new WebSocket(`${base}${path}?${qs}`)
+              ws.countdowns = []
+              ws.on('message', (raw) => {
+                try {
+                  const msg = JSON.parse(raw.toString())
+                  if (msg.type === 'countdown') ws.countdowns.push(msg)
+                } catch {
+                  // ignore
+                }
+              })
               ws.once('open', () => resolve(ws))
               ws.once('error', reject)
             })
@@ -530,79 +606,96 @@ jobs:
             })
           }
 
-          async function main() {
+          function sleep(ms) {
+            return new Promise((resolve) => setTimeout(resolve, ms))
+          }
+
+          async function runOnce(run) {
             const profileA = encodeURIComponent(
               JSON.stringify({ nickname: 'PlayerA', avatar: { kind: 'preset', iconId: 'bolt' }, equippedTitleId: null }),
             )
             const profileB = encodeURIComponent(
               JSON.stringify({ nickname: 'PlayerB', avatar: { kind: 'preset', iconId: 'flame' }, equippedTitleId: null }),
             )
-            const idA = 'ci-e2e-a-' + Math.random().toString(36).slice(2)
-            const idB = 'ci-e2e-b-' + Math.random().toString(36).slice(2)
+            const idA = `ci-e2e-a-${run}-` + Math.random().toString(36).slice(2)
+            const idB = `ci-e2e-b-${run}-` + Math.random().toString(36).slice(2)
 
-            console.log('Connecting Player A and Player B to the Matchmaker Durable Object...')
             const [queueA, queueB] = await Promise.all([
               connect('/api/battles/queue/ws', `playerId=${idA}&profile=${profileA}`),
               connect('/api/battles/queue/ws', `playerId=${idB}&profile=${profileB}`),
             ])
-            const matchFoundA = waitForMessage(queueA, (m) => m.type === 'match_found', 15000, 'match_found(A)')
-            const matchFoundB = waitForMessage(queueB, (m) => m.type === 'match_found', 15000, 'match_found(B)')
+            const matchFoundA = waitForMessage(queueA, (m) => m.type === 'match_found', 15000, `match_found(A) run#${run}`)
+            const matchFoundB = waitForMessage(queueB, (m) => m.type === 'match_found', 15000, `match_found(B) run#${run}`)
             queueA.send(JSON.stringify({ v: 1, type: 'join_world_queue' }))
             queueB.send(JSON.stringify({ v: 1, type: 'join_world_queue' }))
             const [foundA, foundB] = await Promise.all([matchFoundA, matchFoundB])
-            if (foundA.matchId !== foundB.matchId) throw new Error(`matchId mismatch: A=${foundA.matchId} B=${foundB.matchId}`)
-            console.log('Both players matched on the real Preview. matchId =', foundA.matchId)
+            if (foundA.matchId !== foundB.matchId) throw new Error(`run#${run}: matchId mismatch: A=${foundA.matchId} B=${foundB.matchId}`)
             queueA.close()
             queueB.close()
 
-            console.log('Connecting both players to the BattleRoom Durable Object for this match...')
             const [roomA, roomB] = await Promise.all([
               connect(`/api/battles/room/${foundA.matchId}/ws`, `playerId=${idA}&profile=${profileA}`),
               connect(`/api/battles/room/${foundA.matchId}/ws`, `playerId=${idB}&profile=${profileB}`),
             ])
             const [countdownA, countdownB] = await Promise.all([
-              waitForMessage(roomA, (m) => m.type === 'countdown', 10000, 'countdown(A)'),
-              waitForMessage(roomB, (m) => m.type === 'countdown', 10000, 'countdown(B)'),
+              waitForMessage(roomA, (m) => m.type === 'countdown', 10000, `countdown(A) run#${run}`),
+              waitForMessage(roomB, (m) => m.type === 'countdown', 10000, `countdown(B) run#${run}`),
             ])
-            if (countdownA.startAt !== countdownB.startAt) throw new Error('server-anchored startAt differs between A and B')
-            if (JSON.stringify(countdownA.problemSet) !== JSON.stringify(countdownB.problemSet)) {
-              throw new Error('problemSet distributed to A and B is not identical')
+            if (countdownA.startAt !== countdownB.startAt) {
+              throw new Error(`run#${run}: server-anchored startAt differs between A and B`)
             }
-            console.log(
-              `CONFIRMED: both players received the identical ProblemSet (${countdownA.problemSet.length} items)` +
-                ` and the same server-anchored startAt (${countdownA.startAt}) from the real BattleRoom Durable Object.`,
-            )
+            if (JSON.stringify(countdownA.problemSet) !== JSON.stringify(countdownB.problemSet)) {
+              throw new Error(`run#${run}: problemSet distributed to A and B is not identical`)
+            }
 
             const progressSeenByB = waitForMessage(
               roomB,
               (m) => m.type === 'opponent_progress' && m.percent === 42,
               10000,
-              'opponent_progress(B sees A at 42%)',
+              `opponent_progress(B sees A at 42%) run#${run}`,
             )
             roomA.send(JSON.stringify({ v: 1, type: 'progress', percent: 42 }))
             await progressSeenByB
-            console.log('CONFIRMED: live opponent DOPA% sync works on the real Preview (B received A=42% via opponent_progress).')
 
             const perf = { finalDopaPercent: 80, baseDopaPercent: 80, accuracy: 1, maxCombo: 5, medianCorrectReactionMs: 400 }
-            const finishA = waitForMessage(roomA, (m) => m.type === 'battle_finish', 10000, 'battle_finish(A)')
-            const finishB = waitForMessage(roomB, (m) => m.type === 'battle_finish', 10000, 'battle_finish(B)')
+            const finishA = waitForMessage(roomA, (m) => m.type === 'battle_finish', 10000, `battle_finish(A) run#${run}`)
+            const finishB = waitForMessage(roomB, (m) => m.type === 'battle_finish', 10000, `battle_finish(B) run#${run}`)
             roomA.send(JSON.stringify({ v: 1, type: 'finished', performance: perf }))
             roomB.send(JSON.stringify({ v: 1, type: 'finished', performance: perf }))
             const [resultA, resultB] = await Promise.all([finishA, finishB])
 
             if (resultA.result.winner !== 'draw' || resultB.result.winner !== 'draw') {
-              throw new Error(`expected a complete-tie DRAW (both reported identical performance), got A=${resultA.result.winner} B=${resultB.result.winner}`)
+              throw new Error(`run#${run}: expected a complete-tie DRAW, got A=${resultA.result.winner} B=${resultB.result.winner}`)
             }
             if (resultA.viewerIsPlayerA === resultB.viewerIsPlayerA) {
-              throw new Error('viewerIsPlayerA should differ between A and B (each client gets its own perspective flag)')
+              throw new Error(`run#${run}: viewerIsPlayerA should differ between A and B`)
             }
-            console.log(
-              'CONFIRMED: full 2-client world battle round trip on the real Cloudflare Preview resolved to DRAW for both viewers' +
-                ' (identical performance -> all 5 metrics tie), with correct per-viewer viewerIsPlayerA flags.',
-            )
+
+            // item 6: 二重countdown検知のため、battle_finish後にもう少し待ってから、
+            // 各ソケットが受信したcountdownメッセージ全件を確認する（state restoration
+            // 方式により2回届くことはあるが、startAtが揺れていればそれは不具合）。
+            await sleep(300)
+            for (const [label, ws] of [['A', roomA], ['B', roomB]]) {
+              const startAts = new Set(ws.countdowns.map((m) => m.startAt))
+              if (startAts.size > 1) {
+                throw new Error(`run#${run}: player ${label} received conflicting countdown startAt values: ${[...startAts].join(', ')}`)
+              }
+            }
 
             roomA.close()
             roomB.close()
+          }
+
+          async function main() {
+            for (let run = 1; run <= RUNS; run++) {
+              console.log(`--- world battle E2E run #${run}/${RUNS} ---`)
+              await runOnce(run)
+              console.log(`run #${run}/${RUNS}: OK`)
+            }
+            console.log(
+              `CONFIRMED: ${RUNS}/${RUNS} consecutive 2-client world battle round trips on the real Cloudflare Preview succeeded` +
+                ' with no countdown(B) timeout, no startAt mismatch, and no conflicting duplicate countdown.',
+            )
           }
 
           main()
@@ -622,14 +715,14 @@ jobs:
           {
             echo ""
             if [ "$E2E_EXIT" -eq 0 ]; then
-              echo "- 実Preview 2クライアント世界対戦E2E: ✅ マッチング→同一ProblemSet→同一startAt→DOPA%同期→battle_finish確定を確認"
+              echo "- 実Preview 2クライアント世界対戦E2E（10回連続）: ✅ 10/10回ともマッチング→同一ProblemSet→同一startAt→DOPA%同期→battle_finish確定、countdown(B) timeoutなし・二重countdownなしを確認"
             else
-              echo "- 実Preview 2クライアント世界対戦E2E: ❌ 失敗（exit $E2E_EXIT）"
+              echo "- 実Preview 2クライアント世界対戦E2E（10回連続）: ❌ 失敗（exit $E2E_EXIT、途中のrun番号は上のログ参照）"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$E2E_EXIT" -ne 0 ]; then
-            echo "::error::実Preview上での2クライアント世界対戦E2Eに失敗しました（exit $E2E_EXIT）。"
+            echo "::error::実Preview上での2クライアント世界対戦E2E（10回連続）に失敗しました（exit $E2E_EXIT）。"
             exit 1
           fi
 

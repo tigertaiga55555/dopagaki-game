@@ -505,6 +505,29 @@ describe('worker fetch handler: ENDLESS Challenge (Ver.6 Phase 8)', () => {
     expect(challenge.conditions).toEqual({ mode: 'endless', endlessDifficulty: 'advanced' })
   })
 
+  /**
+   * 次フェーズ（実機不具合修正）: 実機で「初級6 STREAKで挑戦状の作成に失敗」が報告された。
+   * 根本原因はこのWorkerハンドラ/validation.ts側の論理ではなく、migrations/0005が
+   * 実リモートD1上で一度も成功していなかったこと（FOREIGN KEY constraint failed、
+   * PRAGMA foreign_keys=OFFがトランザクション内では無効というSQLite仕様による）。
+   * このfakeD1（testFakeD1.ts）は手書きのJS実装でCHECK/FK制約を一切検証しないため、
+   * この種のmigration実行順序バグはvitestのユニットテストでは原理的に検知できない
+   * ——.github/workflows/cloudflare-preview-ver6.ymlに追加した
+   * 「Verify ENDLESS Challenge creation on the real Preview」ステップが、実リモートD1に
+   * 対して0/6 STREAKの両方を実際に作成し、二度と見落とさないようにする（唯一の
+   * 権威的な検証はそちら）。ここでは純粋に「6のような非ゼロSTREAKでもWorkerの
+   * アプリケーションロジック自体は正しく201を返す」ことの回帰防止として残す。
+   */
+  it('POST /api/challenges: 6のような非ゼロSTREAKでも201でmode=endless・creatorScore=6が保存される', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+
+    const challenge = await createEndlessChallenge(env, { creatorScore: 6 })
+    expect(challenge.mode).toBe('endless')
+    expect(challenge.performance).toBeNull()
+    expect(challenge.creatorScore).toBe(6)
+  })
+
   it('POST /api/challenges: Ver.6 Phase 10: 初級・中級とも0 STREAKで作成できる（最低条件は全難易度で撤廃済み）', async () => {
     const db = createFakeD1Database()
     const env = { CHALLENGE_DB: db as never }

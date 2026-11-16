@@ -4,6 +4,7 @@ import {
   applyDisconnect,
   applyForfeit,
   applyReconnect,
+  buildCountdownPayloadFor,
   createRoom,
   decideStartIfReady,
   finalizeResult,
@@ -114,6 +115,60 @@ describe('battleRoomEngine: room lifecycle (Ver.6 Phase 6)', () => {
     state = decideStartIfReady(state, 1000, 3000)
     expect(state.startAt).toBeNull()
   })
+})
+
+describe('buildCountdownPayloadFor: 次フェーズ（世界対戦countdown(B) timeoutの根治、state restoration方式）', () => {
+  it('まだwaiting（startAt未確定）ならnullを返す（まだ送るべきものがない）', () => {
+    let state = createRoom('m1', 'world', null, sampleProblemSet())
+    state = (addPlayer(state, 'a', PROFILE_A, true) as { ok: true; state: BattleRoomState }).state
+    expect(buildCountdownPayloadFor(state, 'a')).toBeNull()
+  })
+
+  it('in_progress確定後は、両プレイヤーそれぞれに正しいopponent/startAt/problemSetのpayloadを返す', () => {
+    let state = createRoom('m1', 'world', null, sampleProblemSet())
+    state = (addPlayer(state, 'a', PROFILE_A, true) as { ok: true; state: BattleRoomState }).state
+    state = (addPlayer(state, 'b', PROFILE_B, true) as { ok: true; state: BattleRoomState }).state
+    state = decideStartIfReady(state, 1000, 3000)
+
+    const forA = buildCountdownPayloadFor(state, 'a')
+    expect(forA).toEqual({ startAt: state.startAt, problemSet: state.problemSet, opponent: PROFILE_B })
+
+    const forB = buildCountdownPayloadFor(state, 'b')
+    expect(forB).toEqual({ startAt: state.startAt, problemSet: state.problemSet, opponent: PROFILE_A })
+  })
+
+  it('同一stateに対して何度呼んでも同じpayloadを返す（冪等・再送して安全）', () => {
+    let state = createRoom('m1', 'world', null, sampleProblemSet())
+    state = (addPlayer(state, 'a', PROFILE_A, true) as { ok: true; state: BattleRoomState }).state
+    state = (addPlayer(state, 'b', PROFILE_B, true) as { ok: true; state: BattleRoomState }).state
+    state = decideStartIfReady(state, 1000, 3000)
+
+    const first = buildCountdownPayloadFor(state, 'b')
+    const second = buildCountdownPayloadFor(state, 'b')
+    expect(first).toEqual(second)
+  })
+
+  it('試合開始後に切断→再接続したプレイヤーに対しても（startAt変化なし）正しいpayloadを返す——旧実装はここで一切再送しなかったギャップの再発防止', () => {
+    let state = createRoom('m1', 'world', null, sampleProblemSet())
+    state = (addPlayer(state, 'a', PROFILE_A, true) as { ok: true; state: BattleRoomState }).state
+    state = (addPlayer(state, 'b', PROFILE_B, true) as { ok: true; state: BattleRoomState }).state
+    state = decideStartIfReady(state, 1000, 3000)
+    const startAtAfterStart = state.startAt
+
+    // 切断→再接続（applyDisconnect/applyReconnectはstartAtを変更しない）。
+    state = applyDisconnect(state, 'b', 2000)
+    state = applyReconnect(state, 'b')
+
+    const payload = buildCountdownPayloadFor(state, 'b')
+    expect(payload?.startAt).toBe(startAtAfterStart)
+    expect(payload?.opponent).toEqual(PROFILE_A)
+  })
+
+  it('finished/aborted等、in_progressでなくなった後はnullを返す', () => {
+    const state = { ...startedRoom(), phase: 'finished' as const }
+    expect(buildCountdownPayloadFor(state, 'a')).toBeNull()
+  })
+
 })
 
 function startedRoom(): BattleRoomState {
