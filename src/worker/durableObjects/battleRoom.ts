@@ -28,6 +28,8 @@ import type { ChallengeProblemSetItem } from '../../challenge/types'
 const ROOM_STATE_KEY = 'roomState'
 const COUNTDOWN_MS = 3000
 const DISCONNECT_GRACE_MS = 5000
+/** countdown決定直後の初回送信から、安全網としての再送までの遅延（COUNTDOWN_MSより十分短い）。 */
+const COUNTDOWN_RESEND_SAFETY_NET_MS = 500
 
 interface SocketAttachment {
   playerId: string
@@ -197,8 +199,30 @@ export class BattleRoom implements DurableObject {
           opponent: opponent.profile,
         })
       }
+      // 次フェーズ（世界対戦countdown timeoutの根治、追加の安全網）: handleWebSocketUpgrade
+      // 側の直接送信（buildCountdownPayloadFor参照）は「自分自身がちょうど今acceptした
+      // ソケット」への配信を確実にするが、このループ（まさに今above）が行っている
+      // 「既に別のリクエストで確立されていた相手のソケット」をctx.getWebSockets()経由で
+      // 検索して送る配信は、実Preview上での検証で稀に失敗することが確認された
+      // （ホスト側Player Aが一度もcountdownを受信できなかった実際の事例。恐らく
+      // Hibernatable WebSocketの登録が別リクエストの実行タイミングと競合する）。
+      // ctx.waitUntil()でこのレスポンスを返した後も少し生存させ、短い遅延を空けて複数回、
+      // 同じcountdownを両者へ再送する（既に届いていた場合も、クライアント側は同一startAtの
+      // 再設定を安全に無視するため、何度再送しても害にならない——buildCountdownPayloadFor
+      // 参照）。
+      const finalState = state
+      this.ctx.waitUntil(this.resendCountdownAfterDelay(finalState, COUNTDOWN_RESEND_SAFETY_NET_MS))
+      this.ctx.waitUntil(this.resendCountdownAfterDelay(finalState, COUNTDOWN_RESEND_SAFETY_NET_MS * 3))
     } else {
       await this.saveState(state)
+    }
+  }
+
+  private async resendCountdownAfterDelay(state: BattleRoomState, delayMs: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
+    for (const p of state.players) {
+      const payload = buildCountdownPayloadFor(state, p.playerId)
+      if (payload) this.send(this.socketFor(p.playerId), { v: 1, type: 'countdown', ...payload })
     }
   }
 
