@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { HEART_CAP, HEART_REGEN_MS, localHeartRepository, qaSetHeartCount } from './heartRepository'
+import { HEART_CAP, HEART_REGEN_MS, grantRewardedHeart, localHeartRepository, qaSetHeartCount } from './heartRepository'
 
 function installFakeLocalStorage(): void {
   const store = new Map<string, string>()
@@ -106,5 +106,18 @@ describe('heartRepository (次フェーズ: DOPA HEART本実装)', () => {
 
   it('HEART_CAPは5（テストの前提と実装定数が食い違っていないことの保険）', () => {
     expect(HEART_CAP).toBe(5)
+  })
+
+  it('grantRewardedHeart: 5個満タンでも6個へ増やせる（自然回復の5上限を超えて持てる設計）', () => {
+    qaSetHeartCount(5, T0)
+    const result = grantRewardedHeart(T0)
+    expect(result).toBe(6)
+    expect(localHeartRepository.getHeartCount(T0)).toBe(6)
+  })
+
+  it('grantRewardedHeart後も、count>=HEART_CAPの間は自然回復が一時停止したままになる', () => {
+    qaSetHeartCount(5, T0)
+    grantRewardedHeart(T0)
+    expect(localHeartRepository.getNextRecoveryEtaMs(T0 + HEART_REGEN_MS)).toBeNull()
   })
 })

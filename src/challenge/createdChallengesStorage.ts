@@ -1,3 +1,5 @@
+import { HISTORY_ID_STORAGE_CAP } from '../config/historyConfig'
+
 /**
  * Ver.6 Phase 5.3（送った挑戦状一覧）: ログイン未実装の現段階では、自分が作成した
  * ChallengeのIDだけをlocalStorageへ保持する。Challenge情報本体（performance・
@@ -11,11 +13,14 @@
  */
 const CREATED_CHALLENGE_IDS_KEY = 'dopagaki:createdChallengeIdsV1'
 /**
- * Ver.6 Phase 8: 無料ユーザーは直近5件のみ表示する確定仕様（将来DOPA PASSで無制限）に
- * 合わせ、10→5へ変更した。Challenge作成自体は無制限（D1側の行は一切削除しない）——
- * この定数はあくまで「ローカルでIDを何件まで覚えておくか」という表示件数の上限。
+ * 次フェーズ（DOPA PASS基盤ラウンド）: 以前はここに無料ユーザーの表示上限（5件）を
+ * 直接焼き込んでいたが、それではPASS購入後に「全履歴を見せる」ことが構造的に不可能に
+ * なる（ストレージ層で既に切り詰められているため）。無料/PASSの表示差分は
+ * utils/historyDisplay.ts（表示層の純粋関数）だけに持たせ、この定数は技術的な保存上限
+ * （config/historyConfig.ts HISTORY_ID_STORAGE_CAP）へ引き上げた——Challenge作成自体は
+ * 無制限（D1側の行は一切削除しない）。
  */
-const MAX_STORED_IDS = 5
+const MAX_STORED_IDS = HISTORY_ID_STORAGE_CAP
 
 function readIds(): string[] {
   try {

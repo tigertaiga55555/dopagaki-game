@@ -425,6 +425,13 @@ export interface PlayerProfile {
   avatar: AvatarRef
   /** 装備中Title（config/titles.tsのTitleDef.id）。未装備はnull。 */
   equippedTitleId: TitleId | null
+  /**
+   * 次フェーズ（DOPA PASS基盤ラウンド、item 29）: PASS所有者専用の「お気に入りTitle」最大3個
+   * （utils/profileStorage.ts MAX_FAVORITE_TITLES）。装備中Title（equippedTitleId、全ユーザー共通・
+   * 単一のまま変更しない）とは別概念——Profileにピン留め表示するだけで、どれも装備状態には
+   * ならない。PASS非所有者は常に空配列（UIがPASS所有時だけ編集可能にする）。
+   */
+  favoriteTitleIds: TitleId[]
   createdAt: number
 }
 
@@ -624,6 +631,16 @@ export interface TitleDef {
   /** 称号のレアリティ（item 7/8）。既存のENDLESS難易度配色・AchievementDef.rarityとは別の表現系。 */
   rarity: TitleRarity
 }
+
+/**
+ * 次フェーズ（DOPA PASS基盤ラウンド）: ゲームコア／UIがPASS関連の権限を確認する唯一の
+ * キー集合。「hasDopaPass」のような単一bool値を各所に散らすのではなく、
+ * payment/entitlementRepository.tsのEntitlementRepository.hasEntitlement(key)を通して
+ * だけ確認する——現時点ではDOPA_PASS所有が常にこの5つ全てを意味するが（1:1写像）、
+ * 将来の商品構成変更（例: PRIVATE_ROOM_CREATEだけの単体販売）があっても、ゲームコアの
+ * 呼び出し側は一切書き換えずに済む設計にするための抽象境界。
+ */
+export type EntitlementKey = 'DOPA_PASS' | 'PRIVATE_ROOM_CREATE' | 'UNLIMITED_HEART' | 'AD_FREE' | 'FULL_HISTORY'
 
 /**
  * Ver.6 Phase 5: 共通プレイヤー記録。既存storage（bestPercentV4・EndlessBestV1×3）を

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { checkDopaPercentAchievements } from './achievementStorage'
-import { equipTitle, getOrCreatePlayerId, getProfile, updateIcon, updateNickname } from './profileStorage'
+import { equipTitle, getOrCreatePlayerId, getProfile, setFavoriteTitleIds, updateIcon, updateNickname } from './profileStorage'
 
 function installFakeLocalStorage(): Storage {
   const store = new Map<string, string>()
@@ -99,5 +99,26 @@ describe('profileStorage (Ver.6 Phase 5: 匿名player_id・ローカルプロフ
     const result = equipTitle(null)
     expect(result.ok).toBe(true)
     expect(result.profile.equippedTitleId).toBeNull()
+  })
+
+  it('次フェーズ（DOPA PASS基盤ラウンド）: isPassTitleOwnedがtrueを返すTitleは、実績未解除でも装備できる', () => {
+    const result = equipTitle('pass_launch_campaign', (id) => id === 'pass_launch_campaign')
+    expect(result.ok).toBe(true)
+    expect(result.profile.equippedTitleId).toBe('pass_launch_campaign')
+  })
+
+  it('次フェーズ（DOPA PASS基盤ラウンド）: isPassTitleOwnedがfalseなら未解除のPASS Titleも拒否される', () => {
+    const result = equipTitle('pass_launch_campaign', () => false)
+    expect(result.ok).toBe(false)
+  })
+
+  it('次フェーズ（DOPA PASS基盤ラウンド、item 29）: setFavoriteTitleIdsは最大3件・重複除去で保存する', () => {
+    const profile = setFavoriteTitleIds(['a', 'b', 'a', 'c', 'd'])
+    expect(profile.favoriteTitleIds).toEqual(['a', 'b', 'c'])
+    expect(getProfile().favoriteTitleIds).toEqual(['a', 'b', 'c'])
+  })
+
+  it('初期プロフィールのfavoriteTitleIdsは空配列', () => {
+    expect(getProfile().favoriteTitleIds).toEqual([])
   })
 })

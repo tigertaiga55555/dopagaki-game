@@ -7,9 +7,15 @@
  * 画面側はこのファイルの関数だけに依存させる（utils/createdChallengesStorage.tsと同じ
  * 「保存方式を画面から隠す」方針）。
  */
+import { HISTORY_ID_STORAGE_CAP } from '../config/historyConfig'
+
 const PARTICIPATED_CHALLENGE_IDS_KEY = 'dopagaki:participatedChallengeIdsV1'
-/** Ver.6 Phase 8: 無料ユーザーは直近5件のみ表示する確定仕様に合わせ、10→5へ変更した。 */
-const MAX_STORED_IDS = 5
+/**
+ * 次フェーズ（DOPA PASS基盤ラウンド）: createdChallengesStorage.tsと同じ理由で、無料/PASSの
+ * 表示差分をストレージ層から表示層（utils/historyDisplay.ts）へ移し、この定数は技術的な
+ * 保存上限へ引き上げた。
+ */
+const MAX_STORED_IDS = HISTORY_ID_STORAGE_CAP
 
 function readIds(): string[] {
   try {

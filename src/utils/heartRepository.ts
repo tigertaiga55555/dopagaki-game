@@ -135,3 +135,17 @@ export const localHeartRepository: HeartRepository = {
 export function qaSetHeartCount(count: number, now = Date.now()): void {
   writeStoredState({ count, lastUpdateAt: now })
 }
+
+/**
+ * 次フェーズ（DOPA PASS基盤ラウンド）: リワード広告視聴1回＝即+1 Heart（無料ユーザーのみ、
+ * 呼び出し元のutils/rewardedAdStorage.tsが1日3回の上限を別途管理する）。5個の自然回復
+ * 上限を超えて持てる設計（例: 5→6）——lastUpdateAtを更新しないため、既存のsettle()の
+ * 「count>=HEART_CAPの間は回復を一時停止する」ロジックがそのまま働き、自然回復の挙動自体は
+ * 一切変更しない。
+ */
+export function grantRewardedHeart(now = Date.now()): number {
+  const settled = settle(loadOrInitState(now), now)
+  const next: StoredHeartState = { count: settled.count + 1, lastUpdateAt: settled.lastUpdateAt }
+  writeStoredState(next)
+  return next.count
+}

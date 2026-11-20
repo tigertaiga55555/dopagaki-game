@@ -42,14 +42,13 @@ describe('createdChallengesStorage (Ver.6 Phase 5.3: 送った挑戦状一覧)',
     expect(getCreatedChallengeIds()).toEqual(['id-1', 'id-2'])
   })
 
-  it('Ver.6 Phase 8: 5件を超えると古いものから捨てられる（無料ユーザー直近5件表示の方針、10→5へ変更）', () => {
+  it('次フェーズ（DOPA PASS基盤ラウンド）: 7件保存しても一切切り詰められない（無料/PASSの表示差分はstorage層ではなく表示層utils/historyDisplay.tsが担う）', () => {
     for (let i = 0; i < 7; i++) {
       addCreatedChallengeId(`id-${i}`)
     }
     const ids = getCreatedChallengeIds()
-    expect(ids.length).toBe(5)
-    expect(ids[0]).toBe('id-6')
-    expect(ids).not.toContain('id-0')
-    expect(ids).not.toContain('id-1')
+    expect(ids.length).toBe(7)
+    expect(ids).toContain('id-0')
+    expect(ids).toContain('id-6')
   })
 })

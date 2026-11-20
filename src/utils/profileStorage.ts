@@ -66,12 +66,16 @@ function resolveAvatar(stored: { avatar?: unknown; iconId?: unknown }): AvatarRe
   return DEFAULT_AVATAR
 }
 
+/** 次フェーズ（DOPA PASS基盤ラウンド、item 29）: PASS所有者の「お気に入りTitle」最大数。 */
+export const MAX_FAVORITE_TITLES = 3
+
 function createDefaultProfile(playerId: PlayerId): PlayerProfile {
   return {
     playerId,
     nickname: buildDefaultNickname(playerId),
     avatar: DEFAULT_AVATAR,
     equippedTitleId: null,
+    favoriteTitleIds: [],
     createdAt: Date.now(),
   }
 }
@@ -113,11 +117,17 @@ export function getProfile(): PlayerProfile {
     return fresh
   }
 
+  const storedFavorites = (stored as { favoriteTitleIds?: unknown }).favoriteTitleIds
+  const favoriteTitleIds = Array.isArray(storedFavorites)
+    ? storedFavorites.filter((id): id is TitleId => typeof id === 'string').slice(0, MAX_FAVORITE_TITLES)
+    : []
+
   const merged: PlayerProfile = {
     playerId,
     nickname: typeof stored.nickname === 'string' && stored.nickname.length > 0 ? stored.nickname : buildDefaultNickname(playerId),
     avatar: resolveAvatar(stored),
     equippedTitleId: typeof stored.equippedTitleId === 'string' ? stored.equippedTitleId : null,
+    favoriteTitleIds,
     createdAt: typeof stored.createdAt === 'number' ? stored.createdAt : Date.now(),
   }
   return merged
@@ -148,13 +158,34 @@ export function updateIcon(iconId: PresetIconId): PlayerProfile {
 /**
  * 称号を装備する。未解除のTitleは装備できない（falseを返し、プロフィールは変更しない）。
  * titleIdにnullを渡すと未装備状態に戻せる（常に許可）。
+ *
+ * 次フェーズ（DOPA PASS基盤ラウンド）: PASS限定Title（config/passTitles.ts、68個の通常Title
+ * とは別コレクション）も装備できるようにするため、isPassTitleOwnedを呼び出し元から注入する
+ * （profileStorage.ts自体はpayment/配下への依存を持たない——payment/passTitleGrants.tsを
+ * 直接importせず、呼び出し側のUIがそこから得た判定関数を渡すだけの設計）。
  */
-export function equipTitle(titleId: TitleId | null): { profile: PlayerProfile; ok: boolean } {
+export function equipTitle(
+  titleId: TitleId | null,
+  isPassTitleOwned: (titleId: TitleId) => boolean = () => false,
+): { profile: PlayerProfile; ok: boolean } {
   const profile = getProfile()
-  if (titleId !== null && !isTitleUnlocked(titleId)) {
+  if (titleId !== null && !isTitleUnlocked(titleId) && !isPassTitleOwned(titleId)) {
     return { profile, ok: false }
   }
   const next: PlayerProfile = { ...profile, equippedTitleId: titleId }
   saveProfile(next)
   return { profile: next, ok: true }
+}
+
+/**
+ * 次フェーズ（DOPA PASS基盤ラウンド、item 29）: お気に入りTitleを設定する（最大
+ * MAX_FAVORITE_TITLES個、重複は除去）。装備中Title（equippedTitleId、全ユーザー共通・単一）
+ * とは別概念——どれも装備状態にはならない、Profileへのピン留め表示専用。
+ */
+export function setFavoriteTitleIds(titleIds: TitleId[]): PlayerProfile {
+  const profile = getProfile()
+  const deduped = Array.from(new Set(titleIds)).slice(0, MAX_FAVORITE_TITLES)
+  const next: PlayerProfile = { ...profile, favoriteTitleIds: deduped }
+  saveProfile(next)
+  return next
 }

@@ -226,3 +226,55 @@ export function trackBattleDisconnect(): void {
 export function trackBattleForfeit(): void {
   trackEvent('battle_forfeit')
 }
+
+/**
+ * 次フェーズ（DOPA PASS基盤ラウンド）: 購入ファネル・PRIVATE ROOM関連のイベント。
+ * playerId・roomCode・matchId等の識別情報は一切送信しない既存方針を踏襲する。
+ *
+ * 重要（ユーザー指示）: 今回まだ実決済プロバイダを一切接続していないため、QA操作による
+ * 「成功」を正式なpurchase_successとして絶対に送らない——将来の実購入ファネル指標を
+ * 汚染してしまう。QA専用の別名イベント（qa_purchase_success）に分離し、本物の
+ * trackPassPurchaseSuccess（purchase_success）は定義するだけで、今回のラウンドでは
+ * どこからも呼ばない（実プロバイダ統合時に初めて呼ばれる）。
+ */
+export type PassPaywallSource =
+  | 'profile'
+  | 'private_room_create'
+  | 'heart_empty'
+  | 'ad_interstitial'
+  | 'history_limit'
+  | 'other'
+
+export function trackPassPaywallView(source: PassPaywallSource): void {
+  trackEvent('pass_paywall_view', { source })
+}
+
+export function trackPassPurchaseStart(): void {
+  trackEvent('purchase_start')
+}
+
+/** 実決済プロバイダ未接続のため、今回のラウンドではどこからも呼ばない（将来の実装用）。 */
+export function trackPassPurchaseSuccess(): void {
+  trackEvent('purchase_success')
+}
+
+/** QA購入（qaPaymentAdapter）専用。本物のpurchase_successとは別名で送る。 */
+export function trackQaPassPurchaseSuccess(): void {
+  trackEvent('qa_purchase_success')
+}
+
+export function trackPassPurchaseCancel(): void {
+  trackEvent('purchase_cancel')
+}
+
+export function trackPassPurchaseError(): void {
+  trackEvent('purchase_error')
+}
+
+export function trackPrivateRoomCreated(): void {
+  trackEvent('private_room_created')
+}
+
+export function trackPrivateRoomJoined(): void {
+  trackEvent('private_room_joined')
+}
