@@ -26,6 +26,14 @@ export type ScreenName =
   | 'passAnalytics'
   /** 次フェーズ（DOPA PASS基盤ラウンド）: DOPA PASS購入（paywall）画面。 */
   | 'passPaywall'
+  /** 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM）: 作成/参加の入口。 */
+  | 'privateRoomHome'
+  /** 次フェーズ（item 15）: ロビー（メンバー一覧・ホスト操作）。 */
+  | 'privateRoomLobby'
+  /** 次フェーズ（item 15）: PRIVATE ROOM経由のNORMAL対戦（既存BattleMatchScreenを再利用）。 */
+  | 'privateRoomMatch'
+  /** 次フェーズ（item 15）: PRIVATE ROOM経由のENDLESS対戦。 */
+  | 'privateEndlessMatch'
 
 /**
  * Ver.6 Phase 4: Endlessモードの難易度。既存通常ゲームの問題難易度システム

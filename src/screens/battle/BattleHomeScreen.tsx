@@ -4,6 +4,8 @@ interface Props {
   onBack: () => void
   onWorldBattle: () => void
   onFriendBattle: () => void
+  /** 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM）: 参加は誰でも無料、作成はDOPA PASS限定。 */
+  onPrivateRoom: () => void
 }
 
 /**
@@ -11,7 +13,7 @@ interface Props {
  * 通常モードより対人戦・緊張感・アーケード感を出すため、濃い赤〜紫のグラデーションで
  * トーンを変える（ただし問題の視認性には影響しない、この画面限定の演出）。
  */
-export function BattleHomeScreen({ onBack, onWorldBattle, onFriendBattle }: Props) {
+export function BattleHomeScreen({ onBack, onWorldBattle, onFriendBattle, onPrivateRoom }: Props) {
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-gradient-to-b from-black via-[#1a0510] to-black">
       <BackButton onBack={onBack} label="ホーム" />
@@ -36,6 +38,14 @@ export function BattleHomeScreen({ onBack, onWorldBattle, onFriendBattle }: Prop
             🤝 フレンド対戦
           </button>
           <p className="text-[11px] text-white/40">URL・ルームコードで1対1</p>
+
+          <button
+            onClick={onPrivateRoom}
+            className="mt-2 w-full rounded-2xl border border-fuchsia-400/30 bg-fuchsia-500/10 py-4 text-base font-black tracking-widest text-fuchsia-200 transition-transform active:scale-95"
+          >
+            🚪 PRIVATE ROOM
+          </button>
+          <p className="text-[11px] text-white/40">友達だけのロビーで何度でも対戦（参加は無料）</p>
         </div>
       </div>
     </div>

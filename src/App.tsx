@@ -33,11 +33,16 @@ import { SentChallengesScreen } from './screens/SentChallengesScreen'
 import { BattleHomeScreen } from './screens/battle/BattleHomeScreen'
 import { BattleMatchScreen } from './screens/battle/BattleMatchScreen'
 import { FriendBattleScreen } from './screens/battle/FriendBattleScreen'
+import { PrivateEndlessMatchScreen } from './screens/battle/PrivateEndlessMatchScreen'
+import { PrivateRoomHomeScreen } from './screens/battle/PrivateRoomHomeScreen'
+import { PrivateRoomLobbyScreen } from './screens/battle/PrivateRoomLobbyScreen'
 import { WorldMatchingScreen } from './screens/battle/WorldMatchingScreen'
 import { TitleScreen } from './screens/TitleScreen'
 import { addCreatedChallengeId } from './challenge/createdChallengesStorage'
 import { extractChallengeIdFromLocation } from './challenge/url'
 import { extractRoomCodeFromLocation } from './battle/battleUrl'
+import { extractPrivateRoomCodeFromLocation } from './battle/privateRoomUrl'
+import type { BattleFormat } from './battle/types'
 import { trackChallengePlayed, trackGameStart, trackReplayStart, type PassPaywallSource } from './utils/analytics'
 import { unlockAudio } from './utils/audioContext'
 import { runMigrationsOnce } from './utils/migrations'
@@ -64,7 +69,13 @@ export default function App() {
   // 入る。Ver.6 Phase 6: /battle/:roomCodeも同様にフレンド対戦の合流画面へ直接入る。
   // それ以外は常に従来どおりtitleから始まる。
   const [screen, setScreen] = useState<ScreenName>(() =>
-    extractChallengeIdFromLocation() ? 'challengeReceive' : extractRoomCodeFromLocation() ? 'battleFriend' : 'title',
+    extractChallengeIdFromLocation()
+      ? 'challengeReceive'
+      : extractRoomCodeFromLocation()
+        ? 'battleFriend'
+        : extractPrivateRoomCodeFromLocation()
+          ? 'privateRoomHome'
+          : 'title',
   )
   const [result, setResult] = useState<FinalResultV4 | null>(null)
   const [playKey, setPlayKey] = useState(0)
@@ -78,6 +89,17 @@ export default function App() {
   // Ver.6 Phase 6（1対1リアルタイム対戦）: Battle専用の状態。通常ゲーム・Challengeとは
   // 完全に独立させる。初期roomCodeは/battle/:roomCodeを直接開いた場合だけ使う。
   const [initialBattleRoomCode] = useState(() => extractRoomCodeFromLocation())
+  // 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM）: PRIVATE ROOM専用の状態。
+  // 既存のbattleMatchとは完全に別（PRIVATE ROOM経由のNORMAL対戦もbattleMatchは使わず、
+  // privateRoomMatchだけを使う——戻り先がprivateRoomLobbyになる点が既存battleMatchと違うため）。
+  const [initialPrivateRoomCode] = useState(() => extractPrivateRoomCodeFromLocation())
+  const [privateRoomCode, setPrivateRoomCode] = useState<string | null>(null)
+  const [privateRoomMatch, setPrivateRoomMatch] = useState<{
+    matchId: string
+    battleType: BattleFormat
+    endlessDifficulty: EndlessDifficulty | null
+    opponentProfile: BattleOpponentProfile
+  } | null>(null)
   const [battleMatch, setBattleMatch] = useState<{ matchId: string; mode: BattleMode; roomCode: string | null; opponent: BattleOpponentProfile | null } | null>(
     null,
   )
@@ -329,10 +351,15 @@ export default function App() {
    * 開けるpaywall画面。sourceは呼び出し元（analytics.ts PassPaywallSource）ごとに変える。
    */
   const [passPaywallSource, setPassPaywallSource] = useState<PassPaywallSource>('profile')
+  // 次フェーズ（item 18 PRIVATE ROOM create-room paywall gate）: paywallは複数の画面
+  // （Profile／PrivateRoomHomeScreenの「ルームを作る」）から開ける。subScreenOrigin
+  // （profile/title二択）では戻り先がprivateRoomHomeにならないため、実際に開いた時の
+  // screenそのものを戻り先として保持する。
+  const [passPaywallReturnScreen, setPassPaywallReturnScreen] = useState<ScreenName>('title')
   const openPassPaywall = useCallback(
     (source: PassPaywallSource) => {
       setPassPaywallSource(source)
-      setSubScreenOrigin(resolveSubScreenOrigin(screen))
+      setPassPaywallReturnScreen(screen)
       setScreen('passPaywall')
     },
     [screen],
@@ -342,8 +369,43 @@ export default function App() {
     setScreen('passAnalytics')
   }, [screen])
   const handlePassPurchased = useCallback(() => {
-    setScreen(subScreenBackTarget.screen)
-  }, [subScreenBackTarget.screen])
+    setScreen(passPaywallReturnScreen)
+  }, [passPaywallReturnScreen])
+
+  /**
+   * 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM）: PRIVATE ROOMの画面遷移。
+   * 既存のbattleMatch（World/Friend Battle専用）とは完全に分離する——PRIVATE ROOM経由の
+   * NORMAL対戦も戻り先がprivateRoomLobbyになる点が既存と異なるため、別の状態として持つ。
+   */
+  const openPrivateRoomHome = useCallback(() => setScreen('privateRoomHome'), [])
+
+  const enterPrivateRoomLobby = useCallback((roomCode: string) => {
+    setPrivateRoomCode(roomCode)
+    setPrivateRoomMatch(null)
+    setScreen('privateRoomLobby')
+  }, [])
+
+  const handlePrivateRoomEnterMatch = useCallback(
+    (args: { matchId: string; battleType: BattleFormat; endlessDifficulty: EndlessDifficulty | null; opponentProfile: BattleOpponentProfile }) => {
+      setPrivateRoomMatch(args)
+      setScreen(args.battleType === 'endless' ? 'privateEndlessMatch' : 'privateRoomMatch')
+    },
+    [],
+  )
+
+  // item: PRIVATE ROOMはChallenge・ENDLESS Challengeと同様、強制インタースティシャルの
+  // 対象から完全に除外する（ユーザー指示）——exitBattleのようなmaybeGateWithInterstitial
+  // ラップを一切行わない。
+  const exitPrivateRoomMatch = useCallback(() => {
+    setPrivateRoomMatch(null)
+    setScreen('privateRoomLobby')
+  }, [])
+
+  const leavePrivateRoom = useCallback(() => {
+    setPrivateRoomCode(null)
+    setPrivateRoomMatch(null)
+    setScreen('battleHome')
+  }, [])
 
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-[430px] overflow-hidden bg-[#0b0620]">
@@ -424,7 +486,7 @@ export default function App() {
           {screen === 'ranking' && <RankingScreen onBack={backFromSubScreen} backLabel={subScreenBackTarget.label} />}
           {screen === 'passAnalytics' && <PassAnalyticsScreen onBack={backFromSubScreen} />}
           {screen === 'passPaywall' && (
-            <PassPaywallScreen source={passPaywallSource} onBack={backFromSubScreen} onPurchased={handlePassPurchased} />
+            <PassPaywallScreen source={passPaywallSource} onBack={() => setScreen(passPaywallReturnScreen)} onPurchased={handlePassPurchased} />
           )}
           {screen === 'challengeReceive' && challengeId && (
             <ChallengeReceiveScreen
@@ -464,7 +526,12 @@ export default function App() {
             <ParticipatedChallengesScreen onBack={backFromSubScreen} backLabel={subScreenBackTarget.label} onOpenHistory={openChallengeHistory} />
           )}
           {screen === 'battleHome' && (
-            <BattleHomeScreen onBack={quitToHome} onWorldBattle={openWorldMatching} onFriendBattle={openFriendBattle} />
+            <BattleHomeScreen
+              onBack={quitToHome}
+              onWorldBattle={openWorldMatching}
+              onFriendBattle={openFriendBattle}
+              onPrivateRoom={openPrivateRoomHome}
+            />
           )}
           {screen === 'battleWorldMatching' && (
             <WorldMatchingScreen
@@ -486,6 +553,47 @@ export default function App() {
               myProfile={toBattleProfile(getProfile())}
               initialOpponent={battleMatch.opponent}
               onExit={exitBattle}
+            />
+          )}
+          {screen === 'privateRoomHome' && (
+            <PrivateRoomHomeScreen
+              onBack={openBattleHome}
+              onEnterLobby={enterPrivateRoomLobby}
+              onRequirePass={() => openPassPaywall('private_room_create')}
+              hasPass={qaLocalEntitlementRepository.hasEntitlement('PRIVATE_ROOM_CREATE')}
+              playerId={getOrCreatePlayerId()}
+              myProfile={toBattleProfile(getProfile())}
+              initialRoomCode={initialPrivateRoomCode}
+            />
+          )}
+          {screen === 'privateRoomLobby' && privateRoomCode && (
+            <PrivateRoomLobbyScreen
+              roomCode={privateRoomCode}
+              playerId={getOrCreatePlayerId()}
+              myProfile={toBattleProfile(getProfile())}
+              onLeave={leavePrivateRoom}
+              onEnterMatch={handlePrivateRoomEnterMatch}
+            />
+          )}
+          {screen === 'privateRoomMatch' && privateRoomMatch && (
+            <BattleMatchScreen
+              matchId={privateRoomMatch.matchId}
+              mode="friend"
+              roomCode={null}
+              playerId={getOrCreatePlayerId()}
+              myProfile={toBattleProfile(getProfile())}
+              initialOpponent={privateRoomMatch.opponentProfile}
+              onExit={exitPrivateRoomMatch}
+            />
+          )}
+          {screen === 'privateEndlessMatch' && privateRoomMatch && privateRoomMatch.endlessDifficulty && (
+            <PrivateEndlessMatchScreen
+              matchId={privateRoomMatch.matchId}
+              endlessDifficulty={privateRoomMatch.endlessDifficulty}
+              playerId={getOrCreatePlayerId()}
+              myProfile={toBattleProfile(getProfile())}
+              initialOpponent={privateRoomMatch.opponentProfile}
+              onExit={exitPrivateRoomMatch}
             />
           )}
         </>

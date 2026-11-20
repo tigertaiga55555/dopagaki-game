@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Challenge500TimerBar } from '../components/Challenge500TimerBar'
 import { QuitButton } from '../components/QuitButton'
 import { CHALLENGE500_CONFIG } from '../config/challenge500Config'
@@ -33,6 +34,18 @@ interface Props {
    * （useEndlessGameのtargetStreakへそのまま渡す）。
    */
   targetStreak?: number
+  /**
+   * 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM ENDLESS）: PlayScreen.tsxの
+   * battleHudと同じ拡張点。PRIVATE ROOMのENDLESS対戦で、相手の進行中STREAKをQuitButtonの
+   * 左側スロットへ表示するためだけに追加した（既存のソロ/ENDLESS Challenge呼び出しは
+   * 渡さないため、見た目・挙動に一切変化がない）。
+   */
+  battleHud?: ReactNode
+  /**
+   * 次フェーズ（item 15 PRIVATE ROOM ENDLESS）: streakが変化するたびに呼ばれる（PRIVATE
+   * ROOMが相手へendless_progressを送るためのフック）。既存呼び出しは渡さないため無視される。
+   */
+  onStreakChange?: (streak: number) => void
 }
 
 /** 正解時の軽い一撃（500%チャレンジのような大規模演出はコピーしない、控えめな手応えだけ）。 */
@@ -95,8 +108,13 @@ function finalBgmIntensity(streak: number): number {
  */
 type Phase = 'rule' | 'countdown' | 'playing'
 
-export function EndlessPlayScreen({ difficulty, onFinish, onQuit, qaMode = false, replayQuestions, targetStreak }: Props) {
+export function EndlessPlayScreen({ difficulty, onFinish, onQuit, qaMode = false, replayQuestions, targetStreak, battleHud, onStreakChange }: Props) {
   const { snapshot, start, handleResult } = useEndlessGame(difficulty, onFinish, { qaMode, replayQuestions, targetStreak })
+
+  useEffect(() => {
+    onStreakChange?.(snapshot.state.streak)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot.state.streak])
   // item 5/7（実機QA最終改善）: 上級だけ開始前にルール説明を挟む。その後（または
   // 他難易度は最初から）、通常モードと同じ3→2→1→STARTを見せてからplayingへ入る。
   // phaseが'playing'になるまでstart()を呼ばないため、「カウントダウン中は問題の
@@ -223,7 +241,7 @@ export function EndlessPlayScreen({ difficulty, onFinish, onQuit, qaMode = false
 
   return (
     <div ref={shakeWrapperRef} className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
-      <QuitButton onQuit={onQuit} />
+      <QuitButton onQuit={onQuit} leftSlot={battleHud} />
 
       <div className="relative z-10 flex items-start justify-between px-5 pt-3 pb-1">
         <p className={`text-[10px] font-bold tracking-widest ${theme.textClass}`}>
