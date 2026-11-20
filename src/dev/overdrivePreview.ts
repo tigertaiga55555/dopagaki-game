@@ -73,3 +73,13 @@ export function isEndlessPreviewRequested(): boolean {
 export function isHeartQaPanelRequested(): boolean {
   return previewParam() === 'heart'
 }
+
+/**
+ * 次フェーズ（DOPA PASS基盤ラウンド）QA補助: ?preview=pass — ホーム画面にDOPA PASSの
+ * OFF/ON/発売キャンペーン購入者相当を切り替えられる小さなQAパネルを重ねて表示する。
+ * isHeartQaPanelRequestedと同じ仕組みで、__DOPAGAKI_PREVIEW_ENABLED__がfalseな
+ * Productionビルドでは常にfalseを返すため、Productionに露出することはない。
+ */
+export function isPassQaPanelRequested(): boolean {
+  return previewParam() === 'pass'
+}

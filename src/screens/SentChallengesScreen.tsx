@@ -8,6 +8,8 @@ import { ENDLESS_THEME } from '../config/endlessTheme'
 import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
 import { checkChallengeDefenseAchievements, checkChallengeWantedAchievement } from '../utils/achievementStorage'
 import { matchesChallengeModeFilter, type ChallengeModeFilter } from '../utils/challengeModeFilter'
+import { applyHistoryDisplayLimit } from '../utils/historyDisplay'
+import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import type { ChallengeApiError, ChallengeRecord, ChallengeSummary } from '../challenge/types'
 import type { AchievementId } from '../types'
 
@@ -107,31 +109,45 @@ export function SentChallengesScreen({ onBack, backLabel, onOpenHistory }: Props
 
         {state.status === 'error' && <p className="mt-10 text-sm font-bold text-white/60">一覧の読み込みに失敗しました。</p>}
 
-        {state.status === 'ready' && (
-          <div className="flex w-full max-w-sm flex-col gap-3">
-            {state.summaries.filter((summary) => matchesChallengeModeFilter(summary.mode, modeFilter)).length === 0 && (
-              <p className="mt-6 text-center text-sm font-bold text-white/40">このフィルターに該当するChallengeはありません</p>
-            )}
-            {state.summaries.filter((summary) => matchesChallengeModeFilter(summary.mode, modeFilter)).map((summary) => (
-              <button
-                key={summary.id}
-                onClick={() => handleOpen(summary.id)}
-                disabled={openingId !== null}
-                className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left active:scale-95 disabled:opacity-60"
-              >
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-black text-white">
-                    {summary.mode === 'endless' ? `${summary.creatorScore}連続` : `${summary.creatorScore}％`}への挑戦状
+        {state.status === 'ready' &&
+          (() => {
+            // 次フェーズ（DOPA PASS基盤ラウンド）: 無料ユーザーは直近5件のみ表示（表示層の
+            // 制限のみ——ローカルID一覧・サーバー側のD1行は一切削除・切り詰めない）。
+            // PASS購入後は即座に全件が見える。
+            const hasFullHistory = qaLocalEntitlementRepository.hasEntitlement('FULL_HISTORY')
+            const { visible, truncated } = applyHistoryDisplayLimit(state.summaries, hasFullHistory)
+            const filtered = visible.filter((summary) => matchesChallengeModeFilter(summary.mode, modeFilter))
+            return (
+              <div className="flex w-full max-w-sm flex-col gap-3">
+                {truncated && (
+                  <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-center text-[11px] font-bold text-amber-300">
+                    無料ユーザーは直近5件のみ表示されます。DOPA PASSで全履歴を表示できます。
                   </p>
-                  <span className="text-[10px] font-bold tracking-widest text-white/40">{describeMode(summary)}</span>
-                </div>
-                <p className="mt-1 text-[11px] text-white/40">
-                  挑戦者 {summary.challengerCount}人 ・ {summary.attemptCount}回挑戦 ・ 突破 {summary.clearedCount}人
-                </p>
-              </button>
-            ))}
-          </div>
-        )}
+                )}
+                {filtered.length === 0 && (
+                  <p className="mt-6 text-center text-sm font-bold text-white/40">このフィルターに該当するChallengeはありません</p>
+                )}
+                {filtered.map((summary) => (
+                  <button
+                    key={summary.id}
+                    onClick={() => handleOpen(summary.id)}
+                    disabled={openingId !== null}
+                    className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left active:scale-95 disabled:opacity-60"
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-black text-white">
+                        {summary.mode === 'endless' ? `${summary.creatorScore}連続` : `${summary.creatorScore}％`}への挑戦状
+                      </p>
+                      <span className="text-[10px] font-bold tracking-widest text-white/40">{describeMode(summary)}</span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-white/40">
+                      挑戦者 {summary.challengerCount}人 ・ {summary.attemptCount}回挑戦 ・ 突破 {summary.clearedCount}人
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )
+          })()}
       </div>
     </div>
   )

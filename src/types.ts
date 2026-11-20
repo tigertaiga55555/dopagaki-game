@@ -22,6 +22,10 @@ export type ScreenName =
   | 'battleWorldMatching'
   | 'battleFriend'
   | 'battleMatch'
+  /** 次フェーズ（DOPA PASS基盤ラウンド）: PASS限定の詳細分析画面。 */
+  | 'passAnalytics'
+  /** 次フェーズ（DOPA PASS基盤ラウンド）: DOPA PASS購入（paywall）画面。 */
+  | 'passPaywall'
 
 /**
  * Ver.6 Phase 4: Endlessモードの難易度。既存通常ゲームの問題難易度システム

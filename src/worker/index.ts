@@ -356,6 +356,19 @@ async function handleGetBattleStats(playerId: string, env: Env): Promise<Respons
   return json({ ok: true, value: stats ?? { wins: 0, losses: 0, draws: 0, currentStreak: 0, maxStreak: 0 } }, 200)
 }
 
+/**
+ * 次フェーズ（DOPA PASS基盤ラウンド、item 28）: GET /api/battles/performance/:playerId。
+ * PASS限定の詳細分析画面向け、世界対戦の平均パフォーマンス＋決着理由別勝利数。
+ */
+async function handleGetBattlePerformance(playerId: string, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB) {
+    return errorResponse({ ok: false, error: 'not_configured', message: 'Battle backend is not configured on this environment yet' })
+  }
+  const repo = createD1BattleRepository(env.CHALLENGE_DB)
+  const value = await repo.getPerformanceAggregates(playerId)
+  return json({ ok: true, value }, 200)
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
@@ -403,6 +416,11 @@ export default {
     const battleStatsMatch = /^\/api\/battles\/stats\/([^/]+)$/.exec(url.pathname)
     if (battleStatsMatch && request.method === 'GET') {
       return handleGetBattleStats(decodeURIComponent(battleStatsMatch[1]), env)
+    }
+
+    const battlePerformanceMatch = /^\/api\/battles\/performance\/([^/]+)$/.exec(url.pathname)
+    if (battlePerformanceMatch && request.method === 'GET') {
+      return handleGetBattlePerformance(decodeURIComponent(battlePerformanceMatch[1]), env)
     }
 
     if (!env.CHALLENGE_DB) {

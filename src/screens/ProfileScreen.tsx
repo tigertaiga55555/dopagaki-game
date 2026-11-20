@@ -1,14 +1,22 @@
 import { useEffect, useState } from 'react'
 import { BackButton } from '../components/BackButton'
+import { DopaPassBadge } from '../components/DopaPassBadge'
+import { FavoriteTitlesRow } from '../components/FavoriteTitlesRow'
+import { PassTitleBadge } from '../components/PassTitleBadge'
+import { PassTitleDetailModal } from '../components/PassTitleDetailModal'
 import { TitleBadge } from '../components/TitleBadge'
 import { TitleDetailModal } from '../components/TitleDetailModal'
 import { ACHIEVEMENT_DEFS } from '../config/achievements'
+import { PASS_TITLE_DEFS_BY_ID } from '../config/passTitles'
 import { resolveAvatarEmoji } from '../config/profileConfig'
 import { TITLE_DEFS_BY_ID } from '../config/titles'
 import { getTitleRarityTheme } from '../config/titleRarityTheme'
+import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
+import { getOwnedPassTitleIds, isPassTitleOwned } from '../payment/passTitleGrants'
 import { trackProfileView } from '../utils/analytics'
+import { getUnlockedTitles } from '../utils/achievementStorage'
 import { localPlayerStatsRepository } from '../utils/playerStatsRepository'
-import { getProfile } from '../utils/profileStorage'
+import { equipTitle, getProfile, setFavoriteTitleIds } from '../utils/profileStorage'
 
 interface Props {
   onBack: () => void
@@ -19,30 +27,57 @@ interface Props {
   onSentChallenges: () => void
   /** Ver.6 Phase 5.4（実機QA最終修正）: 自分が挑戦したChallengeの一覧を開く。 */
   onParticipatedChallenges: () => void
+  /** 次フェーズ（DOPA PASS基盤ラウンド）: PASS限定の詳細分析画面を開く（PASS所有者のみ導線を出す）。 */
+  onOpenPassAnalytics: () => void
+  /** 次フェーズ（DOPA PASS基盤ラウンド）: PASS購入画面を開く（非所有者向け）。 */
+  onOpenPassPaywall: () => void
 }
 
 /**
  * Ver.6 Phase 5（Profile/Achievement/Ranking基盤）: ログイン不要のローカルプロフィール画面。
  *
- * 「プレイヤーカード」として気持ちよく見えることを優先しつつ、過度なSNS風にはしない
- * （フォロー/フォロワー等は一切ない）。世界対戦の勝利数・最大連勝は今回まだ実装していない
- * ため、偽の0として主要Statsに表示しない（PlayerStatsがそもそもこの2値を持たない —
- * utils/playerStatsRepository.ts参照）。
+ * 次フェーズ（DOPA PASS基盤ラウンド、item 29/30）: DOPA PASS所有バッジ（汎用、Profile限定
+ * スコープ）・PASS限定Title（通常の装備中Titleとは別枠、装備も可能）・お気に入りTitle
+ * （PASS所有者のみ編集可）をこの画面にだけ追加する——ユーザー自身の仕様が「将来
+ * VS/Ranking/Challengeへも表示可能」としつつ「Profile画面のみで今回は十分」と明記している
+ * ため、他画面への配置は意図的にスコープ外のまま。
  */
-export function ProfileScreen({ onBack, onEdit, onAchievements, onRanking, onSentChallenges, onParticipatedChallenges }: Props) {
-  const profile = getProfile()
+export function ProfileScreen({
+  onBack,
+  onEdit,
+  onAchievements,
+  onRanking,
+  onSentChallenges,
+  onParticipatedChallenges,
+  onOpenPassAnalytics,
+  onOpenPassPaywall,
+}: Props) {
+  const [profile, setProfile] = useState(() => getProfile())
   const stats = localPlayerStatsRepository.getPlayerStats()
-  const equippedTitle = profile.equippedTitleId ? TITLE_DEFS_BY_ID[profile.equippedTitleId] : null
+  const hasPass = qaLocalEntitlementRepository.hasEntitlement('DOPA_PASS')
+  const ownedPassTitleIds = getOwnedPassTitleIds()
+
+  const equippedPassTitle = profile.equippedTitleId ? PASS_TITLE_DEFS_BY_ID[profile.equippedTitleId] : null
+  const equippedRegularTitle = !equippedPassTitle && profile.equippedTitleId ? TITLE_DEFS_BY_ID[profile.equippedTitleId] : null
   const [showTitleDetail, setShowTitleDetail] = useState(false)
 
   // 次フェーズ（item 12）: LEGENDARY/MYTHICを装備している間だけ、アバターリング/
   // プレイヤーカードへ軽くレアリティのテーマ色を広げる（COMMON/RARE/EPICは従来の見た目の
-  // ままにし、全体を過剰に色付けしない——ユーザー指示）。
-  const flourishClass = equippedTitle ? getTitleRarityTheme(equippedTitle.rarity).profileRingClass : ''
+  // ままにし、全体を過剰に色付けしない——ユーザー指示）。PASS限定Title装備時はamber系で統一。
+  const flourishClass = equippedPassTitle
+    ? 'border-amber-400/60 shadow-[0_0_24px_rgba(251,191,36,0.3)]'
+    : equippedRegularTitle
+      ? getTitleRarityTheme(equippedRegularTitle.rarity).profileRingClass
+      : ''
 
   useEffect(() => {
     trackProfileView()
   }, [])
+
+  function handleEquipPassTitle(titleId: string) {
+    const result = equipTitle(titleId, isPassTitleOwned)
+    if (result.ok) setProfile(result.profile)
+  }
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
@@ -60,12 +95,28 @@ export function ProfileScreen({ onBack, onEdit, onAchievements, onRanking, onSen
           >
             {resolveAvatarEmoji(profile.avatar)}
           </div>
+
+          {hasPass && <DopaPassBadge />}
+
           <p className="text-xl font-black text-white">{profile.nickname}</p>
-          {equippedTitle ? (
-            <TitleBadge title={equippedTitle} onClick={() => setShowTitleDetail(true)} />
+
+          {equippedPassTitle ? (
+            <PassTitleBadge title={equippedPassTitle} onClick={() => setShowTitleDetail(true)} />
+          ) : equippedRegularTitle ? (
+            <TitleBadge title={equippedRegularTitle} onClick={() => setShowTitleDetail(true)} />
           ) : (
             <p className="text-xs font-bold tracking-widest text-white/40">称号未装備</p>
           )}
+
+          {ownedPassTitleIds.length > 0 && profile.equippedTitleId !== ownedPassTitleIds[0] && (
+            <button
+              onClick={() => handleEquipPassTitle(ownedPassTitleIds[0])}
+              className="text-[10px] font-bold text-amber-300/80 underline"
+            >
+              PASS限定Titleを装備する
+            </button>
+          )}
+
           <button
             onClick={onEdit}
             className="mt-1 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-bold text-white/70 active:scale-95"
@@ -73,6 +124,14 @@ export function ProfileScreen({ onBack, onEdit, onAchievements, onRanking, onSen
             プロフィールを編集
           </button>
         </div>
+
+        {hasPass && (
+          <FavoriteTitlesRow
+            favoriteTitleIds={profile.favoriteTitleIds}
+            unlockedTitleIds={getUnlockedTitles().map((t) => t.id)}
+            onChange={(next) => setProfile(setFavoriteTitleIds(next))}
+          />
+        )}
 
         {/* プレイヤー記録 */}
         <div className="w-full max-w-xs space-y-2 rounded-2xl bg-white/5 px-4 py-4">
@@ -87,6 +146,21 @@ export function ProfileScreen({ onBack, onEdit, onAchievements, onRanking, onSen
         </div>
 
         <div className="flex w-full max-w-xs flex-col gap-3">
+          {hasPass ? (
+            <button
+              onClick={onOpenPassAnalytics}
+              className="w-full rounded-2xl border border-amber-400/50 bg-amber-500/10 py-3 text-sm font-black text-amber-300 active:scale-95"
+            >
+              DOPA PASS 詳細分析
+            </button>
+          ) : (
+            <button
+              onClick={onOpenPassPaywall}
+              className="w-full rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 py-3.5 text-sm font-black text-black shadow-[0_6px_0_0_rgba(180,130,0,0.6)] active:translate-y-1 active:shadow-[0_2px_0_0_rgba(180,130,0,0.6)]"
+            >
+              DOPA PASSについて見る
+            </button>
+          )}
           <button
             onClick={onAchievements}
             className="w-full rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-3.5 text-base font-black tracking-widest text-white shadow-[0_6px_0_0_rgba(126,34,206,0.8)] transition-transform active:translate-y-1 active:shadow-[0_2px_0_0_rgba(126,34,206,0.8)]"
@@ -114,8 +188,9 @@ export function ProfileScreen({ onBack, onEdit, onAchievements, onRanking, onSen
         </div>
       </div>
 
-      {showTitleDetail && equippedTitle && (
-        <TitleDetailModal achievementId={equippedTitle.unlockedByAchievementId} unlocked onClose={() => setShowTitleDetail(false)} />
+      {showTitleDetail && equippedPassTitle && <PassTitleDetailModal title={equippedPassTitle} onClose={() => setShowTitleDetail(false)} />}
+      {showTitleDetail && equippedRegularTitle && (
+        <TitleDetailModal achievementId={equippedRegularTitle.unlockedByAchievementId} unlocked onClose={() => setShowTitleDetail(false)} />
       )}
     </div>
   )

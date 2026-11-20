@@ -9,6 +9,8 @@ import { trackChallengeParticipatedListView } from '../utils/analytics'
 import { getOrCreatePlayerId } from '../utils/profileStorage'
 import { ENDLESS_THEME } from '../config/endlessTheme'
 import { matchesChallengeModeFilter, type ChallengeModeFilter } from '../utils/challengeModeFilter'
+import { applyHistoryDisplayLimit } from '../utils/historyDisplay'
+import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import type { ChallengeApiError, ChallengeRecord, ParticipatedChallengeSummary } from '../challenge/types'
 
 interface Props {
@@ -104,47 +106,60 @@ export function ParticipatedChallengesScreen({ onBack, backLabel, onOpenHistory 
 
         {state.status === 'error' && <p className="mt-10 text-sm font-bold text-white/60">一覧の読み込みに失敗しました。</p>}
 
-        {state.status === 'ready' && (
-          <div className="flex w-full max-w-sm flex-col gap-3">
-            {state.summaries.filter((summary) => matchesChallengeModeFilter(summary.mode, modeFilter)).length === 0 && (
-              <p className="mt-6 text-center text-sm font-bold text-white/40">このフィルターに該当するChallengeはありません</p>
-            )}
-            {state.summaries.filter((summary) => matchesChallengeModeFilter(summary.mode, modeFilter)).map((summary) => {
-              const title = summary.creatorEquippedTitle ? TITLE_DEFS_BY_ID[summary.creatorEquippedTitle] : null
-              return (
-                <button
-                  key={summary.id}
-                  onClick={() => handleOpen(summary.id)}
-                  disabled={openingId !== null}
-                  className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left active:scale-95 disabled:opacity-60"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">{resolveAvatarEmoji(summary.creatorIcon)}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-black text-white">{summary.creatorNickname}への挑戦</p>
-                      {title && <p className="truncate text-[10px] font-bold text-fuchsia-300/80">{title.name}</p>}
-                    </div>
-                    <span className="text-[10px] font-bold tracking-widest text-white/40">{describeMode(summary)}</span>
-                  </div>
-                  <p className="mt-1.5 flex items-center gap-2 text-[11px] text-white/40">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
-                        summary.myLatestResult === 'win'
-                          ? 'bg-amber-400/20 text-amber-300'
-                          : summary.myLatestResult === 'draw'
-                            ? 'bg-white/15 text-white/70'
-                            : 'bg-white/10 text-white/50'
-                      }`}
-                    >
-                      最新: {summary.myLatestResult === 'win' ? 'WIN' : summary.myLatestResult === 'draw' ? 'DRAW' : 'LOSE'}
-                    </span>
-                    <span>{summary.myAttemptCount}回挑戦</span>
+        {state.status === 'ready' &&
+          (() => {
+            // 次フェーズ（DOPA PASS基盤ラウンド）: SentChallengesScreen.tsxと同じ方針
+            // （表示層の制限のみ、ローカルID一覧・D1行は一切切り詰めない）。
+            const hasFullHistory = qaLocalEntitlementRepository.hasEntitlement('FULL_HISTORY')
+            const { visible, truncated } = applyHistoryDisplayLimit(state.summaries, hasFullHistory)
+            const filtered = visible.filter((summary) => matchesChallengeModeFilter(summary.mode, modeFilter))
+            return (
+              <div className="flex w-full max-w-sm flex-col gap-3">
+                {truncated && (
+                  <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-center text-[11px] font-bold text-amber-300">
+                    無料ユーザーは直近5件のみ表示されます。DOPA PASSで全履歴を表示できます。
                   </p>
-                </button>
-              )
-            })}
-          </div>
-        )}
+                )}
+                {filtered.length === 0 && (
+                  <p className="mt-6 text-center text-sm font-bold text-white/40">このフィルターに該当するChallengeはありません</p>
+                )}
+                {filtered.map((summary) => {
+                  const title = summary.creatorEquippedTitle ? TITLE_DEFS_BY_ID[summary.creatorEquippedTitle] : null
+                  return (
+                    <button
+                      key={summary.id}
+                      onClick={() => handleOpen(summary.id)}
+                      disabled={openingId !== null}
+                      className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left active:scale-95 disabled:opacity-60"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{resolveAvatarEmoji(summary.creatorIcon)}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-black text-white">{summary.creatorNickname}への挑戦</p>
+                          {title && <p className="truncate text-[10px] font-bold text-fuchsia-300/80">{title.name}</p>}
+                        </div>
+                        <span className="text-[10px] font-bold tracking-widest text-white/40">{describeMode(summary)}</span>
+                      </div>
+                      <p className="mt-1.5 flex items-center gap-2 text-[11px] text-white/40">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+                            summary.myLatestResult === 'win'
+                              ? 'bg-amber-400/20 text-amber-300'
+                              : summary.myLatestResult === 'draw'
+                                ? 'bg-white/15 text-white/70'
+                                : 'bg-white/10 text-white/50'
+                          }`}
+                        >
+                          最新: {summary.myLatestResult === 'win' ? 'WIN' : summary.myLatestResult === 'draw' ? 'DRAW' : 'LOSE'}
+                        </span>
+                        <span>{summary.myAttemptCount}回挑戦</span>
+                      </p>
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })()}
       </div>
     </div>
   )

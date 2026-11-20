@@ -11,6 +11,7 @@ import { QUESTION_MODULES } from '../questions'
 import { FINAL_QUESTION_MODULES } from '../questions/final'
 import { EndlessAdvancedRuleCard } from './EndlessAdvancedRuleCard'
 import { setBgmProgress, setFinalIntensity, setFinalMode, startBgm, stopBgm } from '../utils/bgm'
+import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import { localHeartRepository } from '../utils/heartRepository'
 import type { ChallengeProblemSetItem } from '../challenge/types'
 import type { EndlessDifficulty } from '../types'
@@ -129,7 +130,8 @@ export function EndlessPlayScreen({ difficulty, onFinish, onQuit, qaMode = false
   useEffect(() => {
     if (phase !== 'countdown' || qaMode || heartConsumedRef.current) return
     heartConsumedRef.current = true
-    localHeartRepository.consumeHeart()
+    // 次フェーズ（DOPA PASS基盤ラウンド、item 26）: DOPA PASS所有者はHeartを消費しない。
+    localHeartRepository.consumeHeart(Date.now(), qaLocalEntitlementRepository.hasEntitlement('UNLIMITED_HEART'))
   }, [phase, qaMode])
 
   // BGM（utils/bgm.ts）は難易度ごとに別の既存アンビエントをそのまま再利用する。

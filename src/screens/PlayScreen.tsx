@@ -8,6 +8,7 @@ import { computeFinalResult } from '../engine/resultEngineV4'
 import { useRushGame } from '../engine/useRushGame'
 import { QUESTION_MODULES } from '../questions'
 import { FinalTrialScreen } from './FinalTrialScreen'
+import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import { localHeartRepository } from '../utils/heartRepository'
 import { isMuted, setMuted } from '../utils/sound'
 import type { ChallengeProblemSetItem, FinalResultV4, PlayStats } from '../types'
@@ -80,7 +81,10 @@ export function PlayScreen({ onFinish, onQuit, replayQuestions, onQuestionResolv
   useEffect(() => {
     if (!official || heartConsumedRef.current) return
     heartConsumedRef.current = true
-    localHeartRepository.consumeHeart()
+    // 次フェーズ（DOPA PASS基盤ラウンド、item 26）: DOPA PASS所有者はHeartを消費しない。
+    // 無料ユーザーのHeart消費ロジック自体（この呼び出し自体）は一切変更しない——
+    // bypass引数はheartRepository.ts側が前ラウンドから既に持っていた境界。
+    localHeartRepository.consumeHeart(Date.now(), qaLocalEntitlementRepository.hasEntitlement('UNLIMITED_HEART'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

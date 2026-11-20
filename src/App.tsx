@@ -22,6 +22,8 @@ import { EndlessPlayScreen } from './screens/EndlessPlayScreen'
 import { EndlessResultScreen } from './screens/EndlessResultScreen'
 import { EndlessSelectScreen } from './screens/EndlessSelectScreen'
 import { ParticipatedChallengesScreen } from './screens/ParticipatedChallengesScreen'
+import { PassAnalyticsScreen } from './screens/PassAnalyticsScreen'
+import { PassPaywallScreen } from './screens/PassPaywallScreen'
 import { PlayScreen } from './screens/PlayScreen'
 import { ProfileEditScreen } from './screens/ProfileEditScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
@@ -36,11 +38,13 @@ import { TitleScreen } from './screens/TitleScreen'
 import { addCreatedChallengeId } from './challenge/createdChallengesStorage'
 import { extractChallengeIdFromLocation } from './challenge/url'
 import { extractRoomCodeFromLocation } from './battle/battleUrl'
-import { trackChallengePlayed, trackGameStart, trackReplayStart } from './utils/analytics'
+import { trackChallengePlayed, trackGameStart, trackReplayStart, type PassPaywallSource } from './utils/analytics'
 import { unlockAudio } from './utils/audioContext'
 import { runMigrationsOnce } from './utils/migrations'
 import { getOrCreatePlayerId, getProfile } from './utils/profileStorage'
 import { sfx } from './utils/sound'
+import { checkAndConsumeInterstitial, recordEligiblePlayCompleted } from './utils/adPolicyStorage'
+import { qaLocalEntitlementRepository } from './payment/entitlementRepository'
 import { localHeartRepository } from './utils/heartRepository'
 import { getSubScreenBackTarget, resolveSubScreenOrigin, type SubScreenOrigin } from './utils/subScreenNavigation'
 import type { BattleMode, BattleOpponentProfile } from './battle/types'
@@ -48,6 +52,7 @@ import type { ChallengeRecord } from './challenge/types'
 import type { AchievementId, EndlessDifficulty, FinalResultV4, ScreenName } from './types'
 import { AchievementUnlockBanner } from './components/AchievementUnlockBanner'
 import { HeartEmptyModal } from './components/HeartEmptyModal'
+import { MockInterstitialAd } from './components/MockInterstitialAd'
 
 function toBattleProfile(profile: ReturnType<typeof getProfile>): BattleOpponentProfile {
   return { nickname: profile.nickname, avatar: profile.avatar, equippedTitleId: profile.equippedTitleId }
@@ -132,8 +137,25 @@ export default function App() {
    */
   const [heartEmptyEtaMs, setHeartEmptyEtaMs] = useState<number | null>(null)
 
+  /**
+   * 次フェーズ（DOPA PASS基盤ラウンド）: 強制インタースティシャルの「次のアクション時に
+   * だけ挟む」仕組み。結果画面の上に即座には出さない——retry/home等、ユーザーが実際に
+   * 次へ進もうとした操作をこの関数でラップし、しきい値＋クールダウンの両方を満たす
+   * 場合だけ、実際の遷移（action）をMockInterstitialAdのonClose後まで保留する。
+   */
+  const [pendingAdAction, setPendingAdAction] = useState<(() => void) | null>(null)
+  const maybeGateWithInterstitial = useCallback((action: () => void) => {
+    if (checkAndConsumeInterstitial()) {
+      setPendingAdAction(() => action)
+    } else {
+      action()
+    }
+  }, [])
+
   const startPlay = useCallback((source: 'title' | 'retry') => {
-    if (localHeartRepository.getHeartCount() <= 0) {
+    // 次フェーズ（DOPA PASS基盤ラウンド、item 26）: DOPA PASS所有者はHeart 0チェック自体を
+    // バイパスする（無料ユーザーの既存ロジックは一切変更しない）。
+    if (!qaLocalEntitlementRepository.hasEntitlement('UNLIMITED_HEART') && localHeartRepository.getHeartCount() <= 0) {
       setHeartEmptyEtaMs(localHeartRepository.getNextRecoveryEtaMs() ?? 0)
       return
     }
@@ -148,6 +170,10 @@ export default function App() {
   }, [])
 
   const handleFinish = useCallback((result: FinalResultV4) => {
+    // 次フェーズ（DOPA PASS基盤ラウンド）: DOPA RUSH/ENDLESS/World Battle合算の
+    // 強制インタースティシャル対象カウンター（Challenge・ENDLESS Challenge・
+    // PRIVATE ROOMでは呼ばない）。
+    recordEligiblePlayCompleted()
     setResult(result)
     setScreen('result')
   }, [])
@@ -176,7 +202,7 @@ export default function App() {
   }, [])
 
   const startEndless = useCallback((difficulty: EndlessDifficulty) => {
-    if (localHeartRepository.getHeartCount() <= 0) {
+    if (!qaLocalEntitlementRepository.hasEntitlement('UNLIMITED_HEART') && localHeartRepository.getHeartCount() <= 0) {
       setHeartEmptyEtaMs(localHeartRepository.getNextRecoveryEtaMs() ?? 0)
       return
     }
@@ -186,6 +212,7 @@ export default function App() {
   }, [])
 
   const handleEndlessFinish = useCallback((payload: EndlessFinishPayload) => {
+    recordEligiblePlayCompleted()
     setEndlessResult(payload)
     setScreen('endlessResult')
   }, [])
@@ -291,9 +318,32 @@ export default function App() {
   }, [])
 
   const exitBattle = useCallback(() => {
-    setBattleMatch(null)
-    setScreen('title')
-  }, [])
+    maybeGateWithInterstitial(() => {
+      setBattleMatch(null)
+      setScreen('title')
+    })
+  }, [maybeGateWithInterstitial])
+
+  /**
+   * 次フェーズ（DOPA PASS基盤ラウンド）: Profile/PRIVATE ROOM作成ゲート等、複数の入口から
+   * 開けるpaywall画面。sourceは呼び出し元（analytics.ts PassPaywallSource）ごとに変える。
+   */
+  const [passPaywallSource, setPassPaywallSource] = useState<PassPaywallSource>('profile')
+  const openPassPaywall = useCallback(
+    (source: PassPaywallSource) => {
+      setPassPaywallSource(source)
+      setSubScreenOrigin(resolveSubScreenOrigin(screen))
+      setScreen('passPaywall')
+    },
+    [screen],
+  )
+  const openPassAnalytics = useCallback(() => {
+    setSubScreenOrigin(resolveSubScreenOrigin(screen))
+    setScreen('passAnalytics')
+  }, [screen])
+  const handlePassPurchased = useCallback(() => {
+    setScreen(subScreenBackTarget.screen)
+  }, [subScreenBackTarget.screen])
 
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-[430px] overflow-hidden bg-[#0b0620]">
@@ -337,7 +387,7 @@ export default function App() {
           )}
           {screen === 'playing' && <PlayScreen key={playKey} onFinish={handleFinish} onQuit={quitToHome} />}
           {screen === 'result' && result && (
-            <ResultScreen result={result} onRetry={() => startPlay('retry')} onChallengeSent={handleChallengeSent} />
+            <ResultScreen result={result} onRetry={() => maybeGateWithInterstitial(() => startPlay('retry'))} onChallengeSent={handleChallengeSent} />
           )}
           {screen === 'endlessSelect' && <EndlessSelectScreen onSelect={startEndless} onBack={quitToHome} />}
           {screen === 'endlessPlaying' && (
@@ -352,9 +402,9 @@ export default function App() {
               newlyUnlockedAchievements={endlessResult.newlyUnlockedAchievements}
               recordedProblemSet={endlessResult.recordedProblemSet}
               onChallengeSent={handleChallengeSent}
-              onRetry={() => startEndless(endlessDifficulty)}
-              onChangeDifficulty={() => setScreen('endlessSelect')}
-              onHome={quitToHome}
+              onRetry={() => maybeGateWithInterstitial(() => startEndless(endlessDifficulty))}
+              onChangeDifficulty={() => maybeGateWithInterstitial(() => setScreen('endlessSelect'))}
+              onHome={() => maybeGateWithInterstitial(quitToHome)}
             />
           )}
           {screen === 'profile' && (
@@ -365,11 +415,17 @@ export default function App() {
               onRanking={openRanking}
               onSentChallenges={openSentChallenges}
               onParticipatedChallenges={openParticipatedChallenges}
+              onOpenPassAnalytics={openPassAnalytics}
+              onOpenPassPaywall={() => openPassPaywall('profile')}
             />
           )}
           {screen === 'profileEdit' && <ProfileEditScreen onDone={openProfile} />}
           {screen === 'achievements' && <AchievementScreen onBack={backFromSubScreen} backLabel={subScreenBackTarget.label} />}
           {screen === 'ranking' && <RankingScreen onBack={backFromSubScreen} backLabel={subScreenBackTarget.label} />}
+          {screen === 'passAnalytics' && <PassAnalyticsScreen onBack={backFromSubScreen} />}
+          {screen === 'passPaywall' && (
+            <PassPaywallScreen source={passPaywallSource} onBack={backFromSubScreen} onPurchased={handlePassPurchased} />
+          )}
           {screen === 'challengeReceive' && challengeId && (
             <ChallengeReceiveScreen
               challengeId={challengeId}
@@ -435,6 +491,15 @@ export default function App() {
         </>
       )}
       {heartEmptyEtaMs !== null && <HeartEmptyModal initialEtaMs={heartEmptyEtaMs} onClose={() => setHeartEmptyEtaMs(null)} />}
+      {pendingAdAction && (
+        <MockInterstitialAd
+          onClose={() => {
+            const action = pendingAdAction
+            setPendingAdAction(null)
+            action()
+          }}
+        />
+      )}
     </div>
   )
 }

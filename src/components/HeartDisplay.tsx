@@ -20,8 +20,12 @@ const TICK_MS = 1000
  *   表示しない（item 3。「MAXまたは何も表示しない」はどちらも許容との指示のため、
  *   より主張が弱い「非表示」を採用）。
  * - タップで詳細モーダル（HeartDetailModal）を開く（item 5）。
+ *
+ * 次フェーズ（DOPA PASS基盤ラウンド）: `unlimited`がtrueの間（DOPA PASS所有者）は、
+ * 5枠表示の代わりに「∞ HEART / DOPA PASS」の1行表示に切り替える——無料ユーザーの
+ * Heartロジック・表示自体は一切変更しない（unlimited=falseの分岐は従来のまま）。
  */
-export function HeartDisplay() {
+export function HeartDisplay({ unlimited = false }: { unlimited?: boolean }) {
   const [count, setCount] = useState(() => localHeartRepository.getHeartCount())
   const [etaMs, setEtaMs] = useState(() => localHeartRepository.getNextRecoveryEtaMs())
   const [showDetail, setShowDetail] = useState(false)
@@ -41,21 +45,30 @@ export function HeartDisplay() {
       <button
         onClick={() => setShowDetail(true)}
         className="flex flex-col items-end gap-0.5 self-end active:opacity-70"
-        aria-label={`Heart ${count} / ${HEART_CAP}`}
+        aria-label={unlimited ? 'Heart unlimited (DOPA PASS)' : `Heart ${count} / ${HEART_CAP}`}
       >
-        <span className="flex items-center gap-0.5">
-          {Array.from({ length: view.totalSlots }, (_, index) => (
-            <HeartIcon key={index} filled={index < view.filledSlots} size={20} />
-          ))}
-          {view.overflow > 0 && <span className="ml-0.5 text-sm font-black tabular-nums text-rose-300">+{view.overflow}</span>}
-        </span>
-        {view.showRecoveryTimer && etaMs !== null && (
-          <span className="text-[11px] font-bold tabular-nums text-white/40">
-            次の回復まで {formatMmSs(etaMs)}
+        {unlimited ? (
+          <span className="flex items-center gap-1">
+            <HeartIcon filled size={20} />
+            <span className="text-xs font-black text-amber-300">∞ HEART / DOPA PASS</span>
           </span>
+        ) : (
+          <>
+            <span className="flex items-center gap-0.5">
+              {Array.from({ length: view.totalSlots }, (_, index) => (
+                <HeartIcon key={index} filled={index < view.filledSlots} size={20} />
+              ))}
+              {view.overflow > 0 && <span className="ml-0.5 text-sm font-black tabular-nums text-rose-300">+{view.overflow}</span>}
+            </span>
+            {view.showRecoveryTimer && etaMs !== null && (
+              <span className="text-[11px] font-bold tabular-nums text-white/40">
+                次の回復まで {formatMmSs(etaMs)}
+              </span>
+            )}
+          </>
         )}
       </button>
-      {showDetail && <HeartDetailModal onClose={() => setShowDetail(false)} />}
+      {showDetail && <HeartDetailModal onClose={() => setShowDetail(false)} unlimited={unlimited} />}
     </>
   )
 }

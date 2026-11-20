@@ -1,10 +1,13 @@
+import { useState } from 'react'
 import { AdSlot } from '../components/AdSlot'
 import { HeartDisplay } from '../components/HeartDisplay'
 import { AD_START_SCREEN, ADS_ENABLED_V6 } from '../config/ads'
 import { HOME_MODES, type HomeModeId } from '../config/homeConfig'
 import { TITLE_TEXT } from '../config/messagesV4'
 import { HeartQaPanel } from '../dev/HeartQaPanel'
-import { isHeartQaPanelRequested } from '../dev/overdrivePreview'
+import { PassQaPanel } from '../dev/PassQaPanel'
+import { isHeartQaPanelRequested, isPassQaPanelRequested } from '../dev/overdrivePreview'
+import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import { qaSetHeartCount } from '../utils/heartRepository'
 import { getBestPercent } from '../utils/storage'
 
@@ -29,6 +32,11 @@ interface Props {
  */
 export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProfile, onOpenAchievements, onOpenRanking }: Props) {
   const best = getBestPercent()
+  // 次フェーズ（DOPA PASS基盤ラウンド）: PassQaPanelでの切り替えを即座に全PASS依存UIへ
+  // 反映させるための再評価トリガー（qaLocalEntitlementRepositoryはlocalStorage読み取りのため
+  // Reactのstateではなく、この値を変えて強制的に再読み込みさせる）。
+  const [, setPassRevision] = useState(0)
+  const hasUnlimitedHeart = qaLocalEntitlementRepository.hasEntitlement('UNLIMITED_HEART')
 
   const handlers: Record<HomeModeId, () => void> = {
     rush: onStart,
@@ -38,7 +46,7 @@ export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProf
 
   return (
     <div className="flex min-h-dvh flex-col items-center gap-5 px-6 py-8 text-center">
-      <HeartDisplay />
+      <HeartDisplay unlimited={hasUnlimitedHeart} />
       {/* Ver.6 Phase 9（実機QA反映）: 広告（下部100px枠）を非表示にしたことで、タイトル〜
           PROFILE/ACHIEVEMENT/RANKINGのまとまり全体がjustify-centerのままだと画面上寄りに
           見えるようになった。カード自体のサイズ・配色・フォントサイズは一切変えず、
@@ -99,6 +107,7 @@ export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProf
       )}
       <div aria-hidden="true" className="flex-[1]" />
       {isHeartQaPanelRequested() && <HeartQaPanel onSet={(count) => qaSetHeartCount(count)} />}
+      {isPassQaPanelRequested() && <PassQaPanel onChange={() => setPassRevision((r) => r + 1)} />}
     </div>
   )
 }

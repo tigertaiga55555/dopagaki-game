@@ -133,3 +133,25 @@ export async function fetchBattleStats(playerId: string): Promise<BattleStatsRes
     return null
   }
 }
+
+export interface BattlePerformanceResponse {
+  sampleSize: number
+  avgFinalDopaPercent: number
+  avgBaseDopaPercent: number
+  avgAccuracy: number
+  avgMaxCombo: number
+  avgMedianReactionMs: number | null
+  winsByDecidedBy: Record<string, number>
+}
+
+/** 次フェーズ（DOPA PASS基盤ラウンド、item 28）: PASS限定分析画面向け、世界対戦の平均パフォーマンス。 */
+export async function fetchBattlePerformance(playerId: string): Promise<BattlePerformanceResponse | null> {
+  try {
+    const res = await fetch(`/api/battles/performance/${encodeURIComponent(playerId)}`)
+    if (!res.ok) return null
+    const body = (await res.json()) as { ok: boolean; value?: BattlePerformanceResponse }
+    return body.ok ? (body.value ?? null) : null
+  } catch {
+    return null
+  }
+}

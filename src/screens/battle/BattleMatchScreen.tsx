@@ -14,6 +14,7 @@ import {
   checkWorldBattleStreakAchievements,
   checkWorldBattleWinAchievements,
 } from '../../utils/achievementStorage'
+import { recordEligiblePlayCompleted } from '../../utils/adPolicyStorage'
 import { incrementFriendBattlePlayCount, recordWorldBattleOutcome } from '../../utils/battleStatsStorage'
 import { getOfficialPlayCount, incrementOfficialPlayCount } from '../../utils/storage'
 import { PlayScreen } from '../PlayScreen'
@@ -108,6 +109,10 @@ export function BattleMatchScreen({ matchId, mode, roomCode, playerId, myProfile
           incrementOfficialPlayCount()
           let unlocked: AchievementId[] = checkGrindAchievements(getOfficialPlayCount())
           if (mode === 'world') {
+            // 次フェーズ（DOPA PASS基盤ラウンド）: DOPA RUSH/ENDLESS/World Battle合算の
+            // 強制インタースティシャル対象カウンター。World Battleだけがここに来る
+            // （Friend Battle・PRIVATE ROOM経由のmode:'friend'な試合は一切カウントしない）。
+            recordEligiblePlayCompleted()
             const stats = recordWorldBattleOutcome(myOutcome)
             unlocked = [
               ...unlocked,
