@@ -11,6 +11,10 @@
 export function createFakeD1Database() {
   const rows = new Map<string, Record<string, unknown>>()
   const attemptRows: Record<string, unknown>[] = []
+  // 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM）: private_rooms
+  // （host_player_idがPRIMARY KEY）。他のテーブルとは無関係に追加しただけで、既存の
+  // Challenge関連クエリ照合には一切影響しない。
+  const privateRooms = new Map<string, { host_player_id: string; room_code: string; created_at: number }>()
 
   function prepare(query: string) {
     let boundValues: unknown[] = []
@@ -100,9 +104,27 @@ export function createFakeD1Database() {
           })
           return { success: true, meta: {} }
         }
+        if (query.startsWith('INSERT INTO private_rooms')) {
+          const [hostPlayerId, roomCode, createdAt] = boundValues as [string, string, number]
+          if (privateRooms.has(hostPlayerId)) {
+            throw new Error('UNIQUE constraint failed: private_rooms.host_player_id')
+          }
+          privateRooms.set(hostPlayerId, { host_player_id: hostPlayerId, room_code: roomCode, created_at: createdAt })
+          return { success: true, meta: {} }
+        }
+        if (query.startsWith('DELETE FROM private_rooms')) {
+          const [hostPlayerId] = boundValues as [string]
+          privateRooms.delete(hostPlayerId)
+          return { success: true, meta: {} }
+        }
         throw new Error(`fake D1: unsupported run() query: ${query}`)
       },
       async first<T>() {
+        if (query.startsWith('SELECT room_code FROM private_rooms WHERE host_player_id = ?')) {
+          const [hostPlayerId] = boundValues as [string]
+          const row = privateRooms.get(hostPlayerId)
+          return (row ? { room_code: row.room_code } : null) as T | null
+        }
         if (query.startsWith('SELECT * FROM challenges WHERE id = ?')) {
           const id = boundValues[0] as string
           return (rows.get(id) as T | undefined) ?? null
@@ -173,5 +195,5 @@ export function createFakeD1Database() {
     return stmt
   }
 
-  return { prepare, _rows: rows, _attemptRows: attemptRows }
+  return { prepare, _rows: rows, _attemptRows: attemptRows, _privateRooms: privateRooms }
 }

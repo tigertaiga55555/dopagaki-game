@@ -73,3 +73,101 @@ describe('createD1BattleRepository (Ver.6 Phase 6: 世界対戦戦績のD1永続
     expect(await repo.getStats('p1')).toEqual({ wins: 1, losses: 0, draws: 0, currentStreak: 1, maxStreak: 1 })
   })
 })
+
+describe('createD1BattleRepository.getPerformanceAggregates (次フェーズ、DOPA PASS基盤ラウンド item 28)', () => {
+  it('記録が無ければsampleSize=0・平均値は0・反応速度はnull', async () => {
+    const db = createBattleFakeD1Database()
+    const repo = createD1BattleRepository(db as never)
+    const value = await repo.getPerformanceAggregates('never-played')
+    expect(value.sampleSize).toBe(0)
+    expect(value.avgFinalDopaPercent).toBe(0)
+    expect(value.avgMedianReactionMs).toBeNull()
+  })
+
+  it('player1側の試合を自分視点で正しく集計する', async () => {
+    const db = createBattleFakeD1Database()
+    const repo = createD1BattleRepository(db as never)
+    await repo.recordMatch({
+      matchId: 'm1',
+      mode: 'world',
+      player1Id: 'p1',
+      player2Id: 'p2',
+      player1Performance: perf({ finalDopaPercent: 100, accuracy: 0.9, maxCombo: 10, medianCorrectReactionMs: 400 }),
+      player2Performance: perf({ finalDopaPercent: 80 }),
+      winner: 'playerA',
+      decidedBy: 'finalDopaPercent',
+      startedAt: 1000,
+      finishedAt: 2000,
+      finishReason: 'completed',
+    })
+    const value = await repo.getPerformanceAggregates('p1')
+    expect(value.sampleSize).toBe(1)
+    expect(value.avgFinalDopaPercent).toBe(100)
+    expect(value.avgAccuracy).toBe(0.9)
+    expect(value.avgMaxCombo).toBe(10)
+    expect(value.avgMedianReactionMs).toBe(400)
+    expect(value.winsByDecidedBy.finalDopaPercent).toBe(1)
+  })
+
+  it('player2側の試合でも自分視点（player2の列）で正しく集計する', async () => {
+    const db = createBattleFakeD1Database()
+    const repo = createD1BattleRepository(db as never)
+    await repo.recordMatch({
+      matchId: 'm1',
+      mode: 'world',
+      player1Id: 'p1',
+      player2Id: 'p2',
+      player1Performance: perf({ finalDopaPercent: 60 }),
+      player2Performance: perf({ finalDopaPercent: 90, maxCombo: 7 }),
+      winner: 'playerB',
+      decidedBy: 'maxCombo',
+      startedAt: 1000,
+      finishedAt: 2000,
+      finishReason: 'completed',
+    })
+    const value = await repo.getPerformanceAggregates('p2')
+    expect(value.avgFinalDopaPercent).toBe(90)
+    expect(value.avgMaxCombo).toBe(7)
+    expect(value.winsByDecidedBy.maxCombo).toBe(1)
+  })
+
+  it('finish_reasonがcompleted以外（forfeit等）の試合は集計対象外', async () => {
+    const db = createBattleFakeD1Database()
+    const repo = createD1BattleRepository(db as never)
+    await repo.recordMatch({
+      matchId: 'm1',
+      mode: 'world',
+      player1Id: 'p1',
+      player2Id: 'p2',
+      player1Performance: perf(),
+      player2Performance: perf(),
+      winner: 'playerA',
+      decidedBy: null,
+      startedAt: 1000,
+      finishedAt: 2000,
+      finishReason: 'forfeit',
+    })
+    const value = await repo.getPerformanceAggregates('p1')
+    expect(value.sampleSize).toBe(0)
+  })
+
+  it('mode=friendの試合は集計対象外（世界対戦のみ）', async () => {
+    const db = createBattleFakeD1Database()
+    const repo = createD1BattleRepository(db as never)
+    await repo.recordMatch({
+      matchId: 'm1',
+      mode: 'friend',
+      player1Id: 'p1',
+      player2Id: 'p2',
+      player1Performance: perf(),
+      player2Performance: perf(),
+      winner: 'playerA',
+      decidedBy: 'finalDopaPercent',
+      startedAt: 1000,
+      finishedAt: 2000,
+      finishReason: 'completed',
+    })
+    const value = await repo.getPerformanceAggregates('p1')
+    expect(value.sampleSize).toBe(0)
+  })
+})

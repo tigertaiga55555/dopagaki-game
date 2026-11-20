@@ -796,3 +796,100 @@ describe('worker fetch handler: POST /api/challenges/participated-summaries (Ver
     expect(emptyIds.status).toBe(400)
   })
 })
+
+/**
+ * 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM）: POST/GET /api/rooms/private
+ * のルーティング層テスト。PRIVATE_ROOM（Durable Object binding）自体は実際のDOではなく、
+ * 「渡されたinternal/* パスへfetchが来たら200を返すだけ」の最小フェイクを使う
+ * ——ここでの検証対象はPrivateRoom DOの内部ロジックではなく、ルーティング・
+ * 「1部屋/ホスト」制限のD1連携（claimRoomForHost）だけ。
+ */
+function fakePrivateRoomNamespace() {
+  return {
+    idFromName: (name: string) => name,
+    get: () => ({
+      fetch: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    }),
+  }
+}
+
+describe('worker fetch handler: POST/GET /api/rooms/private (DOPA PASS基盤ラウンド item 15 PRIVATE ROOM)', () => {
+  it('CHALLENGE_DB/PRIVATE_ROOMのいずれかが無ければnot_configuredを返す', async () => {
+    const res = await worker.fetch(
+      new Request('https://example.com/api/rooms/private', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ hostPlayerId: 'host1', hostProfile: { nickname: 'A', avatar: { kind: 'preset', iconId: 'star' }, equippedTitleId: null } }),
+      }),
+      {} as never,
+    )
+    const body = (await res.json()) as ChallengeApiResult<never>
+    expect(body.ok).toBe(false)
+    if (!body.ok) expect(body.error).toBe('not_configured')
+  })
+
+  it('hostPlayerId/hostProfile欠落は400 invalid_input', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never, PRIVATE_ROOM: fakePrivateRoomNamespace() as never }
+    const res = await worker.fetch(
+      new Request('https://example.com/api/rooms/private', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) }),
+      env,
+    )
+    expect(res.status).toBe(400)
+  })
+
+  it('新規ホストの作成は201・roomCodeを返す', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never, PRIVATE_ROOM: fakePrivateRoomNamespace() as never }
+    const res = await worker.fetch(
+      new Request('https://example.com/api/rooms/private', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ hostPlayerId: 'host1', hostProfile: { nickname: 'A', avatar: { kind: 'preset', iconId: 'star' }, equippedTitleId: null } }),
+      }),
+      env,
+    )
+    expect(res.status).toBe(201)
+    const body = (await res.json()) as ChallengeApiResult<{ roomCode: string }>
+    if (!body.ok) throw new Error('expected success')
+    expect(typeof body.value.roomCode).toBe('string')
+  })
+
+  it('同じホストが2回目に作成を試みると、既存roomCodeへ戻す（新規作成しない）', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never, PRIVATE_ROOM: fakePrivateRoomNamespace() as never }
+    const profile = { nickname: 'A', avatar: { kind: 'preset', iconId: 'star' }, equippedTitleId: null }
+
+    const first = await worker.fetch(
+      new Request('https://example.com/api/rooms/private', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ hostPlayerId: 'host1', hostProfile: profile }),
+      }),
+      env,
+    )
+    const firstBody = (await first.json()) as ChallengeApiResult<{ roomCode: string }>
+    if (!firstBody.ok) throw new Error('expected success')
+
+    const second = await worker.fetch(
+      new Request('https://example.com/api/rooms/private', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ hostPlayerId: 'host1', hostProfile: profile }),
+      }),
+      env,
+    )
+    expect(second.status).toBe(200)
+    const secondBody = (await second.json()) as ChallengeApiResult<{ roomCode: string }>
+    if (!secondBody.ok) throw new Error('expected success')
+    expect(secondBody.value.roomCode).toBe(firstBody.value.roomCode)
+  })
+
+  it('GET /api/rooms/private/:roomCode: 不正な形式のroomCodeはnot_found', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never, PRIVATE_ROOM: fakePrivateRoomNamespace() as never }
+    const res = await worker.fetch(new Request('https://example.com/api/rooms/private/!!!'), env)
+    const body = await res.json()
+    expect(body).toEqual({ ok: false, reason: 'not_found' })
+  })
+})
