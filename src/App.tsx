@@ -42,6 +42,7 @@ import { runMigrationsOnce } from './utils/migrations'
 import { getOrCreatePlayerId, getProfile } from './utils/profileStorage'
 import { sfx } from './utils/sound'
 import { localHeartRepository } from './utils/heartRepository'
+import { getSubScreenBackTarget, resolveSubScreenOrigin, type SubScreenOrigin } from './utils/subScreenNavigation'
 import type { BattleMode, BattleOpponentProfile } from './battle/types'
 import type { ChallengeRecord } from './challenge/types'
 import type { AchievementId, EndlessDifficulty, FinalResultV4, ScreenName } from './types'
@@ -241,10 +242,33 @@ export default function App() {
    */
   const openProfile = useCallback(() => setScreen('profile'), [])
   const openProfileEdit = useCallback(() => setScreen('profileEdit'), [])
-  const openAchievements = useCallback(() => setScreen('achievements'), [])
-  const openRanking = useCallback(() => setScreen('ranking'), [])
-  const openSentChallenges = useCallback(() => setScreen('challengeSentList'), [])
-  const openParticipatedChallenges = useCallback(() => setScreen('challengeParticipatedList'), [])
+
+  /**
+   * 次フェーズ（item 17/18）: Achievement/Ranking/作成したChallenge/参加したChallengeの
+   * 4画面は、Profileからも・Home（title画面のサブ導線）からも開ける。開いた瞬間の
+   * 現在screenから「どこから来たか」をsubScreenOriginへ記録し、各画面の「戻る」は
+   * 常にHomeへ固定せず、記録した方へ戻す（ブラウザのhistoryには一切依存しない、
+   * 既存のscreen状態モデル内だけで解決する——ユーザー指示どおり）。
+   */
+  const [subScreenOrigin, setSubScreenOrigin] = useState<SubScreenOrigin>('title')
+  const openAchievements = useCallback(() => {
+    setSubScreenOrigin(resolveSubScreenOrigin(screen))
+    setScreen('achievements')
+  }, [screen])
+  const openRanking = useCallback(() => {
+    setSubScreenOrigin(resolveSubScreenOrigin(screen))
+    setScreen('ranking')
+  }, [screen])
+  const openSentChallenges = useCallback(() => {
+    setSubScreenOrigin(resolveSubScreenOrigin(screen))
+    setScreen('challengeSentList')
+  }, [screen])
+  const openParticipatedChallenges = useCallback(() => {
+    setSubScreenOrigin(resolveSubScreenOrigin(screen))
+    setScreen('challengeParticipatedList')
+  }, [screen])
+  const subScreenBackTarget = getSubScreenBackTarget(subScreenOrigin)
+  const backFromSubScreen = useCallback(() => setScreen(subScreenBackTarget.screen), [subScreenBackTarget.screen])
 
   /**
    * Ver.6 Phase 6（1対1リアルタイム対戦）: BATTLE（世界対戦・フレンド対戦）の画面遷移。
@@ -344,8 +368,8 @@ export default function App() {
             />
           )}
           {screen === 'profileEdit' && <ProfileEditScreen onDone={openProfile} />}
-          {screen === 'achievements' && <AchievementScreen onBack={quitToHome} />}
-          {screen === 'ranking' && <RankingScreen onBack={quitToHome} />}
+          {screen === 'achievements' && <AchievementScreen onBack={backFromSubScreen} backLabel={subScreenBackTarget.label} />}
+          {screen === 'ranking' && <RankingScreen onBack={backFromSubScreen} backLabel={subScreenBackTarget.label} />}
           {screen === 'challengeReceive' && challengeId && (
             <ChallengeReceiveScreen
               challengeId={challengeId}
@@ -377,9 +401,11 @@ export default function App() {
           {screen === 'challengeHistory' && activeChallenge && (
             <ChallengeHistoryScreen challenge={activeChallenge} onBack={quitToHome} />
           )}
-          {screen === 'challengeSentList' && <SentChallengesScreen onBack={quitToHome} onOpenHistory={openChallengeHistory} />}
+          {screen === 'challengeSentList' && (
+            <SentChallengesScreen onBack={backFromSubScreen} backLabel={subScreenBackTarget.label} onOpenHistory={openChallengeHistory} />
+          )}
           {screen === 'challengeParticipatedList' && (
-            <ParticipatedChallengesScreen onBack={quitToHome} onOpenHistory={openChallengeHistory} />
+            <ParticipatedChallengesScreen onBack={backFromSubScreen} backLabel={subScreenBackTarget.label} onOpenHistory={openChallengeHistory} />
           )}
           {screen === 'battleHome' && (
             <BattleHomeScreen onBack={quitToHome} onWorldBattle={openWorldMatching} onFriendBattle={openFriendBattle} />

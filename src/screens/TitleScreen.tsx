@@ -1,15 +1,12 @@
-import { useEffect, useState } from 'react'
 import { AdSlot } from '../components/AdSlot'
+import { HeartDisplay } from '../components/HeartDisplay'
 import { AD_START_SCREEN, ADS_ENABLED_V6 } from '../config/ads'
 import { HOME_MODES, type HomeModeId } from '../config/homeConfig'
 import { TITLE_TEXT } from '../config/messagesV4'
 import { HeartQaPanel } from '../dev/HeartQaPanel'
 import { isHeartQaPanelRequested } from '../dev/overdrivePreview'
-import { HEART_CAP, localHeartRepository, qaSetHeartCount } from '../utils/heartRepository'
+import { qaSetHeartCount } from '../utils/heartRepository'
 import { getBestPercent } from '../utils/storage'
-
-/** ホーム画面を表示したままどれくらいの頻度でHeart表示を再計算するか（自然回復の見え方）。 */
-const HEART_DISPLAY_REFRESH_MS = 15_000
 
 interface Props {
   onStart: () => void
@@ -33,15 +30,6 @@ interface Props {
 export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProfile, onOpenAchievements, onOpenRanking }: Props) {
   const best = getBestPercent()
 
-  // 次フェーズ（DOPA HEART本実装、item 11）: ホーム画面に常時「❤️ N / 5」を表示する。
-  // 自然回復は時間経過で進むため、ホーム画面を開いたままでも見た目が更新されるよう
-  // 軽い間隔で再計算する（厳密なリアルタイム性は不要、というユーザー指示の範囲内）。
-  const [heartCount, setHeartCount] = useState(() => localHeartRepository.getHeartCount())
-  useEffect(() => {
-    const interval = setInterval(() => setHeartCount(localHeartRepository.getHeartCount()), HEART_DISPLAY_REFRESH_MS)
-    return () => clearInterval(interval)
-  }, [])
-
   const handlers: Record<HomeModeId, () => void> = {
     rush: onStart,
     endless: onStartEndless,
@@ -50,13 +38,7 @@ export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProf
 
   return (
     <div className="flex min-h-dvh flex-col items-center gap-5 px-6 py-8 text-center">
-      {/* item 11: 所持数が自然回復上限（HEART_CAP）を超えている場合も、そのまま
-          「❤️ 8 / 5」のように表示できるようにする（データモデル側でhard capにしていない
-          ため、表示側も上限超過をそのまま出すだけで特別な分岐は要らない）。 */}
-      <div className="flex items-center gap-1 self-end text-xs font-black tabular-nums text-rose-300">
-        <span aria-hidden="true">❤️</span>
-        {heartCount} / {HEART_CAP}
-      </div>
+      <HeartDisplay />
       {/* Ver.6 Phase 9（実機QA反映）: 広告（下部100px枠）を非表示にしたことで、タイトル〜
           PROFILE/ACHIEVEMENT/RANKINGのまとまり全体がjustify-centerのままだと画面上寄りに
           見えるようになった。カード自体のサイズ・配色・フォントサイズは一切変えず、
@@ -116,14 +98,7 @@ export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProf
         <AdSlot adTag={AD_START_SCREEN.tag} width={AD_START_SCREEN.width} height={AD_START_SCREEN.height} label={AD_START_SCREEN.slotName} />
       )}
       <div aria-hidden="true" className="flex-[1]" />
-      {isHeartQaPanelRequested() && (
-        <HeartQaPanel
-          onSet={(count) => {
-            qaSetHeartCount(count)
-            setHeartCount(localHeartRepository.getHeartCount())
-          }}
-        />
-      )}
+      {isHeartQaPanelRequested() && <HeartQaPanel onSet={(count) => qaSetHeartCount(count)} />}
     </div>
   )
 }

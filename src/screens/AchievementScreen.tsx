@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BackButton } from '../components/BackButton'
+import { TitleDetailModal } from '../components/TitleDetailModal'
 import { ACHIEVEMENT_DEFS } from '../config/achievements'
 import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
 import { ENDLESS_THEME } from '../config/endlessTheme'
@@ -11,6 +12,8 @@ import type { AchievementCategory, AchievementId } from '../types'
 
 interface Props {
   onBack: () => void
+  /** 次フェーズ（item 17/18）: ProfileからのHomeからで戻り先・ラベルが変わる（App.tsx側で決定）。 */
+  backLabel: string
 }
 
 /**
@@ -62,9 +65,22 @@ const BATTLE_MODE_LABEL: Partial<Record<AchievementCategory, string>> = {
  * 訪問中はずっとNEWバッジを表示し続け、次回の訪問からは消える——という最も単純で
  * 「ユーザーが気づけること」を優先した方式にした。
  */
-export function AchievementScreen({ onBack }: Props) {
+export function AchievementScreen({ onBack, backLabel }: Props) {
   const [revision, setRevision] = useState(0)
   const [filter, setFilter] = useState<FilterTab>('all')
+  // 次フェーズ（item 10）: 実績カードをタップした際に、ProfileScreen.tsxと共通の
+  // TitleDetailModalを開く（詳細表示の実装を2重化しない）。
+  const [detailId, setDetailId] = useState<AchievementId | null>(null)
+
+  // 次フェーズ（item 19）: タブ行は7個あり390px幅には収まらず横スクロール設計のまま
+  // （大規模な再設計はしない——ユーザー指示）。ただし「スクロールできることが分かりにくい」
+  // 実機フィードバックに応じ、軽い改善だけを足す——①選択中タブへの自動scrollIntoView、
+  // ②右端にフェードを置き「まだ続きがある」ことを視覚的に示す、の2点のみ。
+  const tabRowRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const active = tabRowRef.current?.querySelector<HTMLButtonElement>(`[data-tab-id="${filter}"]`)
+    active?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+  }, [filter])
   const [newIds] = useState<Set<AchievementId>>(() => {
     const unseen = new Set(getUnseenUnlockedAchievementIds())
     markAllUnlockedAchievementsSeen()
@@ -87,7 +103,7 @@ export function AchievementScreen({ onBack }: Props) {
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
-      <BackButton onBack={onBack} label="戻る" />
+      <BackButton onBack={onBack} label={backLabel} />
 
       <div className="flex flex-1 flex-col items-center gap-3 px-5 py-4">
         <h1 className="text-lg font-black tracking-widest text-white">ACHIEVEMENT</h1>
@@ -95,18 +111,27 @@ export function AchievementScreen({ onBack }: Props) {
           {unlockedCount} / {ACHIEVEMENT_DEFS.length}
         </p>
 
-        <div className="flex w-full max-w-sm gap-1.5 overflow-x-auto rounded-full bg-white/5 p-1" style={{ scrollbarWidth: 'none' }}>
-          {FILTER_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setFilter(tab.id)}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-black tracking-widest transition-colors ${
-                filter === tab.id ? 'bg-fuchsia-500/80 text-white' : 'text-white/45'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="relative w-full max-w-sm">
+          <div
+            ref={tabRowRef}
+            className="flex gap-1.5 overflow-x-auto rounded-full bg-white/5 p-1 pr-6"
+            style={{ scrollbarWidth: 'none' }}
+          >
+            {FILTER_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                data-tab-id={tab.id}
+                onClick={() => setFilter(tab.id)}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-black tracking-widest transition-colors ${
+                  filter === tab.id ? 'bg-fuchsia-500/80 text-white' : 'text-white/45'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          {/* item 19: まだ右に続きがあることを示す薄いフェード（タップ操作には干渉しない）。 */}
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-8 rounded-r-full bg-gradient-to-l from-black to-transparent" />
         </div>
 
         <div key={revision} className="grid w-full max-w-sm grid-cols-2 gap-2">
@@ -122,7 +147,13 @@ export function AchievementScreen({ onBack }: Props) {
             return (
               <div
                 key={def.id}
-                className={`relative flex flex-col gap-1 rounded-2xl px-3 py-2.5 ${
+                role="button"
+                tabIndex={0}
+                onClick={() => setDetailId(def.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') setDetailId(def.id)
+                }}
+                className={`relative flex flex-col gap-1 rounded-2xl px-3 py-2.5 text-left active:scale-[0.98] ${
                   unlocked
                     ? def.rarity === 'rare'
                       ? 'border border-amber-300/50 bg-gradient-to-b from-amber-400/15 to-fuchsia-500/10'
@@ -154,7 +185,10 @@ export function AchievementScreen({ onBack }: Props) {
                 <p className="text-[10px] leading-snug text-white/40">{hidden ? '？？？' : def.description}</p>
                 {unlocked && title && (
                   <button
-                    onClick={() => handleEquip(title.id, isEquipped)}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      handleEquip(title.id, isEquipped)
+                    }}
                     className={`mt-1 rounded-full px-2 py-1 text-[10px] font-bold active:scale-95 ${
                       isEquipped ? 'bg-fuchsia-500/30 text-fuchsia-200' : 'bg-white/10 text-white/70'
                     }`}
@@ -167,6 +201,8 @@ export function AchievementScreen({ onBack }: Props) {
           })}
         </div>
       </div>
+
+      {detailId && <TitleDetailModal achievementId={detailId} unlocked={unlockedMap[detailId] !== undefined} onClose={() => setDetailId(null)} />}
     </div>
   )
 }

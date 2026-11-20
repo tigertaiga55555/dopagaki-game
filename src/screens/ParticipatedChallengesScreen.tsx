@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BackButton } from '../components/BackButton'
+import { ChallengeModeFilterTabs } from '../components/ChallengeModeFilterTabs'
 import { resolveAvatarEmoji } from '../config/profileConfig'
 import { TITLE_DEFS_BY_ID } from '../config/titles'
 import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSource'
@@ -7,10 +8,13 @@ import { getParticipatedChallengeIds } from '../challenge/participatedChallenges
 import { trackChallengeParticipatedListView } from '../utils/analytics'
 import { getOrCreatePlayerId } from '../utils/profileStorage'
 import { ENDLESS_THEME } from '../config/endlessTheme'
+import { matchesChallengeModeFilter, type ChallengeModeFilter } from '../utils/challengeModeFilter'
 import type { ChallengeApiError, ChallengeRecord, ParticipatedChallengeSummary } from '../challenge/types'
 
 interface Props {
   onBack: () => void
+  /** 次フェーズ（item 17/18）: ProfileからのHomeからで戻り先・ラベルが変わる（App.tsx側で決定）。 */
+  backLabel: string
   /** Ver.6 Phase 5.4: 一覧の1件を開くと、GET /api/challenges/:idで取得した完全なChallengeRecordを渡す（既存のChallengeHistoryScreenをそのまま再利用する）。 */
   onOpenHistory: (challenge: ChallengeRecord) => void
 }
@@ -47,9 +51,10 @@ function describeMode(summary: ParticipatedChallengeSummary): string {
  * 見るのは当然WIN/LOSEそのままで良い。ホスト視点への反転が必要になるのは、ホストが
  * 自分の送ったChallengeの履歴を見る場合だけ（ChallengeHistoryScreen参照）。
  */
-export function ParticipatedChallengesScreen({ onBack, onOpenHistory }: Props) {
+export function ParticipatedChallengesScreen({ onBack, backLabel, onOpenHistory }: Props) {
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [openingId, setOpeningId] = useState<string | null>(null)
+  const [modeFilter, setModeFilter] = useState<ChallengeModeFilter>('all')
 
   useEffect(() => {
     trackChallengeParticipatedListView()
@@ -84,11 +89,13 @@ export function ParticipatedChallengesScreen({ onBack, onOpenHistory }: Props) {
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
-      <BackButton onBack={onBack} label="ホーム" />
+      <BackButton onBack={onBack} label={backLabel} />
 
       <p className="relative z-10 mt-2 text-center text-sm font-black tracking-widest text-white/80">参加したChallenge</p>
 
       <div className="flex flex-1 flex-col items-center gap-3 px-5 py-4">
+        {state.status === 'ready' && <ChallengeModeFilterTabs value={modeFilter} onChange={setModeFilter} />}
+
         {state.status === 'loading' && <p className="mt-10 text-sm font-bold text-white/50">読み込み中…</p>}
 
         {state.status === 'empty' && (
@@ -99,7 +106,10 @@ export function ParticipatedChallengesScreen({ onBack, onOpenHistory }: Props) {
 
         {state.status === 'ready' && (
           <div className="flex w-full max-w-sm flex-col gap-3">
-            {state.summaries.map((summary) => {
+            {state.summaries.filter((summary) => matchesChallengeModeFilter(summary.mode, modeFilter)).length === 0 && (
+              <p className="mt-6 text-center text-sm font-bold text-white/40">このフィルターに該当するChallengeはありません</p>
+            )}
+            {state.summaries.filter((summary) => matchesChallengeModeFilter(summary.mode, modeFilter)).map((summary) => {
               const title = summary.creatorEquippedTitle ? TITLE_DEFS_BY_ID[summary.creatorEquippedTitle] : null
               return (
                 <button

@@ -84,4 +84,30 @@ describe('TITLE_DEFS (Ver.6 Phase 10: Achievementと1対1の68個)', () => {
       expect(title.unlockedByAchievementId).toBe(title.id)
     }
   })
+
+  /**
+   * 次フェーズ（Profile/Heart UI強化ラウンド、item 8）: 68個全てが5段階レアリティの
+   * いずれか1つを持ち、一律の単一tierに潰れていないことを保証する。
+   */
+  it('全68個がCOMMON/RARE/EPIC/LEGENDARY/MYTHICのいずれかを持つ', () => {
+    const validRarities = new Set(['common', 'rare', 'epic', 'legendary', 'mythic'])
+    for (const title of TITLE_DEFS) {
+      expect(validRarities.has(title.rarity)).toBe(true)
+    }
+  })
+
+  it('rarityの内訳が設計どおり（COMMON19・RARE23・EPIC14・LEGENDARY7・MYTHIC5＝全68）', () => {
+    const counts = TITLE_DEFS.reduce<Record<string, number>>((acc, t) => {
+      acc[t.rarity] = (acc[t.rarity] ?? 0) + 1
+      return acc
+    }, {})
+    expect(counts).toEqual({ common: 19, rare: 23, epic: 14, legendary: 7, mythic: 5 })
+  })
+
+  it('MYTHICは真・ドパガキ/250勝/1000プレイ/鏡写し/大逆転の5個のみ（全てが同じtierに潰れていない）', () => {
+    const mythicIds = TITLE_DEFS.filter((t) => t.rarity === 'mythic')
+      .map((t) => t.id)
+      .sort()
+    expect(mythicIds).toEqual(['battleComeback', 'battleMirrorMatch', 'dopa500', 'grindPlay1000', 'worldBattleWin250'].sort())
+  })
 })

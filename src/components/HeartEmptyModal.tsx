@@ -1,16 +1,10 @@
 import { useEffect, useState } from 'react'
+import { formatMmSs } from '../utils/formatTime'
 
 interface Props {
   /** 次の1回復までの残りミリ秒（既に0以上へ回復していた場合に備え、呼び出し元が開く直前の最新値を渡す）。 */
   initialEtaMs: number
   onClose: () => void
-}
-
-function formatMmSs(ms: number): string {
-  const totalSeconds = Math.max(0, Math.ceil(ms / 1000))
-  const mm = Math.floor(totalSeconds / 60)
-  const ss = totalSeconds % 60
-  return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
 }
 
 /**

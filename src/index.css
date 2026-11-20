@@ -837,6 +837,39 @@ body {
 }
 
 /**
+ * 次フェーズ（Profile/Heart UI強化ラウンド、item 9）: Title LEGENDARY/MYTHICバッジ用の
+ * ごく控えめなアニメーション2種。ユーザー指示「常時ギラギラ動き続けるものにしない」
+ * を守るため、既存のanim-warning-pulse系（0.6〜1.6秒の速い点滅）より大きく遅い周期
+ * （3秒以上）の「呼吸」程度の明滅・グラデーション移動に留める。
+ */
+@keyframes rarity-pulse-slow {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+
+.anim-rarity-pulse-slow {
+  animation: rarity-pulse-slow 3.2s ease-in-out infinite;
+}
+
+@keyframes rarity-rainbow-slow {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 300% 50%;
+  }
+}
+
+.anim-rarity-rainbow-slow {
+  animation: rarity-rainbow-slow 6s linear infinite;
+}
+
+/**
  * Ver.6 Phase 1（再設計版）: prefers-reduced-motionへの最低限の配慮。
  * すべてのCSSアニメーション/トランジションをほぼ即時完了させる（視覚的な動きだけを
  * 止める）。ゲームの状態遷移タイミングはJS側のsetTimeout（CHECKPOINT_300_MS等）で

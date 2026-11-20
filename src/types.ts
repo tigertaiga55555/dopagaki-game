@@ -606,12 +606,23 @@ export interface AchievementDef {
  */
 export type TitleId = string
 
+/**
+ * 次フェーズ（Profile/Heart UI強化ラウンド、item 7/8）: Title専用の5段階レアリティ。
+ * AchievementDef.rarity（'rare'の1値だけ・実績解除演出の強弱フラグ）とは完全に別物
+ * （意図も値域も異なるため、既存のAchievementDef.rarityを拡張・流用せず、Title側に
+ * 専用の型・専用のフィールド名を新設して混同を避ける）。難易度の低い順に
+ * COMMON → RARE → EPIC → LEGENDARY → MYTHIC。
+ */
+export type TitleRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic'
+
 /** Title定義（config/titles.ts）。今回は仮称（例: "DOPA 300%"）でよい。 */
 export interface TitleDef {
   id: TitleId
   name: string
   description: string
   unlockedByAchievementId: AchievementId
+  /** 称号のレアリティ（item 7/8）。既存のENDLESS難易度配色・AchievementDef.rarityとは別の表現系。 */
+  rarity: TitleRarity
 }
 
 /**

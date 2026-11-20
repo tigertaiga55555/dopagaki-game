@@ -1,8 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { BackButton } from '../components/BackButton'
+import { TitleBadge } from '../components/TitleBadge'
+import { TitleDetailModal } from '../components/TitleDetailModal'
 import { ACHIEVEMENT_DEFS } from '../config/achievements'
 import { resolveAvatarEmoji } from '../config/profileConfig'
 import { TITLE_DEFS_BY_ID } from '../config/titles'
+import { getTitleRarityTheme } from '../config/titleRarityTheme'
 import { trackProfileView } from '../utils/analytics'
 import { localPlayerStatsRepository } from '../utils/playerStatsRepository'
 import { getProfile } from '../utils/profileStorage'
@@ -30,6 +33,12 @@ export function ProfileScreen({ onBack, onEdit, onAchievements, onRanking, onSen
   const profile = getProfile()
   const stats = localPlayerStatsRepository.getPlayerStats()
   const equippedTitle = profile.equippedTitleId ? TITLE_DEFS_BY_ID[profile.equippedTitleId] : null
+  const [showTitleDetail, setShowTitleDetail] = useState(false)
+
+  // 次フェーズ（item 12）: LEGENDARY/MYTHICを装備している間だけ、アバターリング/
+  // プレイヤーカードへ軽くレアリティのテーマ色を広げる（COMMON/RARE/EPICは従来の見た目の
+  // ままにし、全体を過剰に色付けしない——ユーザー指示）。
+  const flourishClass = equippedTitle ? getTitleRarityTheme(equippedTitle.rarity).profileRingClass : ''
 
   useEffect(() => {
     trackProfileView()
@@ -41,14 +50,22 @@ export function ProfileScreen({ onBack, onEdit, onAchievements, onRanking, onSen
 
       <div className="flex flex-1 flex-col items-center gap-6 px-6 py-4">
         {/* プレイヤーカード */}
-        <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-3xl border border-fuchsia-400/20 bg-gradient-to-b from-white/[0.06] to-white/[0.02] px-6 py-6 text-center shadow-[0_0_30px_rgba(217,70,239,0.08)]">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-fuchsia-400/50 bg-fuchsia-500/10 text-4xl shadow-[0_0_20px_rgba(217,70,239,0.3)]">
+        <div
+          className={`flex w-full max-w-xs flex-col items-center gap-3 rounded-3xl border border-fuchsia-400/20 bg-gradient-to-b from-white/[0.06] to-white/[0.02] px-6 py-6 text-center shadow-[0_0_30px_rgba(217,70,239,0.08)] ${flourishClass}`}
+        >
+          <div
+            className={`flex h-20 w-20 items-center justify-center rounded-full bg-fuchsia-500/10 text-4xl ${
+              flourishClass || 'border-2 border-fuchsia-400/50 shadow-[0_0_20px_rgba(217,70,239,0.3)]'
+            }`}
+          >
             {resolveAvatarEmoji(profile.avatar)}
           </div>
           <p className="text-xl font-black text-white">{profile.nickname}</p>
-          <p className="text-xs font-bold tracking-widest text-fuchsia-300/90">
-            {equippedTitle ? equippedTitle.name : '称号未装備'}
-          </p>
+          {equippedTitle ? (
+            <TitleBadge title={equippedTitle} onClick={() => setShowTitleDetail(true)} />
+          ) : (
+            <p className="text-xs font-bold tracking-widest text-white/40">称号未装備</p>
+          )}
           <button
             onClick={onEdit}
             className="mt-1 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-bold text-white/70 active:scale-95"
@@ -96,6 +113,10 @@ export function ProfileScreen({ onBack, onEdit, onAchievements, onRanking, onSen
           </button>
         </div>
       </div>
+
+      {showTitleDetail && equippedTitle && (
+        <TitleDetailModal achievementId={equippedTitle.unlockedByAchievementId} unlocked onClose={() => setShowTitleDetail(false)} />
+      )}
     </div>
   )
 }
