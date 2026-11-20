@@ -210,6 +210,10 @@ export class PrivateRoom implements DurableObject {
           ],
           battleType: parsed.battleType,
           notifyPrivateRoomCode: state.roomCode,
+          // このDOをidFromName(matchId)で直接アドレスしているため、BattleRoom DO内部の
+          // state.matchIdもこれと完全に一致させる（notifyPrivateRoomIfAnyでの
+          // applyMatchResultのmatchId照合が成立するために必須）。
+          matchId,
         }),
       })
 
@@ -234,6 +238,12 @@ export class PrivateRoom implements DurableObject {
         await createD1PrivateRoomRepository(this.env.CHALLENGE_DB).releaseRoomForHost(state.hostPlayerId)
       }
       await this.ctx.storage.deleteAll()
+      return
+    }
+
+    if (parsed.type === 'request_state') {
+      const state = await this.loadState()
+      if (state) this.send(ws, { v: 1, type: 'room_state', state })
       return
     }
   }

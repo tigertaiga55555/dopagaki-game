@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Challenge500QaPreviewScreen } from './dev/Challenge500QaPreviewScreen'
 import { EndlessPreviewScreen } from './dev/EndlessPreviewScreen'
 import { FinalTrialPreviewScreen } from './dev/FinalTrialPreviewScreen'
@@ -393,11 +393,29 @@ export default function App() {
     [],
   )
 
+  /**
+   * 次フェーズ（item 15 PRIVATE ROOM、実機/E2Eで発見した競合の修正）: 試合から戻った直後、
+   * PrivateRoomLobbyScreen（毎回アンマウント→再マウントする）のローカルなuseRefだけでは
+   * 「この試合にはもう入らない」という記憶が再マウント時に失われる。BattleRoom DO→
+   * PrivateRoom DOへの通知（notifyPrivateRoomIfAny）がサーバー権威として先に完了する設計へ
+   * 既に修正済みだが、Durable Objectのローカル開発環境（Miniflare）では同一DOへの複数
+   * リクエストの厳密な直列化がPlaywright E2Eで再現できる形では保証されないことを確認した
+   * （本番Cloudflare環境のinput gate機構でも絶対に発生しないとは限らないため、クライアント
+   * 側でも二重の安全網を持たせる）。App.tsx（screenという唯一の永続的な状態を持つ場所）側で
+   * 「既に退出した試合ID」を記憶し、ロビーがどれだけ速く再接続してstale気味のactiveMatchを
+   * 受け取っても、同じmatchIdへは二度と入らないことを保証する。
+   */
+  const exitedPrivateMatchIdsRef = useRef<Set<string>>(new Set())
+  const isPrivateMatchAlreadyHandled = useCallback((matchId: string) => exitedPrivateMatchIdsRef.current.has(matchId), [])
+
   // item: PRIVATE ROOMはChallenge・ENDLESS Challengeと同様、強制インタースティシャルの
   // 対象から完全に除外する（ユーザー指示）——exitBattleのようなmaybeGateWithInterstitial
   // ラップを一切行わない。
   const exitPrivateRoomMatch = useCallback(() => {
-    setPrivateRoomMatch(null)
+    setPrivateRoomMatch((prev) => {
+      if (prev) exitedPrivateMatchIdsRef.current.add(prev.matchId)
+      return null
+    })
     setScreen('privateRoomLobby')
   }, [])
 
@@ -573,6 +591,7 @@ export default function App() {
               myProfile={toBattleProfile(getProfile())}
               onLeave={leavePrivateRoom}
               onEnterMatch={handlePrivateRoomEnterMatch}
+              isMatchAlreadyHandled={isPrivateMatchAlreadyHandled}
             />
           )}
           {screen === 'privateRoomMatch' && privateRoomMatch && (

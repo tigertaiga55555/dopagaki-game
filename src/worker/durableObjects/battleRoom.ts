@@ -59,6 +59,18 @@ interface CreateBody {
    * 適用できる。省略時（World/Friend Battle）は何も通知しない。
    */
   notifyPrivateRoomCode?: string
+  /**
+   * 次フェーズ（item 15 PRIVATE ROOM、実機/E2Eで発見した不整合の修正）: 省略時はこのDO内部で
+   * 新規にcrypto.randomUUID()を生成する（既存のWorld/Friend Battleの挙動、後方互換——
+   * これらはmatchIdを外部の何かと比較する必要が無く、単なる内部ラベルに過ぎないため）。
+   * PRIVATE ROOMはこのDO自身をidFromName(matchId)で既に外部から特定のIDで直接アドレス
+   * 指定しているため、notifyPrivateRoomIfAnyで報告するmatchId（PrivateRoom側の
+   * activeMatch.matchIdと比較される）が、DOを呼び出す際に使った外部のIDと完全に一致して
+   * いなければならない——ここを省略してcrypto.randomUUID()で内部的に再生成すると、
+   * PrivateRoom側が待っているmatchIdと食い違い、applyMatchResultが常にno-opになる
+   * （実際にPlaywright E2Eで再現した不具合）。
+   */
+  matchId?: string
 }
 
 export class BattleRoom implements DurableObject {
@@ -119,7 +131,7 @@ export class BattleRoom implements DurableObject {
     if (existing) return new Response(JSON.stringify({ ok: true }), { status: 200 })
 
     const body = (await request.json()) as CreateBody
-    let state = createRoom(crypto.randomUUID(), body.mode, body.roomCode, body.problemSet, body.battleType ?? 'normal')
+    let state = createRoom(body.matchId ?? crypto.randomUUID(), body.mode, body.roomCode, body.problemSet, body.battleType ?? 'normal')
     for (const p of body.players) {
       // この時点ではまだ誰の実WebSocketも開いていない（Matchmakerが2人を確定させた
       // 直後のロスター事前登録、またはフレンド対戦ホストの部屋作成直後）ため、
@@ -403,10 +415,16 @@ export class BattleRoom implements DurableObject {
       const result = finalizeEndlessResult(state)
       const finishedState: BattleRoomState = { ...state, phase: 'finished', finishReason: result.finishReason, endlessResult: result }
       await this.saveState(finishedState)
+      // 次フェーズ（item 15 PRIVATE ROOM、実機/E2Eで発見した競合の修正）: PrivateRoom DOへの
+      // 通知は、プレイヤーへのbattle_finish送信より必ず先に完了させる。逆順だと、クライアントが
+      // 結果画面を見て即座に「ロビーへ戻る」を押した場合、ロビー再接続時にPrivateRoom側の
+      // activeMatchがまだこのmatchIdを指したまま（通知が未到達）になり、同じ終了済みマッチへ
+      // 再入室してしまう（実際にPlaywright E2Eで再現した不具合）。通知を先に完了させておけば、
+      // クライアントがどれだけ速く反応しても、ロビー側は既にactiveMatch=nullを返す。
+      await this.notifyPrivateRoomIfAny(state.matchId, result.winner)
       const [playerA, playerB] = state.players
       if (playerA) this.send(this.socketFor(playerA.playerId), { v: 1, type: 'endless_battle_finish', result, viewerIsPlayerA: true })
       if (playerB) this.send(this.socketFor(playerB.playerId), { v: 1, type: 'endless_battle_finish', result, viewerIsPlayerA: false })
-      await this.notifyPrivateRoomIfAny(state.matchId, result.winner)
       await this.ctx.storage.deleteAll()
       return
     }
@@ -414,6 +432,12 @@ export class BattleRoom implements DurableObject {
     const result = finalizeResult(state)
     const finishedState: BattleRoomState = { ...state, phase: 'finished', finishReason: result.finishReason, result }
     await this.saveState(finishedState)
+
+    // 次フェーズ（item 15 PRIVATE ROOM、実機/E2Eで発見した競合の修正）: ENDLESS分岐と同じ理由で、
+    // PrivateRoom DOへの通知をプレイヤーへのbattle_finish送信より必ず先に完了させる
+    // （World Battleのmode==='world'分岐ではroomCode未設定のため、この呼び出し自体が
+    // 何もしない早期returnになるだけで、既存のWorld Battle挙動には一切影響しない）。
+    await this.notifyPrivateRoomIfAny(state.matchId, result.winner)
 
     const [playerA, playerB] = state.players
     if (playerA) this.send(this.socketFor(playerA.playerId), { v: 1, type: 'battle_finish', result, viewerIsPlayerA: true })
@@ -439,10 +463,6 @@ export class BattleRoom implements DurableObject {
         await repo.applyWorldResult(playerB.playerId, result.winner === 'playerB' ? 'win' : result.winner === 'draw' ? 'draw' : 'lose')
       }
     }
-
-    // PRIVATE ROOM経由のNORMAL対戦（mode:'friend' + notifyPrivateRoomCode）はここに到達する
-    // ——WorldBattle分岐（上）には入らないため、D1統計は一切書き込まれない。
-    await this.notifyPrivateRoomIfAny(state.matchId, result.winner)
 
     // item 34（Durable Object cleanup）: 正式データはD1へ保存済みのため、一時stateは
     // 試合終了後すぐに消す（終了済みBattleRoomの状態を永遠に保持しない）。

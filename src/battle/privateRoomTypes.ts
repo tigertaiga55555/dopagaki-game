@@ -29,6 +29,14 @@ export type PrivateRoomClientMessage =
       endlessDifficulty: EndlessDifficulty | null
     })
   | (BaseMessage & { type: 'close_room' })
+  /**
+   * 次フェーズ（item 15、実機/E2Eで発見した耐障害性の改善）: サーバー側のpush配信
+   * （broadcastState）が何らかの理由（接続の一時的な不調、Hibernatable WebSocketの
+   * 長時間アイドル等）で届かなかった場合に備え、クライアント側から能動的に最新状態を
+   * 取り直せるようにする。room_stateのpushだけに依存しない二重の経路を持たせることで、
+   * 「対戦が終わったのにロビー表示が古いまま」という状態からの自己復帰を保証する。
+   */
+  | (BaseMessage & { type: 'request_state' })
 
 export type PrivateRoomServerMessage =
   | (BaseMessage & { type: 'room_state'; state: PrivateRoomState })

@@ -20,6 +20,13 @@ interface Props {
     endlessDifficulty: EndlessDifficulty | null
     opponentProfile: BattleOpponentProfile
   }) => void
+  /**
+   * 次フェーズ（item 15、実機/E2Eで発見した競合の修正）: このmatchIdへは既に入って
+   * 戻ってきた（App.tsx側で記憶している）かどうか。このコンポーネント自身のuseRefは
+   * 再マウントごとに失われるため、サーバー側のactiveMatchがまだ更新途中の一時的な
+   * stale値を受け取っても、既に退出済みの試合へ二度と入らないことを保証する。
+   */
+  isMatchAlreadyHandled: (matchId: string) => boolean
 }
 
 const DIFFICULTY_LABEL: Record<EndlessDifficulty, string> = { beginner: '初級', intermediate: '中級', advanced: '上級' }
@@ -35,7 +42,7 @@ const DIFFICULTY_LABEL: Record<EndlessDifficulty, string> = { beginner: '初級'
  * （ENDLESS、既存のBattleRoom DO・WS接続・endlessBattleProblemSet.tsをそのまま使う）が
  * 入れ替わりで表示を引き継ぐ。
  */
-export function PrivateRoomLobbyScreen({ roomCode, playerId, myProfile, onLeave, onEnterMatch }: Props) {
+export function PrivateRoomLobbyScreen({ roomCode, playerId, myProfile, onLeave, onEnterMatch, isMatchAlreadyHandled }: Props) {
   const [roomState, setRoomState] = useState<PrivateRoomState | null>(null)
   const [connError, setConnError] = useState<string | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -56,7 +63,12 @@ export function PrivateRoomLobbyScreen({ roomCode, playerId, myProfile, onLeave,
         if (msg.type === 'room_state') {
           setRoomState(msg.state)
           const active = msg.state.activeMatch
-          if (active && (active.memberAId === playerId || active.memberBId === playerId) && enteredMatchRef.current !== active.matchId) {
+          if (
+            active &&
+            (active.memberAId === playerId || active.memberBId === playerId) &&
+            enteredMatchRef.current !== active.matchId &&
+            !isMatchAlreadyHandled(active.matchId)
+          ) {
             enteredMatchRef.current = active.matchId
             const opponentId = active.memberAId === playerId ? active.memberBId : active.memberAId
             const opponent = msg.state.members.find((m) => m.playerId === opponentId)
@@ -81,6 +93,19 @@ export function PrivateRoomLobbyScreen({ roomCode, playerId, myProfile, onLeave,
     return () => socket.close()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode])
+
+  /**
+   * 次フェーズ（item 15、実機/E2Eで発見した耐障害性の改善）: サーバーからのroom_state
+   * push配信だけに依存せず、定期的に能動的な再取得（request_state）も行う——pushが
+   * 何らかの理由で届かなかった場合でも、このロビーが「対戦が終わったのに表示が古いまま」
+   * から自動的に復帰できるようにするための二重の経路。ロビーが表示されている間だけ動く。
+   */
+  useEffect(() => {
+    const interval = setInterval(() => {
+      socketRef.current?.send({ v: 1, type: 'request_state' })
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [])
 
   const isHost = roomState?.hostPlayerId === playerId
   const members = roomState?.members ?? []
@@ -162,7 +187,15 @@ export function PrivateRoomLobbyScreen({ roomCode, playerId, myProfile, onLeave,
           <div className="flex w-full max-w-xs flex-col gap-2">
             {!activeMatch && (
               <button
-                onClick={() => setPickerOpen(true)}
+                onClick={() => {
+                  // 次フェーズ（item 15、Playwright E2Eで発見した不具合の修正）: 前回の
+                  // マッチで選んだメンバーがselectedに残り続けると、再戦時に意図しない
+                  // 組み合わせで対戦が始まってしまう（例: A・Bで対戦後、A・Cを選ぶつもりで
+                  // Aを再クリックすると「トグルで外す」ことになり、B・Cが選ばれてしまう）。
+                  // ピッカーを開くたびに必ず空の状態から選び直させる。
+                  setSelected([])
+                  setPickerOpen(true)
+                }}
                 disabled={members.length < 2}
                 className="w-full rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-3.5 text-sm font-black tracking-widest text-white active:scale-95 disabled:opacity-50"
               >
