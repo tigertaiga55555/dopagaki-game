@@ -1,8 +1,16 @@
-import { compareDopaPerformance } from '../challenge/performance'
+import { compareDopaPerformance, compareEndlessStreak } from '../challenge/performance'
 import { computeMedian } from '../challenge/performance'
 import type { ChallengePerformance } from '../challenge/types'
 import type { ChallengeProblemSetItem } from '../types'
-import type { BattleAnswerEvent, BattleFinishReason, BattleFinishResult, BattleOpponentProfile, BattleWinner } from './types'
+import type {
+  BattleAnswerEvent,
+  BattleFinishReason,
+  BattleFinishResult,
+  BattleFormat,
+  BattleOpponentProfile,
+  BattleWinner,
+  EndlessBattleFinishResult,
+} from './types'
 
 /**
  * Ver.6 Phase 6（1対1リアルタイム対戦）: BattleRoom Durable Objectの試合状態を管理する
@@ -41,6 +49,10 @@ export interface BattlePlayerSlot {
   finished: boolean
   reportedPerformance: ChallengePerformance | null
   forfeited: boolean
+  /** 次フェーズ（item 15）: ENDLESS形式専用。進行中のライブSTREAK（UI表示用、確定前）。 */
+  liveStreak: number
+  /** 次フェーズ（item 15）: ENDLESS形式専用。MISSして確定したSTREAK。未確定はnull。 */
+  finalStreak: number | null
 }
 
 export interface BattleRoomState {
@@ -48,11 +60,15 @@ export interface BattleRoomState {
   mode: 'world' | 'friend'
   roomCode: string | null
   phase: BattlePhase
+  /** 次フェーズ（item 15）: 既存のWorld/Friend Battleは常に'normal'（デフォルト、動作は一切変更しない）。PRIVATE ROOMのENDLESS対戦だけ'endless'。 */
+  battleType: BattleFormat
   problemSet: ChallengeProblemSetItem[]
   players: BattlePlayerSlot[]
   startAt: number | null
   finishReason: BattleFinishReason | null
   result: BattleFinishResult | null
+  /** 次フェーズ（item 15）: battleType==='endless'の確定結果。normal形式では常にnull（resultと排他）。 */
+  endlessResult: EndlessBattleFinishResult | null
 }
 
 function createSlot(playerId: string, profile: BattleOpponentProfile, connected: boolean): BattlePlayerSlot {
@@ -67,6 +83,8 @@ function createSlot(playerId: string, profile: BattleOpponentProfile, connected:
     finished: false,
     reportedPerformance: null,
     forfeited: false,
+    liveStreak: 0,
+    finalStreak: null,
   }
 }
 
@@ -75,8 +93,21 @@ export function createRoom(
   mode: 'world' | 'friend',
   roomCode: string | null,
   problemSet: ChallengeProblemSetItem[],
+  battleType: BattleFormat = 'normal',
 ): BattleRoomState {
-  return { matchId, mode, roomCode, phase: 'waiting', problemSet, players: [], startAt: null, finishReason: null, result: null }
+  return {
+    matchId,
+    mode,
+    roomCode,
+    phase: 'waiting',
+    battleType,
+    problemSet,
+    players: [],
+    startAt: null,
+    finishReason: null,
+    result: null,
+    endlessResult: null,
+  }
 }
 
 export function getPlayer(state: BattleRoomState, playerId: string): BattlePlayerSlot | undefined {
@@ -239,6 +270,31 @@ export function submitFinished(state: BattleRoomState, playerId: string, perform
   return { state: nextState, bothFinished: players.every((p) => p.finished || p.forfeited) }
 }
 
+/**
+ * 次フェーズ（item 15）: ENDLESS形式専用。進行中のライブSTREAK報告（相手への表示用、まだ
+ * 確定していない）。answer/progressのDOPA%ベースの検証（questionIndex順序・score範囲等）は
+ * ENDLESSには存在しない概念のため、ここでは一切行わない——streak自体はクライアントの
+ * endlessEngine.tsが既に検証済みの「何連続正解したか」という単純な整数であり、Battleの
+ * answerイベントのような不正値検証対象ではない（最終勝敗はfinalStreak同士の比較だけで
+ * 決まり、途中経過のliveStreakは表示用に過ぎない）。
+ */
+export function submitEndlessProgress(state: BattleRoomState, playerId: string, streak: number): BattleRoomState {
+  const players = state.players.map((p) => (p.playerId === playerId ? { ...p, liveStreak: Math.max(0, streak) } : p))
+  return { ...state, players }
+}
+
+export type SubmitEndlessFinishedResult = { state: BattleRoomState; bothFinished: boolean }
+
+/** 次フェーズ（item 15）: ENDLESS形式専用。1プレイヤーがMISSして確定STREAKを報告した。 */
+export function submitEndlessFinished(state: BattleRoomState, playerId: string, streak: number): SubmitEndlessFinishedResult {
+  const finalStreak = Math.max(0, streak)
+  const players = state.players.map((p) =>
+    p.playerId === playerId ? { ...p, finished: true, finalStreak, liveStreak: finalStreak } : p,
+  )
+  const nextState = { ...state, players }
+  return { state: nextState, bothFinished: players.every((p) => p.finished || p.forfeited) }
+}
+
 export function applyForfeit(state: BattleRoomState, playerId: string): BattleRoomState {
   const players = state.players.map((p) => (p.playerId === playerId ? { ...p, forfeited: true } : p))
   return { ...state, players }
@@ -330,4 +386,37 @@ export function finalizeResult(state: BattleRoomState): BattleFinishResult {
     playerA: { performance: perfA },
     playerB: { performance: perfB },
   }
+}
+
+/**
+ * 次フェーズ（item 15）: ENDLESS形式専用のfinalize。finalizeResult()と同じ
+ * forfeit/disconnect優先ルールを踏襲しつつ、勝敗の決定だけを既存のcompareEndlessStreak
+ * （ENDLESS Challengeで実績のある、タイブレーク一切なしの単純STREAK比較）に委ねる
+ * ——DOPA%比較ロジック（compareDopaPerformance）は一切参照しない。
+ * compareEndlessStreak(host, challenger)はchallenger視点の結果を返すため、playerAを
+ * host役・playerBをchallenger役として呼び、戻り値をBattleWinnerへ読み替える。
+ */
+export function finalizeEndlessResult(state: BattleRoomState): EndlessBattleFinishResult {
+  const [playerA, playerB] = state.players
+  if (!playerA || !playerB) {
+    return { winner: 'draw', finishReason: 'invalid', playerAStreak: playerA?.finalStreak ?? 0, playerBStreak: playerB?.finalStreak ?? 0 }
+  }
+  const forfeitedA = playerA.forfeited
+  const forfeitedB = playerB.forfeited
+  const disconnectedA = !playerA.connected
+  const disconnectedB = !playerB.connected
+
+  if (forfeitedA || forfeitedB || disconnectedA || disconnectedB) {
+    const aLoses = forfeitedA || disconnectedA
+    const bLoses = forfeitedB || disconnectedB
+    const winner: BattleWinner = aLoses && bLoses ? 'draw' : aLoses ? 'playerB' : 'playerA'
+    const finishReason: BattleFinishReason = forfeitedA || forfeitedB ? 'forfeit' : 'disconnect'
+    return { winner, finishReason, playerAStreak: playerA.finalStreak ?? 0, playerBStreak: playerB.finalStreak ?? 0 }
+  }
+
+  const streakA = playerA.finalStreak ?? 0
+  const streakB = playerB.finalStreak ?? 0
+  const comparison = compareEndlessStreak(streakA, streakB)
+  const winner: BattleWinner = comparison === 'win' ? 'playerB' : comparison === 'lose' ? 'playerA' : 'draw'
+  return { winner, finishReason: 'completed', playerAStreak: streakA, playerBStreak: streakB }
 }

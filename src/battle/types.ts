@@ -12,6 +12,17 @@ export type { ChallengeProblemSetItem }
 
 export type BattleMode = 'world' | 'friend'
 
+/**
+ * 次フェーズ（DOPA PASS基盤ラウンド、item 15）: BattleRoom（1試合ぶんのDurable Object）が
+ * 内部で管理する試合種別。'normal'は既存のDOPA%ベース（0〜200%）の1v1、'endless'は
+ * PRIVATE ROOM専用の新しい種別——同じ問題列を両者が独立に解き、片方がMISSしても
+ * もう片方が記録を超える可能性がある限り続行し、最終STREAKを比較する
+ * （既存のENDLESS ChallengeのcompareEndlessStreakをそのまま再利用、DOPA%比較ロジックは
+ * 一切流用しない）。既存のWorld/Friend Battle（createRoom呼び出し）は常に'normal'のまま、
+ * 挙動に一切変化がない。
+ */
+export type BattleFormat = 'normal' | 'endless'
+
 /** Challengeと異なり、全項目完全同値はDRAW（どちらのLOSEでもない）。 */
 export type BattleWinner = 'playerA' | 'playerB' | 'draw'
 
@@ -37,6 +48,19 @@ export interface BattleFinishResult {
   finishReason: BattleFinishReason
   playerA: BattlePlayerResult
   playerB: BattlePlayerResult
+}
+
+/**
+ * 次フェーズ（DOPA PASS基盤ラウンド、item 15）: ENDLESS形式（PRIVATE ROOM専用）の結果。
+ * 既存のBattleFinishResult（DOPA%/正答率/COMBO/反応速度ベース）とは完全に別の型にして、
+ * 既存のBattleResultScreen.tsx（normal形式専用、World/Friend Battleで実績あり）を
+ * 一切変更しない。decidedByという概念自体が存在しない（STREAK比較だけ、タイブレークなし）。
+ */
+export interface EndlessBattleFinishResult {
+  winner: BattleWinner
+  finishReason: BattleFinishReason
+  playerAStreak: number
+  playerBStreak: number
 }
 
 /**
@@ -75,6 +99,10 @@ export type BattleClientMessage =
   | (BaseMessage & { type: 'progress'; percent: number })
   | (BaseMessage & { type: 'finished'; performance: ChallengePerformance })
   | (BaseMessage & { type: 'forfeit' })
+  // 次フェーズ（DOPA PASS基盤ラウンド、item 15）: ENDLESS形式（PRIVATE ROOM専用）専用の2種。
+  // 既存のanswer/progress/finishedはDOPA%ベースのため使わず、STREAK数だけをやり取りする。
+  | (BaseMessage & { type: 'endless_progress'; streak: number })
+  | (BaseMessage & { type: 'endless_finished'; streak: number })
 
 export type BattleServerMessage =
   | (BaseMessage & { type: 'queue_joined' })
@@ -87,6 +115,8 @@ export type BattleServerMessage =
   | (BaseMessage & { type: 'opponent_reconnected' })
   | (BaseMessage & { type: 'battle_finish'; result: BattleFinishResult; viewerIsPlayerA: boolean })
   | (BaseMessage & { type: 'error'; message: string })
+  | (BaseMessage & { type: 'opponent_endless_progress'; streak: number })
+  | (BaseMessage & { type: 'endless_battle_finish'; result: EndlessBattleFinishResult; viewerIsPlayerA: boolean })
 
 export interface CreateRoomResponse {
   roomCode: string

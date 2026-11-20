@@ -41,6 +41,11 @@ class_name = "Matchmaker"
 name = "BATTLE_ROOM"
 class_name = "BattleRoom"
 
+# 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM）: ロビーを管理する新規Durable Object。
+[[durable_objects.bindings]]
+name = "PRIVATE_ROOM"
+class_name = "PrivateRoom"
+
 [[previews.durable_objects.bindings]]
 name = "MATCHMAKER"
 class_name = "Matchmaker"
@@ -49,6 +54,16 @@ class_name = "Matchmaker"
 name = "BATTLE_ROOM"
 class_name = "BattleRoom"
 
+[[previews.durable_objects.bindings]]
+name = "PRIVATE_ROOM"
+class_name = "PrivateRoom"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Matchmaker", "BattleRoom"]
+
+# 新しいDurable Objectクラスを既存タグ（v1）へ後から混ぜることはCloudflareが許可しないため、
+# 専用の新しいタグを追加する。
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["PrivateRoom"]

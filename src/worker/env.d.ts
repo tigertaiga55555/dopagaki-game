@@ -14,6 +14,8 @@ declare global {
     MATCHMAKER?: DurableObjectNamespace
     /** Ver.6 Phase 6: 1試合ぶんのリアルタイム状態を管理するDurable Object（世界対戦・フレンド対戦共通）。 */
     BATTLE_ROOM?: DurableObjectNamespace
+    /** 次フェーズ（DOPA PASS基盤ラウンド、item 15）: PRIVATE ROOM（ロビー）を管理するDurable Object。 */
+    PRIVATE_ROOM?: DurableObjectNamespace
   }
 }
 

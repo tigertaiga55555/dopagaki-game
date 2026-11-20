@@ -7,11 +7,14 @@ import {
   buildCountdownPayloadFor,
   createRoom,
   decideStartIfReady,
+  finalizeEndlessResult,
   finalizeResult,
   isDisconnectTimedOut,
   markReady,
   removePlayerBeforeStart,
   submitAnswer,
+  submitEndlessFinished,
+  submitEndlessProgress,
   submitFinished,
   type BattleRoomState,
 } from './battleRoomEngine'
@@ -413,5 +416,58 @@ describe('battleRoomEngine: finalizeResult（多指標判定・draw、Ver.6 Phas
     const state = finished(performance(), performance(), answersA, [])
     const result = finalizeResult(state)
     expect(result.playerA.performance.medianCorrectReactionMs).toBeNull()
+  })
+})
+
+describe('battleRoomEngine: ENDLESS形式（PRIVATE ROOM専用、item 15）', () => {
+  function endlessRoom(): BattleRoomState {
+    let state = createRoom('m-endless', 'friend', 'ABCDEF', sampleProblemSet(), 'endless')
+    state = (addPlayer(state, 'a', PROFILE_A, false) as { ok: true; state: BattleRoomState }).state
+    state = (addPlayer(state, 'b', PROFILE_B, false) as { ok: true; state: BattleRoomState }).state
+    return state
+  }
+
+  it('submitEndlessProgressはliveStreakだけを更新し、finishedには影響しない', () => {
+    let state = endlessRoom()
+    state = submitEndlessProgress(state, 'a', 7)
+    expect(state.players[0].liveStreak).toBe(7)
+    expect(state.players[0].finished).toBe(false)
+  })
+
+  it('submitEndlessFinishedは1人目完了時にbothFinished=false、2人目完了時にtrue', () => {
+    let state = endlessRoom()
+    const first = submitEndlessFinished(state, 'a', 12)
+    expect(first.bothFinished).toBe(false)
+    state = first.state
+    const second = submitEndlessFinished(state, 'b', 5)
+    expect(second.bothFinished).toBe(true)
+  })
+
+  it('finalizeEndlessResult: STREAKが高い方がplayerB視点で勝ち（playerA=12 > playerB=5 → playerA勝利）', () => {
+    let state = endlessRoom()
+    state = submitEndlessFinished(state, 'a', 12).state
+    state = submitEndlessFinished(state, 'b', 5).state
+    const result = finalizeEndlessResult(state)
+    expect(result.winner).toBe('playerA')
+    expect(result.playerAStreak).toBe(12)
+    expect(result.playerBStreak).toBe(5)
+    expect(result.finishReason).toBe('completed')
+  })
+
+  it('finalizeEndlessResult: STREAK同数はdraw（反応速度タイブレークなし）', () => {
+    let state = endlessRoom()
+    state = submitEndlessFinished(state, 'a', 8).state
+    state = submitEndlessFinished(state, 'b', 8).state
+    const result = finalizeEndlessResult(state)
+    expect(result.winner).toBe('draw')
+  })
+
+  it('finalizeEndlessResult: forfeitした側は確定STREAKに関わらず敗北', () => {
+    let state = endlessRoom()
+    state = submitEndlessFinished(state, 'a', 99).state
+    state = applyForfeit(state, 'a')
+    const result = finalizeEndlessResult(state)
+    expect(result.winner).toBe('playerB')
+    expect(result.finishReason).toBe('forfeit')
   })
 })

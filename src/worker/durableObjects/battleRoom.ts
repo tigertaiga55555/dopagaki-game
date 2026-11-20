@@ -5,16 +5,19 @@ import {
   buildCountdownPayloadFor,
   createRoom,
   decideStartIfReady,
+  finalizeEndlessResult,
   finalizeResult,
   getOpponentOf,
   getPlayer,
   isDisconnectTimedOut,
   markReady,
   submitAnswer,
+  submitEndlessFinished,
+  submitEndlessProgress,
   submitFinished,
   type BattleRoomState,
 } from '../../battle/battleRoomEngine'
-import { isBattleClientMessage, type BattleOpponentProfile, type BattleServerMessage } from '../../battle/types'
+import { isBattleClientMessage, type BattleFormat, type BattleOpponentProfile, type BattleServerMessage, type BattleWinner } from '../../battle/types'
 import { createD1BattleRepository } from '../battleRepository'
 import type { ChallengeProblemSetItem } from '../../challenge/types'
 
@@ -26,6 +29,8 @@ import type { ChallengeProblemSetItem } from '../../challenge/types'
  * API・ctx.storage・D1永続化との接続だけを担当する。
  */
 const ROOM_STATE_KEY = 'roomState'
+/** 次フェーズ（item 15 PRIVATE ROOM）: notifyPrivateRoomCodeの永続先。pure engineのBattleRoomStateには含めない（DOラッパー層の関心事）。 */
+const NOTIFY_PRIVATE_ROOM_KEY = 'notifyPrivateRoomCode'
 const COUNTDOWN_MS = 3000
 const DISCONNECT_GRACE_MS = 5000
 /** countdown決定直後の初回送信から、安全網としての再送までの遅延（COUNTDOWN_MSより十分短い）。 */
@@ -40,6 +45,20 @@ interface CreateBody {
   roomCode: string | null
   problemSet: ChallengeProblemSetItem[]
   players: { playerId: string; profile: BattleOpponentProfile }[]
+  /**
+   * 次フェーズ（DOPA PASS基盤ラウンド、item 15）: PRIVATE ROOMのENDLESS対戦専用。
+   * 省略時は既存のNORMAL形式（World/Friend Battleと完全に同一の挙動、後方互換）。
+   */
+  battleType?: BattleFormat
+  /**
+   * 次フェーズ（item 15 PRIVATE ROOM）: このマッチがPrivateRoom DOから生成された場合、
+   * そのPrivateRoomのroomCode（= idFromNameのキー）。試合終了時、D1永続化より前に
+   * （item 34のctx.storage.deleteAll()より前に）このPrivateRoom DOへ結果を通知する
+   * ——クライアント報告ではなくDO間のサーバー間通信だけで room-scoped統計を確定させる
+   * ため、WorldBattleのD1統計と同じ「サーバー権威」の原則をPRIVATE ROOMの簡易戦績にも
+   * 適用できる。省略時（World/Friend Battle）は何も通知しない。
+   */
+  notifyPrivateRoomCode?: string
 }
 
 export class BattleRoom implements DurableObject {
@@ -100,7 +119,7 @@ export class BattleRoom implements DurableObject {
     if (existing) return new Response(JSON.stringify({ ok: true }), { status: 200 })
 
     const body = (await request.json()) as CreateBody
-    let state = createRoom(crypto.randomUUID(), body.mode, body.roomCode, body.problemSet)
+    let state = createRoom(crypto.randomUUID(), body.mode, body.roomCode, body.problemSet, body.battleType ?? 'normal')
     for (const p of body.players) {
       // この時点ではまだ誰の実WebSocketも開いていない（Matchmakerが2人を確定させた
       // 直後のロスター事前登録、またはフレンド対戦ホストの部屋作成直後）ため、
@@ -109,6 +128,9 @@ export class BattleRoom implements DurableObject {
       if (result.ok) state = result.state
     }
     await this.saveState(state)
+    if (body.notifyPrivateRoomCode) {
+      await this.ctx.storage.put(NOTIFY_PRIVATE_ROOM_KEY, body.notifyPrivateRoomCode)
+    }
     return new Response(JSON.stringify({ ok: true }), { status: 200 })
   }
 
@@ -298,6 +320,27 @@ export class BattleRoom implements DurableObject {
       await this.finish(state)
       return
     }
+
+    // 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM ENDLESS）: answer/progress/finished
+    // （DOPA%ベース、既存のNORMAL形式専用）とは完全に別の2メッセージ。既存の分岐は一切変更しない。
+    if (parsed.type === 'endless_progress') {
+      const state = await this.loadState()
+      if (!state) return
+      const next = submitEndlessProgress(state, playerId, parsed.streak)
+      await this.saveState(next)
+      this.broadcastExcept(next, playerId, { v: 1, type: 'opponent_endless_progress', streak: parsed.streak })
+      return
+    }
+
+    if (parsed.type === 'endless_finished') {
+      let state = await this.loadState()
+      if (!state) return
+      const { state: nextState, bothFinished } = submitEndlessFinished(state, playerId, parsed.streak)
+      state = nextState
+      await this.saveState(state)
+      if (bothFinished) await this.finish(state)
+      return
+    }
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
@@ -327,8 +370,47 @@ export class BattleRoom implements DurableObject {
     if (timedOut) await this.finish(state)
   }
 
+  /**
+   * 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM）: このマッチがPrivateRoom DOから
+   * 生成されていた場合（notifyPrivateRoomCode保存済み）、D1永続化・storage.deleteAll()より
+   * 前にそのPrivateRoom DOへ結果を通知する。クライアント報告ではなくDO間のサーバー間呼び出し
+   * だけで room-scoped統計を確定させる（WorldBattleのD1統計と同じ「サーバー権威」の原則）。
+   * PRIVATE_ROOMバインディングが無い環境（未デプロイ時）やnotify先が無い通常の
+   * World/Friend Battleでは何もしない。
+   */
+  private async notifyPrivateRoomIfAny(matchId: string, winner: BattleWinner): Promise<void> {
+    const roomCode = await this.ctx.storage.get<string>(NOTIFY_PRIVATE_ROOM_KEY)
+    if (!roomCode || !this.env.PRIVATE_ROOM) return
+    const outcome: 'a' | 'b' | 'draw' = winner === 'playerA' ? 'a' : winner === 'playerB' ? 'b' : 'draw'
+    const stub = this.env.PRIVATE_ROOM.get(this.env.PRIVATE_ROOM.idFromName(roomCode))
+    try {
+      await stub.fetch('https://private-room.internal/internal/match-finished', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ matchId, outcome }),
+      })
+    } catch {
+      // PrivateRoom DOが既に閉じられている等。BattleRoom側の正式な終了処理は継続する。
+    }
+  }
+
   private async finish(state: BattleRoomState): Promise<void> {
     if (state.phase === 'finished' || state.phase === 'aborted') return
+
+    // 次フェーズ（item 15）: ENDLESS形式（PRIVATE ROOM専用）。常にmode:'friend'で生成される
+    // ため、以下のmode==='world'分岐には絶対に到達せず、WorldBattleのD1統計を一切汚染しない。
+    if (state.battleType === 'endless') {
+      const result = finalizeEndlessResult(state)
+      const finishedState: BattleRoomState = { ...state, phase: 'finished', finishReason: result.finishReason, endlessResult: result }
+      await this.saveState(finishedState)
+      const [playerA, playerB] = state.players
+      if (playerA) this.send(this.socketFor(playerA.playerId), { v: 1, type: 'endless_battle_finish', result, viewerIsPlayerA: true })
+      if (playerB) this.send(this.socketFor(playerB.playerId), { v: 1, type: 'endless_battle_finish', result, viewerIsPlayerA: false })
+      await this.notifyPrivateRoomIfAny(state.matchId, result.winner)
+      await this.ctx.storage.deleteAll()
+      return
+    }
+
     const result = finalizeResult(state)
     const finishedState: BattleRoomState = { ...state, phase: 'finished', finishReason: result.finishReason, result }
     await this.saveState(finishedState)
@@ -357,6 +439,10 @@ export class BattleRoom implements DurableObject {
         await repo.applyWorldResult(playerB.playerId, result.winner === 'playerB' ? 'win' : result.winner === 'draw' ? 'draw' : 'lose')
       }
     }
+
+    // PRIVATE ROOM経由のNORMAL対戦（mode:'friend' + notifyPrivateRoomCode）はここに到達する
+    // ——WorldBattle分岐（上）には入らないため、D1統計は一切書き込まれない。
+    await this.notifyPrivateRoomIfAny(state.matchId, result.winner)
 
     // item 34（Durable Object cleanup）: 正式データはD1へ保存済みのため、一時stateは
     // 試合終了後すぐに消す（終了済みBattleRoomの状態を永遠に保持しない）。

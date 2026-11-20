@@ -6,7 +6,10 @@ import { generateBattleProblemSet } from '../battle/battleProblemSet'
 import { generateRoomCode, isValidRoomCode } from '../battle/roomCode'
 import { Matchmaker } from './durableObjects/matchmaker'
 import { BattleRoom } from './durableObjects/battleRoom'
-import type { CreateRoomResponse, RoomStatusResponse } from '../battle/types'
+import { PrivateRoom } from './durableObjects/privateRoom'
+import { createD1PrivateRoomRepository } from './privateRoomRepository'
+import type { BattleOpponentProfile, CreateRoomResponse, RoomStatusResponse } from '../battle/types'
+import type { CreatePrivateRoomResponse, PrivateRoomStatusResponse } from '../battle/privateRoomTypes'
 import type {
   ChallengeApiResult,
   ChallengeAttemptListResult,
@@ -17,7 +20,7 @@ import type {
   ParticipatedChallengeSummary,
 } from '../challenge/types'
 
-export { Matchmaker, BattleRoom }
+export { Matchmaker, BattleRoom, PrivateRoom }
 
 /** Ver.6 Phase 5.3（送った挑戦状一覧）: 一括取得できるChallenge件数の上限（クライアントは直近10件しか送らない想定だが、サーバー側でも念のため上限を設ける）。 */
 const MAX_SUMMARY_IDS = 50
@@ -369,6 +372,64 @@ async function handleGetBattlePerformance(playerId: string, env: Env): Promise<R
   return json({ ok: true, value }, 200)
 }
 
+interface CreatePrivateRoomBody {
+  hostPlayerId: string
+  hostProfile: BattleOpponentProfile
+}
+
+/**
+ * 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM）: POST /api/rooms/private。
+ *
+ * 「1 active PRIVATE ROOM per PASS owner」をサーバー側で強制する唯一の場所
+ * （coordinatorからの明示指示）。private_roomsテーブル（host_player_idがPRIMARY KEY）への
+ * claimRoomForHostが既存行の制約違反を検出した場合、新規ルームを作らず既存のroomCodeを
+ * そのまま返す——「2つ目を作ろうとしたら既存の部屋へ戻す」という仕様をここで満たす。
+ *
+ * 注記（最終報告書にも誠実に記載する既知のギャップ）: DOPA PASSを実際に所有しているかの
+ * 検証自体は、今回まだ存在しないアカウント／決済認証システムの都合上、クライアント側の
+ * 主張（entitlementRepository.ts）に依存したままである。サーバー側で確実に強制できるのは
+ * 「同じhostPlayerIdから2つ目の有効な部屋は作れない」という部分だけであり、
+ * 「このhostPlayerId自体が本当にPASS所有者か」はこのラウンドではまだ検証できない
+ * （実際の決済プロバイダ統合時に、この関数の先頭に差し込むだけで済む、意図的に
+ * 分離されたチェックポイント）。
+ */
+async function handleCreatePrivateRoom(request: Request, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB || !env.PRIVATE_ROOM) {
+    return errorResponse({ ok: false, error: 'not_configured', message: 'Private room backend is not configured on this environment yet' })
+  }
+  const body = (await request.json()) as Partial<CreatePrivateRoomBody>
+  if (typeof body.hostPlayerId !== 'string' || body.hostPlayerId.length === 0 || !body.hostProfile) {
+    return errorResponse({ ok: false, error: 'invalid_input', message: 'hostPlayerId and hostProfile are required' })
+  }
+
+  const repo = createD1PrivateRoomRepository(env.CHALLENGE_DB)
+  const roomCode = generateRoomCode()
+  const claim = await repo.claimRoomForHost(body.hostPlayerId, roomCode, Date.now())
+  const finalRoomCode = claim.ok ? roomCode : claim.existingRoomCode
+
+  if (claim.ok) {
+    const stub = env.PRIVATE_ROOM.get(env.PRIVATE_ROOM.idFromName(finalRoomCode))
+    await stub.fetch('https://private-room.internal/internal/create', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ roomCode: finalRoomCode, hostPlayerId: body.hostPlayerId, hostProfile: body.hostProfile }),
+    })
+  }
+
+  return json({ ok: true, value: { roomCode: finalRoomCode } satisfies CreatePrivateRoomResponse }, claim.ok ? 201 : 200)
+}
+
+/** GET /api/rooms/private/:roomCode。合流前の事前チェック（存在しない/終了済み）。 */
+async function handlePrivateRoomStatus(roomCode: string, env: Env): Promise<Response> {
+  if (!isValidRoomCode(roomCode)) {
+    return json({ ok: false, reason: 'not_found' } satisfies PrivateRoomStatusResponse, 200)
+  }
+  const stub = env.PRIVATE_ROOM!.get(env.PRIVATE_ROOM!.idFromName(roomCode))
+  const res = await stub.fetch('https://private-room.internal/internal/status')
+  const statusBody = (await res.json()) as PrivateRoomStatusResponse
+  return json(statusBody, 200)
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
@@ -421,6 +482,31 @@ export default {
     const battlePerformanceMatch = /^\/api\/battles\/performance\/([^/]+)$/.exec(url.pathname)
     if (battlePerformanceMatch && request.method === 'GET') {
       return handleGetBattlePerformance(decodeURIComponent(battlePerformanceMatch[1]), env)
+    }
+
+    // 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM）: PRIVATE ROOM関連ルート。
+    // CHALLENGE_DBは「1部屋/ホスト」強制のためのみ必要（ロビーのリアルタイム状態自体は
+    // PRIVATE_ROOM Durable Objectのctx.storageだけで管理し、D1は使わない）。
+    if (url.pathname === '/api/rooms/private' && request.method === 'POST') {
+      return handleCreatePrivateRoom(request, env)
+    }
+
+    const privateRoomStatusMatch = /^\/api\/rooms\/private\/([^/]+)$/.exec(url.pathname)
+    if (privateRoomStatusMatch && request.method === 'GET') {
+      if (!env.PRIVATE_ROOM) {
+        return errorResponse({ ok: false, error: 'not_configured', message: 'Private room backend is not configured on this environment yet' })
+      }
+      return handlePrivateRoomStatus(decodeURIComponent(privateRoomStatusMatch[1]), env)
+    }
+
+    const privateRoomWsMatch = /^\/api\/rooms\/private\/([^/]+)\/ws$/.exec(url.pathname)
+    if (privateRoomWsMatch) {
+      if (!env.PRIVATE_ROOM) {
+        return errorResponse({ ok: false, error: 'not_configured', message: 'Private room backend is not configured on this environment yet' })
+      }
+      const roomCode = decodeURIComponent(privateRoomWsMatch[1])
+      const stub = env.PRIVATE_ROOM.get(env.PRIVATE_ROOM.idFromName(roomCode))
+      return stub.fetch(request)
     }
 
     if (!env.CHALLENGE_DB) {
