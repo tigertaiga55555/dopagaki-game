@@ -2,6 +2,8 @@ import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { pick } from '../../engine/random'
 import { createResolveOnce } from '../../engine/resolveOnce'
+import { useInputGateReady } from '../useInputGateReady'
+import { useQuestionStartRef } from '../useQuestionStartRef'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
 const DIRECTIONS = [
@@ -35,10 +37,11 @@ function computeTargetTimeMs() {
 
 function Component({ spec, onResult }: FinalQuestionComponentProps) {
   const { arrowDir, textDir, target } = spec.data as { arrowDir: DirId; textDir: DirId; target: DirId }
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
   const guardRef = useRef<ReturnType<typeof createResolveOnce<FinalQuestionResult>> | null>(null)
   if (!guardRef.current) guardRef.current = createResolveOnce(onResult)
+  const ready = useInputGateReady()
 
   useEffect(() => {
     const timer = setTimeout(() => finish(false), spec.targetTimeMs)
@@ -51,11 +54,12 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   }
 
   function handlePointerDown(e: ReactPointerEvent) {
+    if (!ready) return
     e.currentTarget.setPointerCapture(e.pointerId)
     dragStartRef.current = { x: e.clientX, y: e.clientY }
   }
   function handlePointerUp(e: ReactPointerEvent) {
-    if (!dragStartRef.current || guardRef.current!.isResolved) return
+    if (!ready || !dragStartRef.current || guardRef.current!.isResolved) return
     const dx = e.clientX - dragStartRef.current.x
     const dy = e.clientY - dragStartRef.current.y
     dragStartRef.current = null

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { randInt } from '../engine/random'
 import { sfx } from '../utils/sound'
@@ -19,7 +20,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   const { waitMs } = spec.data as { waitMs: number }
   const [countLabel, setCountLabel] = useState('2')
   const [isSkip, setIsSkip] = useState(false)
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const skipAtRef = useRef<number | null>(null)
   const doneRef = useRef(false)
 

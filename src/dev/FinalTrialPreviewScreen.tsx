@@ -45,6 +45,7 @@ const FAKE_STATS: PlayStats = {
   shortVideoSamples: [],
   colorWordFooledCount: 0,
   notifRushSamples: [],
+  bonusGainRaw: 0,
 }
 
 const MODE_LABEL: Record<FinalPreviewMode, string> = {
@@ -62,6 +63,10 @@ export function FinalTrialPreviewScreen({ mode }: { mode: FinalPreviewMode }) {
       <ResultScreen
         result={result}
         onRetry={() => {
+          setResult(null)
+          setPlayKey((k) => k + 1)
+        }}
+        onHome={() => {
           setResult(null)
           setPlayKey((k) => k + 1)
         }}

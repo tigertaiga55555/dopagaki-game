@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { pick } from '../engine/random'
 import { sfx } from '../utils/sound'
+import { useInputGateReady } from './useInputGateReady'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
 const FOOD_ICONS = ['🍎', '🍌', '🍇', '🍕', '🍔', '🍣', '🍩', '🍞']
@@ -35,8 +37,9 @@ function generate() {
 
 function Component({ spec, onResult }: QuestionComponentProps) {
   const { isFood, icon } = spec.data as { isFood: boolean; icon: string }
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const doneRef = useRef(false)
+  const ready = useInputGateReady()
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
   const [dragX, setDragX] = useState(0)
   const [flyDirection, setFlyDirection] = useState<'left' | 'right' | null>(null)
@@ -61,15 +64,15 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   function handlePointerDown(e: ReactPointerEvent) {
-    if (doneRef.current || flyDirection) return
+    if (!ready || doneRef.current || flyDirection) return
     dragStartRef.current = { x: e.clientX, y: e.clientY }
   }
   function handlePointerMove(e: ReactPointerEvent) {
-    if (!dragStartRef.current || flyDirection) return
+    if (!ready || !dragStartRef.current || flyDirection) return
     setDragX((e.clientX - dragStartRef.current.x) * FOLLOW_RATIO)
   }
   function handlePointerUp(e: ReactPointerEvent) {
-    if (!dragStartRef.current || flyDirection) return
+    if (!ready || !dragStartRef.current || flyDirection) return
     const dx = e.clientX - dragStartRef.current.x
     dragStartRef.current = null
     if (Math.abs(dx) < SWIPE_THRESHOLD_PX) {

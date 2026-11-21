@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { randInt } from '../engine/random'
 import { createResolveOnce } from '../engine/resolveOnce'
@@ -36,7 +37,7 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   const [pos, setPos] = useState(START_POS)
   const [dragging, setDragging] = useState(false)
   const [landed, setLanded] = useState<'success' | 'fail' | null>(null)
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const containerRef = useRef<HTMLDivElement>(null)
   const guardRef = useRef<ReturnType<typeof createResolveOnce<QuestionResult>> | null>(null)
   if (!guardRef.current) guardRef.current = createResolveOnce(onResult)

@@ -1,6 +1,61 @@
 import type { ComponentType } from 'react'
 
-export type ScreenName = 'title' | 'playing' | 'result'
+export type ScreenName =
+  | 'title'
+  | 'playing'
+  | 'result'
+  | 'endlessSelect'
+  | 'endlessPlaying'
+  | 'endlessResult'
+  | 'profile'
+  | 'profileEdit'
+  | 'achievements'
+  | 'ranking'
+  | 'challengeReceive'
+  | 'challengeSent'
+  | 'challengePlaying'
+  | 'challengeResult'
+  | 'challengeHistory'
+  | 'challengeSentList'
+  | 'challengeParticipatedList'
+  | 'battleHome'
+  | 'battleWorldMatching'
+  | 'battleMatch'
+  /** 次フェーズ（DOPA PASS基盤ラウンド）: PASS限定の詳細分析画面。 */
+  | 'passAnalytics'
+  /** 次フェーズ（DOPA PASS基盤ラウンド）: DOPA PASS購入（paywall）画面。 */
+  | 'passPaywall'
+  /** 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM）: 作成/参加の入口。 */
+  | 'privateRoomHome'
+  /** 次フェーズ（item 15）: ロビー（メンバー一覧・ホスト操作）。 */
+  | 'privateRoomLobby'
+  /** 次フェーズ（item 15）: PRIVATE ROOM経由のNORMAL対戦（既存BattleMatchScreenを再利用）。 */
+  | 'privateRoomMatch'
+  /** 次フェーズ（item 15）: PRIVATE ROOM経由のENDLESS対戦。 */
+  | 'privateEndlessMatch'
+  /** 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 27）: フレンド一覧（フレンドコード共有・申請・プレゼンス）。 */
+  | 'friendsHome'
+  /** 次フェーズ（item 27）: フレンドの公開プロフィール（ProfileScreenと同じ公開情報の部分集合）。 */
+  | 'friendProfile'
+
+/**
+ * Ver.6 Phase 4: Endlessモードの難易度。既存通常ゲームの問題難易度システム
+ * （config/difficultyConfig.tsのDIFFICULTY_PHASES）を再利用するための3段階のラベルで、
+ * Endless専用の新しい難易度分類ではない（config/endlessConfig.ts参照）。
+ */
+export type EndlessDifficulty = 'beginner' | 'intermediate' | 'advanced'
+
+/**
+ * Ver.6 Phase 4: 将来のオンラインランキング（Endless 初級/中級/上級の3種類）との互換性のため、
+ * 1プレイぶんの記録をこの形に揃えておく。現段階ではlocalStorageの自己ベストにしか
+ * 使わないが、difficulty/score/playedAtというフィールド構成自体は、将来DBへ送る
+ * レコードとしてもそのまま使える形にしてある（DB/Supabase等は今回導入しない）。
+ */
+export interface EndlessRecord {
+  difficulty: EndlessDifficulty
+  score: number
+  playedAt: number
+}
 
 export type Judgement = 'PERFECT' | 'GREAT' | 'GOOD' | 'MISS'
 
@@ -171,6 +226,14 @@ export interface PlayStats {
   colorWordFooledCount: number
   /** Ver.4.5: 「通知ラッシュ」で規定数の赤を消すのにかかった時間（直近10件） */
   notifRushSamples: { count: number; ms: number }[]
+  /**
+   * Ver.6 Phase 5.3（Challenge勝敗判定強化）: DOPA BONUS TIME（bonusTime問題）で
+   * rawScoreへ加算された量の合計（通常は1ゲーム1回ぶんのみ）。Challenge用の
+   * 「通常獲得DOPA%」（最終DOPA%からボーナスタイム分を除いた値）を正確に算出するために
+   * 追加した。既存の最終DOPA%（finalPercent/percent）の計算には一切影響しない
+   * （rawScoreRef自体への加算ロジックは無変更、この値は別途記録するだけ）。
+   */
+  bonusGainRaw: number
 }
 
 export interface FinalResultV4 {
@@ -189,6 +252,78 @@ export interface FinalResultV4 {
   playCount: number
   /** Ver.5.0: 120%へ到達しFINAL DOPA TRIALへ突入した場合のみ存在する進捗情報。 */
   finalTrial?: FinalTrialResultInfo
+  /** Ver.6 Phase 1: 200%到達後、限界突破チャレンジ（200〜500%）に挑戦した場合のみ存在する。 */
+  challenge500?: Challenge500ResultInfo
+  /**
+   * Ver.6 Phase 5: 今回のプレイで新たに解除されたDOPA%実績（0件なら空配列）。
+   * 300/400チェックポイント・490 FINAL QUESTION・500 CLEAR等の既存演出と競合しないよう、
+   * ゲーム中には出さず結果画面でまとめて通知する（screens/ResultScreen.tsx参照）。
+   */
+  newlyUnlockedAchievements?: AchievementId[]
+  /**
+   * Ver.6 Phase 5.2（Challenge機能完成）: このプレイで実際に出題された問題列。
+   * 結果画面の「挑戦状を送る」がこれをそのままChallengeのproblemSetとして送信する
+   * （未定義または空配列なら「挑戦状を送る」ボタン自体を表示しない）。
+   */
+  recordedProblemSet?: ChallengeProblemSetItem[]
+  /**
+   * Ver.6 Phase 5.3（Challenge勝敗判定強化）: Challengeの作成・挑戦のどちらでも使う
+   * 比較用performance。recordedProblemSetと同じく、未定義なら「挑戦状を送る」ボタンは
+   * 表示されない（createChallengeFromResult.ts参照）。通常結果画面（screens/
+   * ResultScreen.tsx）はこのフィールドを一切読まないため、表示内容に影響しない。
+   */
+  challengePerformance?: ChallengePerformance
+}
+
+/**
+ * Ver.6 Phase 5.3（Challenge勝敗判定強化）: Challengeの勝敗を「最終DOPA%が同じなら即LOSE」
+ * ではなく、複数指標の優先順位で決める——その比較に使う1プレイぶんの記録。
+ * Challenge作成時（作成者の基準記録）・attempt送信時（挑戦者自身の記録）の両方で
+ * このインターフェースをそのまま使う。
+ */
+export interface ChallengePerformance {
+  /** 最終DOPA%（既存のFinalResultV4.percentと同じ値）。 */
+  finalDopaPercent: number
+  /**
+   * 通常獲得DOPA%。最終DOPA%からボーナスタイム等で追加された分を除いた値。
+   * 通常プレイ（0〜120%）はPlayStats.bonusGainRawを除いた値、FINAL DOPA TRIAL・
+   * 限界突破チャレンジにはボーナス機構自体が存在しないため最終DOPA%と同値になる
+   * （engine/resultEngineV4.ts参照）。
+   */
+  baseDopaPercent: number
+  /** 正答率（0〜1）。 */
+  accuracy: number
+  /** 最大COMBO（連続正解数）。 */
+  maxCombo: number
+  /**
+   * 正解した問題だけのreaction time（ms）一覧の中央値。比較可能な正解サンプルが
+   * 一度も無かった場合はnull（例: 1問も答えずに終了した等の極端なケース）。
+   */
+  medianCorrectReactionMs: number | null
+}
+
+/**
+ * Ver.6 Phase 5.2（Challenge機能完成）: 出題された1問を再現するための最小限の情報。
+ * src/challenge/types.tsのChallengeProblemSetItemと同一の型をここで定義し、
+ * challenge/types.ts側はこれをそのまま再利用する（types.ts→challenge/types.tsの
+ * 一方向依存を保ち、循環importを避けるため）。既存の3つの問題体系
+ * （QuestionSpec／FinalQuestionSpec／Challenge500QuestionSpec）はいずれも
+ * {type, data} を核に持つ（targetTimeMs・tagsは体系によって有無が異なる）ため、
+ * その共通部分だけを持つ。
+ */
+export interface ChallengeProblemSetItem {
+  type: string
+  targetTimeMs?: number
+  tags?: string[]
+  data: Record<string, unknown>
+}
+
+/** Ver.6 Phase 1: 結果画面用に持ち越す限界突破チャレンジ（200〜500%）の進捗情報。 */
+export interface Challenge500ResultInfo {
+  /** 確保済みの最高チェックポイント（200/300/400/500）。 */
+  floor: number
+  /** 500%まで完全クリアしたか。 */
+  cleared: boolean
 }
 
 /**
@@ -236,3 +371,319 @@ export interface FinalTrialResultInfo {
   /** FINAL QUESTION（16問目）に正解して200%へ到達したか */
   cleared200: boolean
 }
+
+/**
+ * Ver.6 Phase 5（Profile/Achievement/Ranking基盤）: 匿名プレイヤーID。ログイン不要の
+ * まま、同一ブラウザ内でプレイヤーを識別するためだけの値（個人情報は含まない）。
+ * crypto.randomUUID()等の衝突しにくい形式で生成し、一度生成したら
+ * localStorage（utils/profileStorage.ts）へ保存してブラウザを閉じても維持する。
+ * 将来のDOPA PASS購入・Google/Email認証導入時は、このIDをそのままアカウントへ
+ * 紐付ける鍵として使う想定（storageへ密結合しすぎない構造にするため、型としては
+ * ただのstringで扱う）。
+ */
+export type PlayerId = string
+
+/**
+ * Ver.6 Phase 5.1（icon拡充）: プロフィールアイコン。外部画像は使わず、既存のemoji
+ * 24種から選ぶだけ。既存8種（bolt〜gem）のidは互換性維持のため一切変更していない。
+ */
+export type PresetIconId =
+  // ネオン系（既存8種、Ver.6 Phase 5からそのまま）
+  | 'bolt'
+  | 'flame'
+  | 'skull'
+  | 'eye'
+  | 'swirl'
+  | 'star'
+  | 'crown'
+  | 'gem'
+  // 顔
+  | 'devil'
+  | 'sunglasses'
+  | 'mindblown'
+  | 'hot'
+  | 'ogre'
+  // 動物
+  | 'cat'
+  | 'wolf'
+  | 'fox'
+  | 'frog'
+  // ゲーム的
+  | 'joystick'
+  | 'target'
+  | 'trophy'
+  | 'dice'
+  // エフェクト
+  | 'boom'
+  | 'rainbow'
+  | 'crystalball'
+
+/**
+ * Ver.6 Phase 5.1: プロフィールアイコンの参照。今回はpresetのみ使用するが、将来
+ * 自分の写真（サーバー画像ストレージ実装後）を追加しやすいよう、最初からkindで
+ * 分岐する判別共用体にしてある。remoteCustomは今回どこからも生成しない
+ * （型だけ先に用意し、実際のアップロード機能はサーバーProfile基盤＋R2実装時に追加する）。
+ */
+export type AvatarRef =
+  | { kind: 'preset'; iconId: PresetIconId }
+  | { kind: 'remoteCustom'; url: string }
+
+/**
+ * Ver.6 Phase 5: ログイン不要のローカルプロフィール。将来Public Profile（サーバー接続後）
+ * にもそのまま使える最小限のフィールド構成にしてある。
+ */
+export interface PlayerProfile {
+  playerId: PlayerId
+  nickname: string
+  /** Ver.6 Phase 5.1: 旧来の`iconId`フラットフィールドから移行。既存ユーザーの保存値は
+   *  utils/profileStorage.tsのgetProfile()が透過的に{kind:'preset', iconId}へ変換する。 */
+  avatar: AvatarRef
+  /** 装備中Title（config/titles.tsのTitleDef.id）。未装備はnull。 */
+  equippedTitleId: TitleId | null
+  /**
+   * 次フェーズ（DOPA PASS基盤ラウンド、item 29）: PASS所有者専用の「お気に入りTitle」最大3個
+   * （utils/profileStorage.ts MAX_FAVORITE_TITLES）。装備中Title（equippedTitleId、全ユーザー共通・
+   * 単一のまま変更しない）とは別概念——Profileにピン留め表示するだけで、どれも装備状態には
+   * ならない。PASS非所有者は常に空配列（UIがPASS所有時だけ編集可能にする）。
+   */
+  favoriteTitleIds: TitleId[]
+  createdAt: number
+}
+
+/**
+ * Ver.6 Phase 5.1（Achievement大幅拡充）: 実績の識別子。DOPA%系12個
+ * （既存6個のidは維持：dopa100/120/200/300/400/500）＋Endless系12個
+ * （初級/中級/上級×4段階）＝計24個。idはnameと分離してあり、将来名称だけを
+ * 差し替えてもid・解除済みフラグには一切影響しない。
+ */
+export type AchievementId =
+  | 'dopa50'
+  | 'dopa100'
+  | 'dopa120'
+  | 'dopa150'
+  | 'dopa200'
+  | 'dopa250'
+  | 'dopa300'
+  | 'dopa350'
+  | 'dopa400'
+  | 'dopa450'
+  | 'dopa490'
+  | 'dopa500'
+  | 'endlessBeginner10'
+  | 'endlessBeginner25'
+  | 'endlessBeginner50'
+  | 'endlessBeginner100'
+  | 'endlessIntermediate5'
+  | 'endlessIntermediate15'
+  | 'endlessIntermediate30'
+  | 'endlessIntermediate50'
+  | 'endlessAdvanced3'
+  | 'endlessAdvanced10'
+  | 'endlessAdvanced20'
+  | 'endlessAdvanced30'
+  /**
+   * Ver.6 Phase 8（ENDLESS Challenge）: Challenge専用の実績2個。通常ENDLESSの連続正解
+   * 実績（endlessStreak系）とは完全に独立しており、通常プレイからは絶対に解除されない
+   * （Challenge経由の結果処理からのみ呼ばれる専用関数で解除する）。
+   */
+  | 'endlessChallengeFirstWin'
+  | 'endlessChallengeFirstDefense'
+  /**
+   * Ver.6 Phase 10（実績拡張ラウンド、Achievement/Title 68個化）: 以下、既存26個に
+   * 追加した42個。各カテゴリの件数はconfig/achievements.tsのコメント・テスト
+   * （achievements.test.ts）で68ちょうどであることを保証する。
+   *
+   * ENDLESS追加3個（初級150/中級75/上級50、既存4段階ラダーへの5段目追加）。
+   */
+  | 'endlessBeginner150'
+  | 'endlessIntermediate75'
+  | 'endlessAdvanced50'
+  /** Challenge追加10個（通常Challenge・ENDLESS Challenge双方を合算するladder系＋指名手配）。 */
+  | 'challengeCreatedFirst'
+  | 'challengeParticipatedFirst'
+  | 'challengeWin1'
+  | 'challengeWin5'
+  | 'challengeWin20'
+  | 'challengeWin50'
+  | 'challengeDefense1'
+  | 'challengeDefense10'
+  | 'challengeDefense25'
+  | 'challengeWanted10'
+  /** World Battle 12個（新規カテゴリ）。 */
+  | 'worldBattleFirstPlay'
+  | 'worldBattleWin1'
+  | 'worldBattleWin10'
+  | 'worldBattleWin25'
+  | 'worldBattleWin50'
+  | 'worldBattleWin100'
+  | 'worldBattleWin250'
+  | 'worldBattleStreak3'
+  | 'worldBattleStreak5'
+  | 'worldBattleStreak10'
+  | 'worldBattleStreak20'
+  | 'worldBattleFirstDraw'
+  /** Friend Battle 4個（新規カテゴリ）。 */
+  | 'friendBattleFirstPlay'
+  | 'friendBattlePlay10'
+  | 'friendBattlePlay50'
+  | 'friendBattlePlay100'
+  /** Skill/Special 8個（新規カテゴリ）。 */
+  | 'noMiss100'
+  | 'noMiss200'
+  | 'battleWinByBaseDopa'
+  | 'battleWinByAccuracy'
+  | 'battleWinByMaxCombo'
+  | 'battleWinByReaction'
+  | 'battleMirrorMatch'
+  | 'battleComeback'
+  /** Grind 5個（新規カテゴリ）。 */
+  | 'grindPlay10'
+  | 'grindPlay50'
+  | 'grindPlay100'
+  | 'grindPlay500'
+  | 'grindPlay1000'
+
+/**
+ * 実績の解除条件。
+ * - dopaPercent: 通常モード・FINAL DOPA TRIAL・500%チャレンジのいずれで到達しても共通の
+ *   bestPercentV4（utils/storage.ts）がthreshold以上になった時点で解除。
+ * - endlessStreak: 難易度別のEndless自己ベストがthreshold以上になった時点で解除。
+ * - challenge500FinalQuestion: 490%（FINAL QUESTION、あと1問で500%）到達という一度きりの
+ *   イベント。bestPercentの閾値では表現できない（490はMISSなら400へ、正解なら500へ
+ *   瞬時に遷移し、記録される最終%として490そのものが残ることがないため）、専用の種別。
+ *
+ * Ver.6 Phase 10（実績拡張ラウンド）追加分：
+ * - challengeCreated/challengeParticipated: Challenge作成／参加（挑戦者側）が初めて成立した。
+ * - challengeWinCount/challengeDefenseCount: 通常Challenge・ENDLESS Challenge双方を合算した
+ *   累計（挑戦者としての勝利数／作成者としての防衛数）がthreshold以上。
+ * - challengeWanted: 自分が作成したいずれか1つのChallengeに、10人以上の異なる挑戦者が挑んだ。
+ * - worldBattleFirstPlay/worldBattleFirstDraw: 世界対戦で初めてプレイ／初めてDRAWになった。
+ * - worldBattleWinCount/worldBattleStreak: 世界対戦の累計勝利数／自己最大連勝数がthreshold以上。
+ * - friendBattleFirstPlay/friendBattlePlayCount: フレンド対戦の初プレイ／累計プレイ回数。
+ * - noMiss: 公式DOPA RUSHプレイでthreshold%以上に到達し、かつ正答率100%だった
+ *   （Challenge/Battle経由のリプレイは対象外、officialフラグで判定）。
+ * - battleDecidingStat: 世界対戦で、この項目（baseDopaPercent/accuracy/maxCombo/
+ *   medianCorrectReactionMs）が実際の勝敗決定要因（decidedBy）になってWINした。
+ * - battleMirror: 世界対戦で5項目（finalDopaPercent含む）が完全一致しDRAW（decidedBy==='exactTie'）。
+ * - battleComeback: 世界対戦で、試合中に一定以上のDOPA%差を付けられた状態から最終的にWINした
+ *   （BattleMatchScreen.tsxが試合中のopponentPercent-myPercentの最大値を追跡して判定）。
+ * - officialPlayCount: 公式プレイ（DOPA RUSH・ENDLESS・世界対戦・フレンド対戦。Challenge・
+ *   ENDLESS Challenge・QA/Preview専用モードは含まない）の累計回数がthreshold以上。
+ */
+export type AchievementUnlockCondition =
+  | { type: 'dopaPercent'; threshold: number }
+  | { type: 'endlessStreak'; difficulty: EndlessDifficulty; threshold: number }
+  | { type: 'challenge500FinalQuestion' }
+  /** Ver.6 Phase 8（ENDLESS Challenge）: 挑戦者として初めてENDLESS ChallengeにWINした。 */
+  | { type: 'endlessChallengeWin' }
+  /** Ver.6 Phase 8（ENDLESS Challenge）: ホストとして初めて自分のENDLESS Challengeの防衛（相手のLOSE/DRAW）に成功した。 */
+  | { type: 'endlessChallengeDefense' }
+  | { type: 'challengeCreated' }
+  | { type: 'challengeParticipated' }
+  | { type: 'challengeWinCount'; threshold: number }
+  | { type: 'challengeDefenseCount'; threshold: number }
+  | { type: 'challengeWanted' }
+  | { type: 'worldBattleFirstPlay' }
+  | { type: 'worldBattleWinCount'; threshold: number }
+  | { type: 'worldBattleStreak'; threshold: number }
+  | { type: 'worldBattleFirstDraw' }
+  | { type: 'friendBattleFirstPlay' }
+  | { type: 'friendBattlePlayCount'; threshold: number }
+  | { type: 'noMiss'; threshold: number }
+  | { type: 'battleDecidingStat'; stat: 'baseDopaPercent' | 'accuracy' | 'maxCombo' | 'medianCorrectReactionMs' }
+  | { type: 'battleMirror' }
+  | { type: 'battleComeback' }
+  | { type: 'officialPlayCount'; threshold: number }
+
+/**
+ * 実績のカテゴリ（Achievement画面のフィルタタブに使う）。
+ * Ver.6 Phase 10（実績拡張ラウンド）: 'dopa'/'endless'の既存2値は維持しつつ（既存実績の
+ * categoryフィールドを書き換える必要がないようにするため）、新規5カテゴリを追加した。
+ */
+export type AchievementCategory = 'dopa' | 'endless' | 'challenge' | 'worldBattle' | 'friendBattle' | 'special' | 'grind'
+
+/**
+ * 実績定義（config/achievements.ts）。id/name/description/unlockConditionを分離し、名称だけの差し替えを容易にする。
+ * Ver.6 Phase 10（実績拡張ラウンド）: rarity/secretを追加。
+ * - rarity: 'rare'は解除演出を強化する対象（500%・100勝・250勝・20連勝・1000プレイ・Secret系）。
+ * - secret: trueの場合、未解除時はAchievement画面で名称・条件を「？？？」に隠す
+ *   （鏡写し・大逆転など、条件を知らない方が面白いもの限定。基本的な進捗系実績は対象外）。
+ */
+export interface AchievementDef {
+  id: AchievementId
+  name: string
+  description: string
+  unlockCondition: AchievementUnlockCondition
+  category: AchievementCategory
+  /** categoryが'endless'の場合のみ存在。Achievement画面のカード上に難易度バッジを出すために使う。 */
+  endlessDifficulty?: EndlessDifficulty
+  rarity?: 'rare'
+  secret?: boolean
+}
+
+/**
+ * Ver.6 Phase 5: Title（称号）のid。現時点ではAchievementIdと1対1だが、将来Titleが
+ * Achievement以外（Ranking順位・Challenge等）からも解放されうるため、型としては
+ * AchievementIdへ固定せず別名として分離してある。
+ */
+export type TitleId = string
+
+/**
+ * 次フェーズ（Profile/Heart UI強化ラウンド、item 7/8）: Title専用の5段階レアリティ。
+ * AchievementDef.rarity（'rare'の1値だけ・実績解除演出の強弱フラグ）とは完全に別物
+ * （意図も値域も異なるため、既存のAchievementDef.rarityを拡張・流用せず、Title側に
+ * 専用の型・専用のフィールド名を新設して混同を避ける）。難易度の低い順に
+ * COMMON → RARE → EPIC → LEGENDARY → MYTHIC。
+ */
+export type TitleRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic'
+
+/** Title定義（config/titles.ts）。今回は仮称（例: "DOPA 300%"）でよい。 */
+export interface TitleDef {
+  id: TitleId
+  name: string
+  description: string
+  unlockedByAchievementId: AchievementId
+  /** 称号のレアリティ（item 7/8）。既存のENDLESS難易度配色・AchievementDef.rarityとは別の表現系。 */
+  rarity: TitleRarity
+}
+
+/**
+ * 次フェーズ（DOPA PASS基盤ラウンド）: ゲームコア／UIがPASS関連の権限を確認する唯一の
+ * キー集合。「hasDopaPass」のような単一bool値を各所に散らすのではなく、
+ * payment/entitlementRepository.tsのEntitlementRepository.hasEntitlement(key)を通して
+ * だけ確認する——現時点ではDOPA_PASS所有が常にこの5つ全てを意味するが（1:1写像）、
+ * 将来の商品構成変更（例: PRIVATE_ROOM_CREATEだけの単体販売）があっても、ゲームコアの
+ * 呼び出し側は一切書き換えずに済む設計にするための抽象境界。
+ */
+export type EntitlementKey = 'DOPA_PASS' | 'PRIVATE_ROOM_CREATE' | 'UNLIMITED_HEART' | 'AD_FREE' | 'FULL_HISTORY'
+
+/**
+ * Ver.6 Phase 5: 共通プレイヤー記録。既存storage（bestPercentV4・EndlessBestV1×3）を
+ * 二重管理せず、utils/playerStatsRepository.tsが読み取り専用のビューとして組み立てる。
+ * worldBattle*は将来のリアルタイム対戦実装後に初めて値を持つ（今回は常にundefined、
+ * 偽の0としてUIへ表示しない）。
+ */
+export interface PlayerStats {
+  maxDopaPercent: number
+  endlessBeginnerBest: number
+  endlessIntermediateBest: number
+  endlessAdvancedBest: number
+  achievementCount: number
+  /** 将来用（世界対戦実装後）。今回は常にundefined。 */
+  worldBattleWins?: number
+  /** 将来用（世界対戦実装後）。今回は常にundefined。 */
+  worldBattleMaxStreak?: number
+}
+
+/**
+ * Ver.6 Phase 5: 将来のRanking6種類の識別子。Elo/rating/勝率ランキングは作らない
+ * （ユーザー指示）。worldBattle系2種は対戦実装後に初めて値を持つカテゴリとして
+ * 先に型だけ用意する。
+ */
+export type RankingCategoryId =
+  | 'maxDopaPercent'
+  | 'endlessBeginner'
+  | 'endlessIntermediate'
+  | 'endlessAdvanced'
+  | 'worldBattleWins'
+  | 'worldBattleMaxStreak'

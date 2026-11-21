@@ -69,6 +69,15 @@ export const OVERDRIVE_TITLES: { max: number; type: DopagakiTypeDef }[] = [
   { max: 119, type: { id: 'overdrive4', name: '人類卒業型ドパガキ' } },
   { max: 199, type: { id: 'finalTrial', name: 'FINAL DOPA TRIAL挑戦者' } },
   { max: 200, type: { id: 'dopaPerfect', name: 'DOPA PERFECT' } },
+  // Ver.6 Phase 1: 200%到達後の「限界突破チャレンジ」（200〜500%）。
+  // 旧実装はOVERDRIVE_TITLESの最後のtier（max:200）を超える％に対するtierが
+  // 存在せず、200%を超える値はすべて配列末尾へフォールスルーして「DOPA PERFECT」と
+  // 誤表示されていた（200%も500%も同じ称号になってしまう不具合）。300/400/500に
+  // 明示的なtierを追加して解消する。
+  { max: 299, type: { id: 'challenge500Early', name: '限界突破チャレンジャー' } },
+  { max: 399, type: { id: 'challenge500Checkpoint300', name: '300%到達者' } },
+  { max: 499, type: { id: 'challenge500Checkpoint400', name: '400%到達者' } },
+  { max: 500, type: { id: 'challenge500Clear', name: 'ABSOLUTE DOPA' } },
 ]
 
 export function getOverdriveTitle(percent: number): DopagakiTypeDef {

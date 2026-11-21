@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
-import { pick } from '../../engine/random'
+import { generateRpsHandSequence } from '../../engine/rpsSequence'
+import { useRpsSequenceReveal } from '../useRpsSequenceReveal'
 import { QuestionShell } from '../QuestionShell'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
@@ -12,7 +13,6 @@ const HANDS = [
 ] as const
 type HandId = (typeof HANDS)[number]['id']
 
-const HAND_STEP_MS = 700
 const SEQUENCE_LENGTH = 3
 
 function winningHandAgainst(opponent: HandId): HandId {
@@ -24,9 +24,12 @@ function winningHandAgainst(opponent: HandId): HandId {
  * FinalRpsForwardSequenceQuestion（記憶＋判断プール）の高難度版。「逆順に全部勝て！」の
  * 指示は相手の手の並びを見せる前に必ず表示する。3つの相手の手を記憶した後、
  * 表示順とは逆の順番で、それぞれに勝つ手を選んでいく（記憶＋反転＋判断の複合）。
+ *
+ * Ver.6 Phase 9（実機QA反映）: 手配列の生成はengine/rpsSequence.tsのgenerateRpsHandSequence
+ * に共通化した（隣り合う手が同じにならないことを保証、1個飛ばしの一致は許容）。
  */
 function generate() {
-  const sequence: HandId[] = Array.from({ length: SEQUENCE_LENGTH }, () => pick(HANDS).id)
+  const sequence = generateRpsHandSequence(SEQUENCE_LENGTH)
   const answerSequence = [...sequence].reverse().map(winningHandAgainst)
   return { sequence, answerSequence }
 }
@@ -37,35 +40,27 @@ function computeTargetTimeMs() {
 
 function Component({ spec, onResult }: FinalQuestionComponentProps) {
   const { sequence, answerSequence } = spec.data as { sequence: HandId[]; answerSequence: HandId[] }
-  const [revealIndex, setRevealIndex] = useState(-1)
-  const [revealDone, setRevealDone] = useState(false)
   const [answeredCount, setAnsweredCount] = useState(0)
   const startRef = useRef<number | null>(null)
   const guardRef = useRef<ReturnType<typeof createResolveOnce<FinalQuestionResult>> | null>(null)
   if (!guardRef.current) guardRef.current = createResolveOnce(onResult)
   const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Ver.6 Phase 9（実機QA反映）: 表示→消去→blank→次の表示…の状態遷移は共通フックに委譲する。
+  // 回答フェーズのfailTimerは、3手全ての提示＋最後のblankが終わった（onRevealDone）後にしか
+  // 開始しない。CHALLENGEリプレイで保存済みの古いsequenceを再生しても、データは書き換えない。
+  const { visibleIndex, revealDone } = useRpsSequenceReveal({
+    length: sequence.length,
+    onRevealDone: () => {
+      startRef.current = performance.now()
+      failTimerRef.current = setTimeout(() => finish(false), spec.targetTimeMs)
+    },
+  })
+
   useEffect(() => {
-    const timers: ReturnType<typeof setTimeout>[] = []
-    sequence.forEach((_, i) => {
-      timers.push(setTimeout(() => setRevealIndex(i), i * HAND_STEP_MS))
-    })
-    timers.push(
-      setTimeout(
-        () => {
-          setRevealIndex(-1)
-          setRevealDone(true)
-          startRef.current = performance.now()
-          failTimerRef.current = setTimeout(() => finish(false), spec.targetTimeMs)
-        },
-        sequence.length * HAND_STEP_MS,
-      ),
-    )
     return () => {
-      timers.forEach(clearTimeout)
       if (failTimerRef.current) clearTimeout(failTimerRef.current)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function finish(correct: boolean) {
@@ -93,7 +88,9 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   return (
     <QuestionShell sub={revealDone ? '覚えた順番の逆から勝て' : '相手の手を覚えろ'} instruction="逆順に全部勝て！">
       {!revealDone && (
-        <p className="text-6xl">{revealIndex >= 0 ? HANDS.find((h) => h.id === sequence[revealIndex])!.glyph : '？'}</p>
+        <p className="text-6xl" style={{ minHeight: '1em' }}>
+          {visibleIndex !== null ? HANDS.find((h) => h.id === sequence[visibleIndex])!.glyph : ' '}
+        </p>
       )}
       {revealDone && (
         <div className="flex flex-col items-center gap-2">
