@@ -68,7 +68,7 @@ export function Challenge500QaPreviewScreen() {
   }
 
   if (phase === 'result' && result) {
-    return <ResultScreen result={result} onRetry={restart} />
+    return <ResultScreen result={result} onRetry={restart} onHome={restart} />
   }
 
   return (

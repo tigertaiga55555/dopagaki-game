@@ -609,7 +609,12 @@ export default function App() {
           )}
           {screen === 'playing' && <PlayScreen key={playKey} onFinish={handleFinish} onQuit={quitToHome} />}
           {screen === 'result' && result && (
-            <ResultScreen result={result} onRetry={() => maybeGateWithInterstitial(() => startPlay('retry'))} onChallengeSent={handleChallengeSent} />
+            <ResultScreen
+              result={result}
+              onRetry={() => maybeGateWithInterstitial(() => startPlay('retry'))}
+              onHome={() => maybeGateWithInterstitial(goHome)}
+              onChallengeSent={handleChallengeSent}
+            />
           )}
           {screen === 'endlessSelect' && <EndlessSelectScreen onSelect={startEndless} onBack={popScreen} onHome={goHome} />}
           {screen === 'endlessPlaying' && (

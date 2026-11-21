@@ -66,6 +66,10 @@ export function FinalTrialPreviewScreen({ mode }: { mode: FinalPreviewMode }) {
           setResult(null)
           setPlayKey((k) => k + 1)
         }}
+        onHome={() => {
+          setResult(null)
+          setPlayKey((k) => k + 1)
+        }}
       />
     )
   }

@@ -169,7 +169,7 @@ export function OverdrivePreviewScreen() {
   const frameClass = getOverdriveFrameClass(overdriveTier) || 'neon-frame'
 
   if (phase === 'result') {
-    return <ResultScreen result={buildPreviewResult()} onRetry={() => setPhase('idle')} />
+    return <ResultScreen result={buildPreviewResult()} onRetry={() => setPhase('idle')} onHome={() => setPhase('idle')} />
   }
 
   return (

@@ -17,13 +17,15 @@ import type { FinalResultV4 } from '../types'
 interface Props {
   result: FinalResultV4
   onRetry: () => void
+  /** 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 32-34）: 他の結果画面と揃えた「ホームへ戻る」。 */
+  onHome: () => void
   /** Ver.6 Phase 5.2（Challenge機能完成）: 「挑戦状を送る」が成功した際に呼ばれる。 */
   onChallengeSent?: (challenge: ChallengeRecord) => void
 }
 
 const TOAST_MS = 3200
 
-export function ResultScreen({ result, onRetry, onChallengeSent }: Props) {
+export function ResultScreen({ result, onRetry, onHome, onChallengeSent }: Props) {
   const [copied, setCopied] = useState(false)
   const [imageBusy, setImageBusy] = useState(false)
   const [saveBusy, setSaveBusy] = useState(false)
@@ -199,6 +201,13 @@ export function ResultScreen({ result, onRetry, onChallengeSent }: Props) {
         className="mt-2 w-full max-w-xs rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-5 text-lg font-black text-white shadow-[0_8px_0_0_rgba(126,34,206,0.8)] transition-transform active:translate-y-1 active:shadow-[0_2px_0_0_rgba(126,34,206,0.8)]"
       >
         {getRetryLabel(result.percent)}
+      </button>
+      {/* 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 32-34ナビ監査）: 他の結果画面
+          （Endless/Challenge/Battle）はいずれも控えめな「ホームへ戻る」を持つのに、
+          この画面だけ持っていなかった既存の不整合を、既存の主要CTA（挑戦状/シェア/
+          リトライ）を一切押し出さない最後列のテキストリンクとして揃える。 */}
+      <button onClick={onHome} className="w-full rounded-2xl bg-transparent py-2 text-sm font-bold text-white/50 active:scale-95">
+        ホームへ戻る
       </button>
 
       {ADS_ENABLED_V6 && (
