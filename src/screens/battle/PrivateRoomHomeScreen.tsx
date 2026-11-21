@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BackButton } from '../../components/BackButton'
+import { NavBar } from '../../components/NavBar'
 import { createPrivateRoom, getPrivateRoomStatus } from '../../battle/privateRoomClient'
 import { normalizeRoomCode, isValidRoomCode } from '../../battle/roomCode'
 import { trackPrivateRoomJoined } from '../../utils/analytics'
@@ -7,6 +7,7 @@ import type { BattleOpponentProfile } from '../../battle/types'
 
 interface Props {
   onBack: () => void
+  onHome: () => void
   /** 次フェーズ（item 15 PRIVATE ROOM）: 自由に合流できる（free users joining is free for everyone）。 */
   onEnterLobby: (roomCode: string) => void
   /** ルーム作成はDOPA PASS限定（item 18: create-room paywall gate）。無料ユーザーがタップした場合だけ呼ぶ。 */
@@ -25,7 +26,7 @@ type View = 'menu' | 'join_input'
  * 「PRIVATE ROOMに入る」画面。battle/screens/FriendBattleScreen.tsxと同じ構造——
  * ただし「作る」はDOPA PASS限定（free users joining is always free、作成だけが有料）。
  */
-export function PrivateRoomHomeScreen({ onBack, onEnterLobby, onRequirePass, hasPass, playerId, myProfile, initialRoomCode }: Props) {
+export function PrivateRoomHomeScreen({ onBack, onHome, onEnterLobby, onRequirePass, hasPass, playerId, myProfile, initialRoomCode }: Props) {
   const [view, setView] = useState<View>(initialRoomCode ? 'join_input' : 'menu')
   const [codeInput, setCodeInput] = useState(initialRoomCode ?? '')
   const [error, setError] = useState<string | null>(null)
@@ -68,7 +69,7 @@ export function PrivateRoomHomeScreen({ onBack, onEnterLobby, onRequirePass, has
   if (view === 'join_input') {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 py-10 text-center">
-        <BackButton onBack={onBack} label="戻る" />
+        <NavBar onBack={onBack} onHome={onHome} />
         <p className="text-sm font-bold text-white/70">ルームコードを入力</p>
         <input
           value={codeInput}
@@ -91,7 +92,7 @@ export function PrivateRoomHomeScreen({ onBack, onEnterLobby, onRequirePass, has
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 py-10 text-center">
-      <BackButton onBack={onBack} label="戻る" />
+      <NavBar onBack={onBack} onHome={onHome} />
       <h1 className="text-2xl font-black tracking-widest text-white">🚪 PRIVATE ROOM</h1>
       <p className="text-xs text-white/40">友達だけのロビーを作って、何度でも対戦できます</p>
       {error && <p className="text-xs font-bold text-rose-300">{error}</p>}

@@ -1,22 +1,34 @@
-import { BackButton } from '../../components/BackButton'
+import { NavBar } from '../../components/NavBar'
 
 interface Props {
   onBack: () => void
+  onHome: () => void
   onWorldBattle: () => void
-  onFriendBattle: () => void
   /** 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM）: 参加は誰でも無料、作成はDOPA PASS限定。 */
   onPrivateRoom: () => void
 }
 
 /**
- * Ver.6 Phase 6（1対1リアルタイム対戦）: BATTLE → 世界対戦/フレンド対戦の選択画面。
+ * Ver.6 Phase 6（1対1リアルタイム対戦）: BATTLE → 対戦方法の選択画面。
  * 通常モードより対人戦・緊張感・アーケード感を出すため、濃い赤〜紫のグラデーションで
  * トーンを変える（ただし問題の視認性には影響しない、この画面限定の演出）。
+ *
+ * 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 25/26）: 「知らない人とのランダムマッチング＝
+ * World Battle」「友達との対戦＝PRIVATE ROOM」に役割を完全分離するため、スタンドアロンの
+ * 🤝フレンド対戦（ルームコード/URLで誰でも無料に1対1を始められる導線）をここから廃止した
+ * ——これを残したままだとDOPA PASSの一番の訴求点（PRIVATE ROOM作成権）が無料の代替手段で
+ * 迂回されてしまう（item 36）。選択肢は常に世界対戦／PRIVATE ROOMの2つだけになる。
+ *
+ * 内部実装注記（最終報告書にも記載）: BattleMode型の'friend'や、既存のBattleRoom DO・
+ * battleRoomEngine.ts・/api/battles/rooms系のHTTPルートは一切削除していない——PRIVATE ROOMの
+ * NORMAL対戦が既にmode:'friend'としてこれらをそのまま再利用しているため（内部名を'private'へ
+ * 改名することも検討したが、BattleMode型・各テスト・Worker側ルーティングなど影響範囲が
+ * 広く、今回のラウンドでの機能的な利益がないため見送った——判断の根拠として記録する）。
  */
-export function BattleHomeScreen({ onBack, onWorldBattle, onFriendBattle, onPrivateRoom }: Props) {
+export function BattleHomeScreen({ onBack, onHome, onWorldBattle, onPrivateRoom }: Props) {
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-gradient-to-b from-black via-[#1a0510] to-black">
-      <BackButton onBack={onBack} label="ホーム" />
+      <NavBar onBack={onBack} onHome={onHome} />
 
       <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6 py-10 text-center">
         <p className="text-xs font-black tracking-[0.4em] text-rose-400/80">1 vs 1 REAL-TIME</p>
@@ -32,20 +44,12 @@ export function BattleHomeScreen({ onBack, onWorldBattle, onFriendBattle, onPriv
           <p className="text-[11px] text-white/40">知らないプレイヤーとランダムマッチング</p>
 
           <button
-            onClick={onFriendBattle}
-            className="mt-2 w-full rounded-2xl border border-white/15 bg-white/5 py-4 text-base font-black tracking-widest text-white/85 transition-transform active:scale-95"
-          >
-            🤝 フレンド対戦
-          </button>
-          <p className="text-[11px] text-white/40">URL・ルームコードで1対1</p>
-
-          <button
             onClick={onPrivateRoom}
             className="mt-2 w-full rounded-2xl border border-fuchsia-400/30 bg-fuchsia-500/10 py-4 text-base font-black tracking-widest text-fuchsia-200 transition-transform active:scale-95"
           >
             🚪 PRIVATE ROOM
           </button>
-          <p className="text-[11px] text-white/40">友達だけのロビーで何度でも対戦（参加は無料）</p>
+          <p className="text-[11px] text-white/40">最大8人・友達の参加はいつでも無料・何度でも対戦</p>
         </div>
       </div>
     </div>

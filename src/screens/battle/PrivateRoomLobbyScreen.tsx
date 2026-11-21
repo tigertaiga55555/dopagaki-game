@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BackButton } from '../../components/BackButton'
+import { NavBar } from '../../components/NavBar'
 import { resolveAvatarEmoji } from '../../config/profileConfig'
 import { connectToPrivateRoom, type PrivateRoomSocket } from '../../battle/privateRoomClient'
 import { buildPrivateRoomUrl } from '../../battle/privateRoomUrl'
@@ -11,8 +11,10 @@ interface Props {
   roomCode: string
   playerId: string
   myProfile: BattleOpponentProfile
-  /** ロビーを抜ける（自分の意思で退出、またはhostがルームを閉じた）。 */
+  /** ロビーを抜ける（自分の意思で退出、またはhostがルームを閉じた）。「← 戻る」＝1つ戻る、と同じ扱い。 */
   onLeave: () => void
+  /** 「⌂ ホーム」。スタック全クリア。 */
+  onHome: () => void
   /** 自分がホストに選ばれた2人のうちの1人になった瞬間に呼ぶ（App.tsx側が実際の対戦画面へ切り替える）。 */
   onEnterMatch: (args: {
     matchId: string
@@ -42,7 +44,7 @@ const DIFFICULTY_LABEL: Record<EndlessDifficulty, string> = { beginner: '初級'
  * （ENDLESS、既存のBattleRoom DO・WS接続・endlessBattleProblemSet.tsをそのまま使う）が
  * 入れ替わりで表示を引き継ぐ。
  */
-export function PrivateRoomLobbyScreen({ roomCode, playerId, myProfile, onLeave, onEnterMatch, isMatchAlreadyHandled }: Props) {
+export function PrivateRoomLobbyScreen({ roomCode, playerId, myProfile, onLeave, onHome, onEnterMatch, isMatchAlreadyHandled }: Props) {
   const [roomState, setRoomState] = useState<PrivateRoomState | null>(null)
   const [connError, setConnError] = useState<string | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -146,7 +148,7 @@ export function PrivateRoomLobbyScreen({ roomCode, playerId, myProfile, onLeave,
   if (!roomState) {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
-        <BackButton onBack={handleLeave} label="戻る" />
+        <NavBar onBack={handleLeave} onHome={onHome} />
         <p className="text-sm font-bold text-white/60">ロビーに接続しています…</p>
         {connError && <p className="text-xs font-bold text-rose-300">{connError}</p>}
       </div>
@@ -155,7 +157,7 @@ export function PrivateRoomLobbyScreen({ roomCode, playerId, myProfile, onLeave,
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
-      <BackButton onBack={handleLeave} label="退出" />
+      <NavBar onBack={handleLeave} onHome={onHome} />
 
       <div className="flex flex-1 flex-col items-center gap-4 px-6 py-4">
         <h1 className="text-lg font-black tracking-widest text-fuchsia-300">PRIVATE ROOM</h1>

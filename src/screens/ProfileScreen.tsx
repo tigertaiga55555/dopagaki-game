@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BackButton } from '../components/BackButton'
+import { NavBar } from '../components/NavBar'
 import { DopaPassBadge } from '../components/DopaPassBadge'
 import { FavoriteTitlesRow } from '../components/FavoriteTitlesRow'
 import { PassTitleBadge } from '../components/PassTitleBadge'
@@ -20,6 +20,7 @@ import { equipTitle, getProfile, setFavoriteTitleIds } from '../utils/profileSto
 
 interface Props {
   onBack: () => void
+  onHome: () => void
   onEdit: () => void
   onAchievements: () => void
   onRanking: () => void
@@ -44,6 +45,7 @@ interface Props {
  */
 export function ProfileScreen({
   onBack,
+  onHome,
   onEdit,
   onAchievements,
   onRanking,
@@ -81,7 +83,7 @@ export function ProfileScreen({
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
-      <BackButton onBack={onBack} label="ホーム" />
+      <NavBar onBack={onBack} onHome={onHome} />
 
       <div className="flex flex-1 flex-col items-center gap-6 px-6 py-4">
         {/* プレイヤーカード */}

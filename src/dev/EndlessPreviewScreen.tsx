@@ -43,7 +43,7 @@ export function EndlessPreviewScreen() {
         🔧 ENDLESS QA PREVIEW（本番には出ません）
       </div>
 
-      {phase === 'select' && <EndlessSelectScreen onSelect={handleSelect} onBack={() => setPhase('select')} />}
+      {phase === 'select' && <EndlessSelectScreen onSelect={handleSelect} onBack={() => setPhase('select')} onHome={() => setPhase('select')} />}
 
       {phase === 'playing' && (
         <EndlessPlayScreen

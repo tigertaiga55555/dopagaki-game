@@ -1,12 +1,13 @@
 import { ENDLESS_DIFFICULTIES, ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
 import { ENDLESS_THEME } from '../config/endlessTheme'
-import { BackButton } from '../components/BackButton'
+import { NavBar } from '../components/NavBar'
 import { getEndlessBest } from '../utils/storage'
 import type { EndlessDifficulty } from '../types'
 
 interface Props {
   onSelect: (difficulty: EndlessDifficulty) => void
   onBack: () => void
+  onHome: () => void
 }
 
 /**
@@ -23,10 +24,10 @@ interface Props {
  * 差し替える。実際にプレイが始まった後のEndlessPlayScreen（rule/countdown/playing全フェーズ）の
  * 「×やめる」は、実機QAで3回調整済みのセンシティブな既存コンポーネントのため一切変更しない。
  */
-export function EndlessSelectScreen({ onSelect, onBack }: Props) {
+export function EndlessSelectScreen({ onSelect, onBack, onHome }: Props) {
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
-      <BackButton onBack={onBack} label="ホーム" />
+      <NavBar onBack={onBack} onHome={onHome} />
 
       {/* Ver.6 Phase 9（実機QA反映）: このカード群自体は広告を持たないが、ホーム画面と同様に
           「ドパガキゲーム全体から広告が消えた」文脈に合わせて、上下の余白比率を少しだけ

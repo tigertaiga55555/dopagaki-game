@@ -7,9 +7,12 @@ import { generateRoomCode, isValidRoomCode } from '../battle/roomCode'
 import { Matchmaker } from './durableObjects/matchmaker'
 import { BattleRoom } from './durableObjects/battleRoom'
 import { PrivateRoom } from './durableObjects/privateRoom'
+import { PresenceHub } from './durableObjects/presenceHub'
 import { createD1PrivateRoomRepository } from './privateRoomRepository'
+import { buildFriendSummaries, createD1FriendsRepository } from './friendsRepository'
 import type { BattleOpponentProfile, CreateRoomResponse, RoomStatusResponse } from '../battle/types'
 import type { CreatePrivateRoomResponse, PrivateRoomStatusResponse } from '../battle/privateRoomTypes'
+import type { FriendSummary, PublicProfileSnapshot } from '../friends/types'
 import type {
   ChallengeApiResult,
   ChallengeAttemptListResult,
@@ -20,7 +23,7 @@ import type {
   ParticipatedChallengeSummary,
 } from '../challenge/types'
 
-export { Matchmaker, BattleRoom, PrivateRoom }
+export { Matchmaker, BattleRoom, PrivateRoom, PresenceHub }
 
 /** Ver.6 Phase 5.3（送った挑戦状一覧）: 一括取得できるChallenge件数の上限（クライアントは直近10件しか送らない想定だが、サーバー側でも念のため上限を設ける）。 */
 const MAX_SUMMARY_IDS = 50
@@ -419,6 +422,18 @@ async function handleCreatePrivateRoom(request: Request, env: Env): Promise<Resp
   return json({ ok: true, value: { roomCode: finalRoomCode } satisfies CreatePrivateRoomResponse }, claim.ok ? 201 : 200)
 }
 
+/**
+ * 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 31）: GET /api/rooms/private/active/:hostPlayerId。
+ * FriendsHomeScreenが「ルームに招待」（既存ルームあり）と「ルームを作成して招待」
+ * （まだルームが無い）のどちらを出すかを判断するために使う、private_roomsの単純な参照。
+ */
+async function handleGetActiveRoomForHost(hostPlayerId: string, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB) return json({ ok: true, roomCode: null }, 200)
+  const repo = createD1PrivateRoomRepository(env.CHALLENGE_DB)
+  const roomCode = await repo.getActiveRoomForHost(hostPlayerId)
+  return json({ ok: true, roomCode }, 200)
+}
+
 /** GET /api/rooms/private/:roomCode。合流前の事前チェック（存在しない/終了済み）。 */
 async function handlePrivateRoomStatus(roomCode: string, env: Env): Promise<Response> {
   if (!isValidRoomCode(roomCode)) {
@@ -428,6 +443,90 @@ async function handlePrivateRoomStatus(roomCode: string, env: Env): Promise<Resp
   const res = await stub.fetch('https://private-room.internal/internal/status')
   const statusBody = (await res.json()) as PrivateRoomStatusResponse
   return json(statusBody, 200)
+}
+
+/**
+ * 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 27）: FRIENDS機能のルート群。
+ * friend_codes/friend_requests/friendships/player_public_profilesはいずれも既存の
+ * CHALLENGE_DB（1個のD1データベース内の別テーブル）を再利用する——private_roomsが
+ * 同じCHALLENGE_DBに相乗りした既存パターンをそのまま踏襲し、新しいD1バインディングは
+ * 増やさない。
+ */
+async function handleGetOrCreateFriendCode(request: Request, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB) return errorResponse({ ok: false, error: 'not_configured', message: 'Friends backend is not configured on this environment yet' })
+  const body = (await request.json().catch(() => null)) as Partial<{ playerId: string }> | null
+  if (!body || typeof body.playerId !== 'string' || body.playerId.length === 0) {
+    return errorResponse({ ok: false, error: 'invalid_input', message: 'playerId is required' })
+  }
+  const repo = createD1FriendsRepository(env.CHALLENGE_DB)
+  const code = await repo.getOrCreateFriendCode(body.playerId, Date.now())
+  return json({ ok: true, code }, 200)
+}
+
+async function handleSendFriendRequest(request: Request, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB) return json({ ok: false, reason: 'not_configured' }, 200)
+  const body = (await request.json().catch(() => null)) as Partial<{ fromPlayerId: string; toCode: string }> | null
+  if (!body || typeof body.fromPlayerId !== 'string' || typeof body.toCode !== 'string') {
+    return json({ ok: false, reason: 'invalid_code' }, 200)
+  }
+  const repo = createD1FriendsRepository(env.CHALLENGE_DB)
+  const result = await repo.sendRequestByCode(body.fromPlayerId, body.toCode.trim().toUpperCase(), Date.now())
+  if (result.status === 'rejected') return json({ ok: false, reason: result.reason }, 200)
+  return json({ ok: true, status: result.status }, 200)
+}
+
+async function handleListIncomingFriendRequests(request: Request, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB) return json({ ok: true, value: [] }, 200)
+  const url = new URL(request.url)
+  const playerId = url.searchParams.get('playerId')
+  if (!playerId) return errorResponse({ ok: false, error: 'invalid_input', message: 'playerId is required' })
+  const repo = createD1FriendsRepository(env.CHALLENGE_DB)
+  const value = await repo.listIncomingRequests(playerId)
+  return json({ ok: true, value }, 200)
+}
+
+async function handleRespondToFriendRequest(request: Request, requestId: string, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB) return json({ ok: false, reason: 'not_configured' }, 200)
+  const body = (await request.json().catch(() => null)) as Partial<{ playerId: string; action: 'accept' | 'reject' }> | null
+  if (!body || typeof body.playerId !== 'string' || (body.action !== 'accept' && body.action !== 'reject')) {
+    return errorResponse({ ok: false, error: 'invalid_input', message: 'playerId and action are required' })
+  }
+  const repo = createD1FriendsRepository(env.CHALLENGE_DB)
+  const result = await repo.respondToRequest(requestId, body.playerId, body.action, Date.now())
+  if (!result.ok) return json({ ok: false, reason: result.reason }, 200)
+  return json({ ok: true }, 200)
+}
+
+async function handleListFriends(request: Request, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB) return json({ ok: true, value: [] satisfies FriendSummary[] }, 200)
+  const url = new URL(request.url)
+  const playerId = url.searchParams.get('playerId')
+  if (!playerId) return errorResponse({ ok: false, error: 'invalid_input', message: 'playerId is required' })
+  const repo = createD1FriendsRepository(env.CHALLENGE_DB)
+  const summaries = await buildFriendSummaries(repo, playerId)
+  // presence（ONLINE/PLAYING/OFFLINE）はこのRESTレスポンス時点の推定値を'offline'で
+  // 仮置きし、FriendsHomeScreen側がPresenceHubへのWebSocket購読で即座に上書きする
+  // （サーバー間でDOへ問い合わせる追加ラウンドトリップをこのエンドポイントには持たせない、
+  // というスコープの切り方）。
+  const value: FriendSummary[] = summaries.map((s) => ({ ...s, presence: 'offline' }))
+  return json({ ok: true, value }, 200)
+}
+
+async function handleGetPublicProfile(playerId: string, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB) return errorResponse({ ok: false, error: 'not_configured', message: 'Friends backend is not configured on this environment yet' })
+  const repo = createD1FriendsRepository(env.CHALLENGE_DB)
+  const profile = await repo.getPublicProfile(playerId)
+  if (!profile) return errorResponse({ ok: false, error: 'not_found', message: 'public profile not found' })
+  return json({ ok: true, value: profile }, 200)
+}
+
+async function handleUpsertPublicProfile(request: Request, playerId: string, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB) return errorResponse({ ok: false, error: 'not_configured', message: 'Friends backend is not configured on this environment yet' })
+  const body = (await request.json().catch(() => null)) as Partial<{ profile: PublicProfileSnapshot }> | null
+  if (!body || !body.profile) return errorResponse({ ok: false, error: 'invalid_input', message: 'profile is required' })
+  const repo = createD1FriendsRepository(env.CHALLENGE_DB)
+  await repo.upsertPublicProfile(playerId, body.profile)
+  return json({ ok: true }, 200)
 }
 
 export default {
@@ -491,6 +590,11 @@ export default {
       return handleCreatePrivateRoom(request, env)
     }
 
+    const activeRoomMatch = /^\/api\/rooms\/private\/active\/([^/]+)$/.exec(url.pathname)
+    if (activeRoomMatch && request.method === 'GET') {
+      return handleGetActiveRoomForHost(decodeURIComponent(activeRoomMatch[1]), env)
+    }
+
     const privateRoomStatusMatch = /^\/api\/rooms\/private\/([^/]+)$/.exec(url.pathname)
     if (privateRoomStatusMatch && request.method === 'GET') {
       if (!env.PRIVATE_ROOM) {
@@ -507,6 +611,41 @@ export default {
       const roomCode = decodeURIComponent(privateRoomWsMatch[1])
       const stub = env.PRIVATE_ROOM.get(env.PRIVATE_ROOM.idFromName(roomCode))
       return stub.fetch(request)
+    }
+
+    // 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 28）: プレゼンス（単一グローバルDO、
+    // Matchmakerと同じidFromName('global')パターン）。D1は使わない。
+    if (url.pathname === '/api/presence/ws') {
+      if (!env.PRESENCE_HUB) {
+        return errorResponse({ ok: false, error: 'not_configured', message: 'Presence backend is not configured on this environment yet' })
+      }
+      const stub = env.PRESENCE_HUB.get(env.PRESENCE_HUB.idFromName('global'))
+      return stub.fetch(request)
+    }
+
+    // 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 27）: FRIENDS関連ルート。
+    if (url.pathname === '/api/friends/code' && request.method === 'POST') {
+      return handleGetOrCreateFriendCode(request, env)
+    }
+    if (url.pathname === '/api/friends/requests' && request.method === 'POST') {
+      return handleSendFriendRequest(request, env)
+    }
+    if (url.pathname === '/api/friends/requests/incoming' && request.method === 'GET') {
+      return handleListIncomingFriendRequests(request, env)
+    }
+    const respondMatch = /^\/api\/friends\/requests\/([^/]+)\/respond$/.exec(url.pathname)
+    if (respondMatch && request.method === 'POST') {
+      return handleRespondToFriendRequest(request, decodeURIComponent(respondMatch[1]), env)
+    }
+    if (url.pathname === '/api/friends' && request.method === 'GET') {
+      return handleListFriends(request, env)
+    }
+    const playerProfileMatch = /^\/api\/players\/([^/]+)\/profile$/.exec(url.pathname)
+    if (playerProfileMatch && request.method === 'GET') {
+      return handleGetPublicProfile(decodeURIComponent(playerProfileMatch[1]), env)
+    }
+    if (playerProfileMatch && request.method === 'POST') {
+      return handleUpsertPublicProfile(request, decodeURIComponent(playerProfileMatch[1]), env)
     }
 
     if (!env.CHALLENGE_DB) {

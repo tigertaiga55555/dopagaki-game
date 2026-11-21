@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import worker from './index'
 import { createFakeD1Database } from './testFakeD1'
+import { createFriendsFakeD1Database } from './friendsTestFakeD1'
 import type { ChallengeApiResult, ChallengeAttemptListResult, ChallengeAttemptRecord, ChallengePerformance, ChallengeRecord } from '../challenge/types'
 
 function samplePerformance(overrides: Partial<ChallengePerformance> = {}): ChallengePerformance {
@@ -891,5 +892,177 @@ describe('worker fetch handler: POST/GET /api/rooms/private (DOPA PASS基盤ラ�
     const res = await worker.fetch(new Request('https://example.com/api/rooms/private/!!!'), env)
     const body = await res.json()
     expect(body).toEqual({ ok: false, reason: 'not_found' })
+  })
+
+  it('GET /api/rooms/private/active/:hostPlayerId: 作成前はnull、作成後はそのroomCode', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never, PRIVATE_ROOM: fakePrivateRoomNamespace() as never }
+
+    const before = await worker.fetch(new Request('https://example.com/api/rooms/private/active/host1'), env)
+    expect(await before.json()).toEqual({ ok: true, roomCode: null })
+
+    const profile = { nickname: 'A', avatar: { kind: 'preset', iconId: 'star' }, equippedTitleId: null }
+    const created = await worker.fetch(
+      new Request('https://example.com/api/rooms/private', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ hostPlayerId: 'host1', hostProfile: profile }),
+      }),
+      env,
+    )
+    const createdBody = (await created.json()) as ChallengeApiResult<{ roomCode: string }>
+    if (!createdBody.ok) throw new Error('expected success')
+
+    const after = await worker.fetch(new Request('https://example.com/api/rooms/private/active/host1'), env)
+    expect(await after.json()).toEqual({ ok: true, roomCode: createdBody.value.roomCode })
+  })
+})
+
+/**
+ * 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 27）: FRIENDSルート群のルーティング層テスト。
+ * friendsRepository.test.tsが既に（repository単体で）申請→承認/拒否・重複ガード等の
+ * ロジック自体を検証済みのため、ここではHTTPルーティング・入力検証・ステータスコードだけを見る。
+ */
+describe('worker fetch handler: FRIENDSルート群 (FRIENDS/ナビ刷新ラウンド item 27)', () => {
+  function friendsEnv() {
+    return { CHALLENGE_DB: createFriendsFakeD1Database() as never }
+  }
+
+  it('POST /api/friends/code: playerId欠落は400', async () => {
+    const res = await worker.fetch(
+      new Request('https://example.com/api/friends/code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }),
+      friendsEnv(),
+    )
+    expect(res.status).toBe(400)
+  })
+
+  it('POST /api/friends/code: 同じplayerIdに同じコードを返す', async () => {
+    const env = friendsEnv()
+    const first = await worker.fetch(
+      new Request('https://example.com/api/friends/code', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ playerId: 'p1' }),
+      }),
+      env,
+    )
+    const second = await worker.fetch(
+      new Request('https://example.com/api/friends/code', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ playerId: 'p1' }),
+      }),
+      env,
+    )
+    const firstBody = (await first.json()) as { ok: true; code: string }
+    const secondBody = (await second.json()) as { ok: true; code: string }
+    expect(firstBody.code).toBe(secondBody.code)
+  })
+
+  it('POST /api/friends/requests → GET incoming → POST respond の一連の流れ', async () => {
+    const env = friendsEnv()
+    await worker.fetch(
+      new Request('https://example.com/api/players/p1/profile', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          profile: {
+            nickname: 'Alice',
+            avatar: { kind: 'preset', iconId: 'star' },
+            equippedTitleId: null,
+            hasDopaPass: false,
+            bestDopaPercent: 0,
+            endlessBeginnerBest: 0,
+            endlessIntermediateBest: 0,
+            endlessAdvancedBest: 0,
+            worldBattleWins: 0,
+            achievementCount: 0,
+            updatedAt: 1000,
+          },
+        }),
+      }),
+      env,
+    )
+
+    const codeRes = await worker.fetch(
+      new Request('https://example.com/api/friends/code', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ playerId: 'p2' }),
+      }),
+      env,
+    )
+    const { code } = (await codeRes.json()) as { code: string }
+
+    const sendRes = await worker.fetch(
+      new Request('https://example.com/api/friends/requests', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fromPlayerId: 'p1', toCode: code }),
+      }),
+      env,
+    )
+    expect(await sendRes.json()).toEqual({ ok: true, status: 'pending' })
+
+    const incomingRes = await worker.fetch(new Request('https://example.com/api/friends/requests/incoming?playerId=p2'), env)
+    const incomingBody = (await incomingRes.json()) as { ok: true; value: { requestId: string; fromPlayerId: string }[] }
+    expect(incomingBody.value).toHaveLength(1)
+    expect(incomingBody.value[0].fromPlayerId).toBe('p1')
+
+    const respondRes = await worker.fetch(
+      new Request(`https://example.com/api/friends/requests/${incomingBody.value[0].requestId}/respond`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ playerId: 'p2', action: 'accept' }),
+      }),
+      env,
+    )
+    expect(await respondRes.json()).toEqual({ ok: true })
+
+    const friendsRes = await worker.fetch(new Request('https://example.com/api/friends?playerId=p2'), env)
+    const friendsBody = (await friendsRes.json()) as { ok: true; value: { playerId: string; presence: string }[] }
+    expect(friendsBody.value).toEqual([expect.objectContaining({ playerId: 'p1', presence: 'offline' })])
+  })
+
+  it('GET /api/players/:playerId/profile: 未登録ならnot_found', async () => {
+    const res = await worker.fetch(new Request('https://example.com/api/players/nobody/profile'), friendsEnv())
+    expect(res.status).toBe(404)
+  })
+
+  it('CHALLENGE_DB未設定時はnot_configured/空配列で安全に失敗する', async () => {
+    const env = {} as never
+    const codeRes = await worker.fetch(
+      new Request('https://example.com/api/friends/code', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"playerId":"p1"}' }),
+      env,
+    )
+    expect((await codeRes.json() as { ok: boolean }).ok).toBe(false)
+
+    const listRes = await worker.fetch(new Request('https://example.com/api/friends?playerId=p1'), env)
+    expect(await listRes.json()).toEqual({ ok: true, value: [] })
+  })
+})
+
+describe('worker fetch handler: /api/presence/ws (FRIENDS/ナビ刷新ラウンド item 28)', () => {
+  it('PRESENCE_HUB未設定ならnot_configured', async () => {
+    const res = await worker.fetch(new Request('https://example.com/api/presence/ws'), {} as never)
+    const body = (await res.json()) as ChallengeApiResult<never>
+    expect(body.ok).toBe(false)
+    if (!body.ok) expect(body.error).toBe('not_configured')
+  })
+
+  it('PRESENCE_HUB設定時は単一グローバルDO（idFromName("global")）へそのままfetchを渡す', async () => {
+    let capturedName: string | null = null
+    const env = {
+      PRESENCE_HUB: {
+        idFromName: (name: string) => {
+          capturedName = name
+          return name
+        },
+        get: () => ({ fetch: async () => new Response(null, { status: 200 }) }),
+      } as never,
+    }
+    const res = await worker.fetch(new Request('https://example.com/api/presence/ws'), env as never)
+    expect(capturedName).toBe('global')
+    expect(res.status).toBe(200)
   })
 })

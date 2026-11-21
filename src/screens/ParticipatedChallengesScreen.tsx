@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BackButton } from '../components/BackButton'
+import { NavBar } from '../components/NavBar'
 import { ChallengeModeFilterTabs } from '../components/ChallengeModeFilterTabs'
 import { resolveAvatarEmoji } from '../config/profileConfig'
 import { TITLE_DEFS_BY_ID } from '../config/titles'
@@ -15,8 +15,7 @@ import type { ChallengeApiError, ChallengeRecord, ParticipatedChallengeSummary }
 
 interface Props {
   onBack: () => void
-  /** 次フェーズ（item 17/18）: ProfileからのHomeからで戻り先・ラベルが変わる（App.tsx側で決定）。 */
-  backLabel: string
+  onHome: () => void
   /** Ver.6 Phase 5.4: 一覧の1件を開くと、GET /api/challenges/:idで取得した完全なChallengeRecordを渡す（既存のChallengeHistoryScreenをそのまま再利用する）。 */
   onOpenHistory: (challenge: ChallengeRecord) => void
 }
@@ -53,7 +52,7 @@ function describeMode(summary: ParticipatedChallengeSummary): string {
  * 見るのは当然WIN/LOSEそのままで良い。ホスト視点への反転が必要になるのは、ホストが
  * 自分の送ったChallengeの履歴を見る場合だけ（ChallengeHistoryScreen参照）。
  */
-export function ParticipatedChallengesScreen({ onBack, backLabel, onOpenHistory }: Props) {
+export function ParticipatedChallengesScreen({ onBack, onHome, onOpenHistory }: Props) {
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [openingId, setOpeningId] = useState<string | null>(null)
   const [modeFilter, setModeFilter] = useState<ChallengeModeFilter>('all')
@@ -91,7 +90,7 @@ export function ParticipatedChallengesScreen({ onBack, backLabel, onOpenHistory 
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
-      <BackButton onBack={onBack} label={backLabel} />
+      <NavBar onBack={onBack} onHome={onHome} />
 
       <p className="relative z-10 mt-2 text-center text-sm font-black tracking-widest text-white/80">参加したChallenge</p>
 

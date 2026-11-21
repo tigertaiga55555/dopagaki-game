@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
-import { BackButton } from '../components/BackButton'
+import { NavBar } from '../components/NavBar'
 import { RANKING_CATEGORIES, localRankingDataSource } from '../utils/rankingRepository'
 import { trackRankingView } from '../utils/analytics'
 import type { RankingCategoryId } from '../types'
 
 interface Props {
   onBack: () => void
-  /** 次フェーズ（item 17/18）: ProfileからのHomeからで戻り先・ラベルが変わる（App.tsx側で決定）。 */
-  backLabel: string
+  onHome: () => void
 }
 
 /**
@@ -19,7 +18,7 @@ interface Props {
  * データはutils/rankingRepository.ts（RankingDataSource）経由でのみ取得し、
  * このコンポーネントからlocalStorageを直接参照しない。
  */
-export function RankingScreen({ onBack, backLabel }: Props) {
+export function RankingScreen({ onBack, onHome }: Props) {
   const [selected, setSelected] = useState<RankingCategoryId>('maxDopaPercent')
   const category = RANKING_CATEGORIES.find((c) => c.id === selected)!
   const myValue = localRankingDataSource.getMyValue(selected)
@@ -30,7 +29,7 @@ export function RankingScreen({ onBack, backLabel }: Props) {
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
-      <BackButton onBack={onBack} label={backLabel} />
+      <NavBar onBack={onBack} onHome={onHome} />
 
       <div className="flex flex-1 flex-col items-center gap-4 px-6 py-4">
         <h1 className="text-lg font-black tracking-widest text-white">RANKING</h1>

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { BackButton } from '../components/BackButton'
+import { NavBar } from '../components/NavBar'
 import { fetchBattlePerformance, fetchBattleStats, type BattlePerformanceResponse, type BattleStatsResponse } from '../battle/battleClient'
 import { getOrCreatePlayerId } from '../utils/profileStorage'
 
 interface Props {
   onBack: () => void
+  onHome: () => void
 }
 
 const DECIDED_BY_LABEL: Record<string, string> = {
@@ -27,7 +28,7 @@ const DECIDED_BY_LABEL: Record<string, string> = {
  *   現時点でどこにも記録されていない——これをこの画面のために偽造・推測することは
  *   しない。正直にギャップとして明記し、将来ラウンドでの実装対象として残す。
  */
-export function PassAnalyticsScreen({ onBack }: Props) {
+export function PassAnalyticsScreen({ onBack, onHome }: Props) {
   const [stats, setStats] = useState<BattleStatsResponse | null>(null)
   const [performance, setPerformance] = useState<BattlePerformanceResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -43,7 +44,7 @@ export function PassAnalyticsScreen({ onBack }: Props) {
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
-      <BackButton onBack={onBack} label="プロフィール" />
+      <NavBar onBack={onBack} onHome={onHome} />
 
       <div className="flex flex-1 flex-col items-center gap-4 px-6 py-4">
         <h1 className="text-lg font-black tracking-widest text-amber-300">DOPA PASS 詳細分析</h1>

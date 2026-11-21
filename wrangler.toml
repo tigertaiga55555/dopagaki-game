@@ -46,6 +46,12 @@ class_name = "BattleRoom"
 name = "PRIVATE_ROOM"
 class_name = "PrivateRoom"
 
+# 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 28）: プレゼンス（ONLINE/PLAYING）を管理する
+# 単一グローバルDurable Object（Matchmakerと同じidFromName('global')パターン）。
+[[durable_objects.bindings]]
+name = "PRESENCE_HUB"
+class_name = "PresenceHub"
+
 [[previews.durable_objects.bindings]]
 name = "MATCHMAKER"
 class_name = "Matchmaker"
@@ -58,6 +64,10 @@ class_name = "BattleRoom"
 name = "PRIVATE_ROOM"
 class_name = "PrivateRoom"
 
+[[previews.durable_objects.bindings]]
+name = "PRESENCE_HUB"
+class_name = "PresenceHub"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Matchmaker", "BattleRoom"]
@@ -67,3 +77,8 @@ new_sqlite_classes = ["Matchmaker", "BattleRoom"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["PrivateRoom"]
+
+# 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 28）: 同じ理由でPresenceHubも専用の新タグ。
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["PresenceHub"]

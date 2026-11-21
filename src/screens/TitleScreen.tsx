@@ -21,6 +21,8 @@ interface Props {
   onOpenProfile: () => void
   onOpenAchievements: () => void
   onOpenRanking: () => void
+  /** 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 27）: フレンド一覧への入口。 */
+  onOpenFriends: () => void
 }
 
 /**
@@ -30,7 +32,7 @@ interface Props {
  * 書き換えた（英語タイトルを主役にし、その下に短い日本語説明を添える）。
  * Profile/Achievement/Rankingは従来どおり控えめなテキストリンクのまま維持する。
  */
-export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProfile, onOpenAchievements, onOpenRanking }: Props) {
+export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProfile, onOpenAchievements, onOpenRanking, onOpenFriends }: Props) {
   const best = getBestPercent()
   // 次フェーズ（DOPA PASS基盤ラウンド）: PassQaPanelでの切り替えを即座に全PASS依存UIへ
   // 反映させるための再評価トリガー（qaLocalEntitlementRepositoryはlocalStorage読み取りのため
@@ -99,6 +101,10 @@ export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProf
         <span className="text-white/15">|</span>
         <button onClick={onOpenRanking} className="flex items-center gap-1 active:text-white/60">
           <span aria-hidden="true">📊</span> RANKING
+        </button>
+        <span className="text-white/15">|</span>
+        <button onClick={onOpenFriends} className="flex items-center gap-1 active:text-white/60">
+          <span aria-hidden="true">👥</span> FRIENDS
         </button>
       </div>
 

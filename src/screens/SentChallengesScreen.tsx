@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BackButton } from '../components/BackButton'
+import { NavBar } from '../components/NavBar'
 import { ChallengeModeFilterTabs } from '../components/ChallengeModeFilterTabs'
 import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSource'
 import { getCreatedChallengeIds } from '../challenge/createdChallengesStorage'
@@ -15,8 +15,7 @@ import type { AchievementId } from '../types'
 
 interface Props {
   onBack: () => void
-  /** 次フェーズ（item 17/18）: ProfileからのHomeからで戻り先・ラベルが変わる（App.tsx側で決定）。 */
-  backLabel: string
+  onHome: () => void
   /** Ver.6 Phase 5.3: 一覧の1件を開くと、GET /api/challenges/:idで取得した完全なChallengeRecordを渡す（既存のChallengeHistoryScreenをそのまま再利用する）。 */
   onOpenHistory: (challenge: ChallengeRecord) => void
 }
@@ -48,7 +47,7 @@ function describeMode(summary: ChallengeSummary): string {
  * /api/challenges/summaries（一括取得）という順で、Challenge情報本体はローカルへ一切
  * 保存しない方針を徹底する。
  */
-export function SentChallengesScreen({ onBack, backLabel, onOpenHistory }: Props) {
+export function SentChallengesScreen({ onBack, onHome, onOpenHistory }: Props) {
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [openingId, setOpeningId] = useState<string | null>(null)
   const [newlyUnlocked, setNewlyUnlocked] = useState<AchievementId[]>([])
@@ -93,7 +92,7 @@ export function SentChallengesScreen({ onBack, backLabel, onOpenHistory }: Props
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
-      <BackButton onBack={onBack} label={backLabel} />
+      <NavBar onBack={onBack} onHome={onHome} />
       <AchievementUnlockBanner newlyUnlocked={newlyUnlocked} />
 
       <p className="relative z-10 mt-2 text-center text-sm font-black tracking-widest text-white/80">作成したChallenge</p>

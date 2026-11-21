@@ -16,6 +16,8 @@ declare global {
     BATTLE_ROOM?: DurableObjectNamespace
     /** 次フェーズ（DOPA PASS基盤ラウンド、item 15）: PRIVATE ROOM（ロビー）を管理するDurable Object。 */
     PRIVATE_ROOM?: DurableObjectNamespace
+    /** 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 28）: プレゼンス（ONLINE/PLAYING）を管理する単一グローバルDurable Object。 */
+    PRESENCE_HUB?: DurableObjectNamespace
   }
 }
 

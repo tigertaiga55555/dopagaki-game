@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BackButton } from '../components/BackButton'
+import { NavBar } from '../components/NavBar'
 import { TitleDetailModal } from '../components/TitleDetailModal'
 import { ACHIEVEMENT_DEFS } from '../config/achievements'
 import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
@@ -12,8 +12,7 @@ import type { AchievementCategory, AchievementId } from '../types'
 
 interface Props {
   onBack: () => void
-  /** 次フェーズ（item 17/18）: ProfileからのHomeからで戻り先・ラベルが変わる（App.tsx側で決定）。 */
-  backLabel: string
+  onHome: () => void
 }
 
 /**
@@ -65,7 +64,7 @@ const BATTLE_MODE_LABEL: Partial<Record<AchievementCategory, string>> = {
  * 訪問中はずっとNEWバッジを表示し続け、次回の訪問からは消える——という最も単純で
  * 「ユーザーが気づけること」を優先した方式にした。
  */
-export function AchievementScreen({ onBack, backLabel }: Props) {
+export function AchievementScreen({ onBack, onHome }: Props) {
   const [revision, setRevision] = useState(0)
   const [filter, setFilter] = useState<FilterTab>('all')
   // 次フェーズ（item 10）: 実績カードをタップした際に、ProfileScreen.tsxと共通の
@@ -103,7 +102,7 @@ export function AchievementScreen({ onBack, backLabel }: Props) {
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
-      <BackButton onBack={onBack} label={backLabel} />
+      <NavBar onBack={onBack} onHome={onHome} />
 
       <div className="flex flex-1 flex-col items-center gap-3 px-5 py-4">
         <h1 className="text-lg font-black tracking-widest text-white">ACHIEVEMENT</h1>

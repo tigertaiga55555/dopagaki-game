@@ -28,3 +28,20 @@ export function computeHeartSlotsView(count: number, cap: number): HeartSlotsVie
     showRecoveryTimer: safeCount < cap,
   }
 }
+
+/**
+ * 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 35）: 「空ハートは左・満ハートは右」の向きで
+ * 描く——「左から消費されていく」と読める見た目にする、というユーザー指示。
+ *
+ * heartRepository.tsの所持数/消費/回復ロジック自体には一切触れない、純粋な表示解釈のみの
+ * 変更（このファイルがHeartSlotsViewからの「どのindexを塗るか」の解釈を担い、
+ * HeartDisplay.tsx/HeartDetailModal.tsxはこの関数の戻り値をそのまま使うだけにする）。
+ *
+ * 空枠は常に左側の連続した区間（index 0..totalSlots-filledSlots-1）、満枠は常に右側の
+ * 連続した区間（それ以降）になる。自然回復でfilledSlotsが1増えると、空区間と満区間の
+ * 境界（＝空区間の一番右、満区間に隣接する枠）が塗られる——空区間・満区間のどちらも
+ * 常に連続していなければならない以上、これが唯一の自然な「次に塗る枠」になる。
+ */
+export function isHeartSlotFilledAt(view: HeartSlotsView, index: number): boolean {
+  return index >= view.totalSlots - view.filledSlots
+}

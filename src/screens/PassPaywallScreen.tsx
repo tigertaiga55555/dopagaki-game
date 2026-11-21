@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BackButton } from '../components/BackButton'
+import { NavBar } from '../components/NavBar'
 import { getCurrentPassPrice, getEffectiveReleaseAtMs, daysRemainingInLaunchCampaign, isLaunchCampaignActive } from '../config/dopaPassConfig'
 import { qaPaymentAdapter } from '../payment/qaPaymentAdapter'
 import { trackPassPaywallView, trackPassPurchaseCancel, trackPassPurchaseError, trackPassPurchaseStart, type PassPaywallSource } from '../utils/analytics'
@@ -7,6 +7,7 @@ import { trackPassPaywallView, trackPassPurchaseCancel, trackPassPurchaseError, 
 interface Props {
   source: PassPaywallSource
   onBack: () => void
+  onHome: () => void
   onPurchased: () => void
 }
 
@@ -33,8 +34,12 @@ interface ValuePoint {
  * プロバイダが確定する価格が最終的な権威になる。
  */
 const VALUE_POINTS: ValuePoint[] = [
-  { icon: '🚪', title: 'PRIVATE ROOMを作れる', description: '友達だけで集まれる専用ルームを、いつでも何度でも作成できます。' },
-  { icon: '🤝', title: '友達の参加は誰でも無料', description: 'あなたが作ったPRIVATE ROOMに、友達は無料で何人でも参加できます。' },
+  {
+    icon: '🚪',
+    title: '最大8人のPRIVATE ROOMを作れる',
+    description: '友達だけで集まれる専用ルームを、何度でも作成できます。World Battle・単発のフレンド対戦URLはもう存在しません——友達との対戦はPRIVATE ROOMだけの特別な体験です。',
+  },
+  { icon: '🤝', title: '友達の参加はいつでも無料', description: 'あなたが作ったPRIVATE ROOMに、友達は誰でも無料で何度でも参加・対戦できます。' },
   { icon: '❤️', title: 'Heart無制限', description: 'DOPA RUSH/ENDLESSの挑戦回数を気にせず、いつでもプレイできます。' },
   { icon: '🚫', title: '広告非表示', description: 'バナー・インタースティシャル広告が一切表示されなくなります。' },
   { icon: '📜', title: '履歴を完全保存', description: 'Challenge・World Battleの全履歴を、件数制限なく確認できます。' },
@@ -45,7 +50,7 @@ const VALUE_POINTS: ValuePoint[] = [
   { icon: '👑', title: 'PASS限定バッジ・装飾', description: 'DOPA PASS所有者だけの特別な見た目が手に入ります。' },
 ]
 
-export function PassPaywallScreen({ source, onBack, onPurchased }: Props) {
+export function PassPaywallScreen({ source, onBack, onHome, onPurchased }: Props) {
   const [busy, setBusy] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const now = Date.now()
@@ -75,7 +80,7 @@ export function PassPaywallScreen({ source, onBack, onPurchased }: Props) {
 
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
-      <BackButton onBack={onBack} label="戻る" />
+      <NavBar onBack={onBack} onHome={onHome} />
 
       <div className="flex flex-1 flex-col items-center gap-4 px-6 py-4">
         <h1 className="text-2xl font-black tracking-wide text-amber-300">DOPA PASS</h1>

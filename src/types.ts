@@ -20,7 +20,6 @@ export type ScreenName =
   | 'challengeParticipatedList'
   | 'battleHome'
   | 'battleWorldMatching'
-  | 'battleFriend'
   | 'battleMatch'
   /** 次フェーズ（DOPA PASS基盤ラウンド）: PASS限定の詳細分析画面。 */
   | 'passAnalytics'
@@ -34,6 +33,10 @@ export type ScreenName =
   | 'privateRoomMatch'
   /** 次フェーズ（item 15）: PRIVATE ROOM経由のENDLESS対戦。 */
   | 'privateEndlessMatch'
+  /** 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 27）: フレンド一覧（フレンドコード共有・申請・プレゼンス）。 */
+  | 'friendsHome'
+  /** 次フェーズ（item 27）: フレンドの公開プロフィール（ProfileScreenと同じ公開情報の部分集合）。 */
+  | 'friendProfile'
 
 /**
  * Ver.6 Phase 4: Endlessモードの難易度。既存通常ゲームの問題難易度システム

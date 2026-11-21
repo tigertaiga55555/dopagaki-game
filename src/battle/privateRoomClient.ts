@@ -86,3 +86,15 @@ export async function getPrivateRoomStatus(roomCode: string): Promise<PrivateRoo
     return { ok: false, reason: 'not_found' }
   }
 }
+
+/** 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 31）: 招待ボタンの文言分岐（既存ルームあり/なし）に使う。 */
+export async function getActiveRoomForHost(hostPlayerId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/rooms/private/active/${encodeURIComponent(hostPlayerId)}`)
+    if (!res.ok) return null
+    const body = (await res.json()) as { ok: boolean; roomCode?: string | null }
+    return body.ok ? (body.roomCode ?? null) : null
+  } catch {
+    return null
+  }
+}
