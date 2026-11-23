@@ -17,6 +17,14 @@ interface Props {
   myProfile: BattleOpponentProfile
   /** /room/:roomCode を直接開いた場合、最初から参加入力をスキップしてこのコードで合流を試みる。 */
   initialRoomCode?: string | null
+  /**
+   * 次フェーズ（item 46-47、E2Eで発見した実バグの修正）: initialRoomCodeを実際に使った
+   * （この画面がそれで最初にマウントされた）ことを親（App.tsx）へ一度だけ伝える——SPAなので
+   * ページは再読み込みされず、親がこれをnullへ戻さない限り、このURL起点の挙動が
+   * セッション中ずっと居座ってしまい、以後この画面を開くたびに「参加中/作成中のルームに
+   * 戻る」の優先表示（item 46-47の核心）が二度と出せなくなる。
+   */
+  onConsumedInitialRoomCode?: () => void
 }
 
 type View = 'checking' | 'menu' | 'join_input' | 'returning'
@@ -36,7 +44,17 @@ type View = 'checking' | 'menu' | 'join_input' | 'returning'
  * ただし/room/:roomCodeを直接開いた場合（initialRoomCode指定時）は、そのURLの意図を
  * 優先してjoin_inputへ直行する（既存の挙動を変えない）。
  */
-export function PrivateRoomHomeScreen({ onBack, onHome, onEnterLobby, onRequirePass, hasPass, playerId, myProfile, initialRoomCode }: Props) {
+export function PrivateRoomHomeScreen({
+  onBack,
+  onHome,
+  onEnterLobby,
+  onRequirePass,
+  hasPass,
+  playerId,
+  myProfile,
+  initialRoomCode,
+  onConsumedInitialRoomCode,
+}: Props) {
   const [view, setView] = useState<View>(initialRoomCode ? 'join_input' : 'checking')
   const [activeRoom, setActiveRoom] = useState<{ roomCode: string; isHost: boolean } | null>(null)
   const [codeInput, setCodeInput] = useState(initialRoomCode ?? '')
@@ -44,7 +62,13 @@ export function PrivateRoomHomeScreen({ onBack, onHome, onEnterLobby, onRequireP
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (initialRoomCode) return
+    if (initialRoomCode) {
+      // item 46-47（E2Eで発見した実バグの修正）: この「URL起点でjoin_inputへ直行する」挙動は
+      // 本当に一度だけのものにする——親に伝えて消費済みにしてもらう（さもないと、SPAの
+      // セッション中、この画面を開くたびに毎回このコードへ直行し続けてしまう）。
+      onConsumedInitialRoomCode?.()
+      return
+    }
     getActiveRoomForPlayer(playerId).then((active) => {
       setActiveRoom(active)
       setView(active ? 'returning' : 'menu')

@@ -126,7 +126,16 @@ export default function App() {
   // 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM）: PRIVATE ROOM専用の状態。
   // 既存のbattleMatchとは完全に別（PRIVATE ROOM経由のNORMAL対戦もbattleMatchは使わず、
   // privateRoomMatchだけを使う——戻り先がprivateRoomLobbyになる点が既存battleMatchと違うため）。
-  const [initialPrivateRoomCode] = useState(() => extractPrivateRoomCodeFromLocation())
+  //
+  // 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 46-47、E2Eで発見した実バグの修正）:
+  // これは「/room/:roomCodeを直接開いた、その最初の1回だけ」有効な一度限りのURL意図であり、
+  // SPAなのでページ自体は再読み込みされない——setterを使わずに保持したままだと、一度共有
+  // リンクで参加した後は、セッション中は二度と「友達と対戦」を開いても参加中/作成中の
+  // ルームへの復帰導線（item 46-47の核心）が出せず、毎回このURLのjoin_input（コード入力欄）
+  // へ直行してしまう恒久的なリグレッションになっていた。PrivateRoomHomeScreenが初回マウント時に
+  // 消費した直後にonConsumedInitialRoomCodeで即座にnullへ戻し、「一度だけ」の意図を正しく
+  // 一度だけに保つ。
+  const [initialPrivateRoomCode, setInitialPrivateRoomCode] = useState(() => extractPrivateRoomCodeFromLocation())
   const [privateRoomCode, setPrivateRoomCode] = useState<string | null>(null)
   const [privateRoomMatch, setPrivateRoomMatch] = useState<{
     matchId: string
@@ -768,6 +777,7 @@ export default function App() {
               playerId={getOrCreatePlayerId()}
               myProfile={toBattleProfile(getProfile())}
               initialRoomCode={initialPrivateRoomCode}
+              onConsumedInitialRoomCode={() => setInitialPrivateRoomCode(null)}
             />
           )}
           {screen === 'privateRoomLobby' && privateRoomCode && (
