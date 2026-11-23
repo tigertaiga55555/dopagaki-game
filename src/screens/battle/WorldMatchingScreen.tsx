@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { BackButton } from '../../components/BackButton'
 import { connectToWorldQueue, type BattleSocket } from '../../battle/battleClient'
+import { WORLD_BATTLE_RULESET, WORLD_BATTLE_RULESET_LABEL } from '../../config/worldBattleConfig'
 import { trackBattleMatchmakingCancel, trackBattleMatchmakingStart, trackBattleMatchmakingTimeout } from '../../utils/analytics'
 import type { BattleOpponentProfile } from '../../battle/types'
 
@@ -80,6 +81,8 @@ export function WorldMatchingScreen({ playerId, profile, onBack, onMatchFound }:
           {state === 'connecting' ? '接続中…' : 'MATCHING...'}
         </p>
         <p className="text-xs text-white/40">対戦相手を探しています</p>
+        {/* 次フェーズ（item 81）: 世界対戦はNORMAL（DOPA RUSH）ルール専用であることを小さく明示する（将来WORLD ENDLESS追加時に備え、文字列はconfig/worldBattleConfig.tsの1箇所から引く）。 */}
+        <p className="text-[10px] font-bold tracking-widest text-white/25">{WORLD_BATTLE_RULESET_LABEL[WORLD_BATTLE_RULESET]}</p>
       </div>
     </div>
   )

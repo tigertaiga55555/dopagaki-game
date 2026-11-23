@@ -1,4 +1,5 @@
 import { NavBar } from '../../components/NavBar'
+import { WORLD_BATTLE_RULESET, WORLD_BATTLE_RULESET_LABEL } from '../../config/worldBattleConfig'
 
 interface Props {
   onBack: () => void
@@ -45,7 +46,10 @@ export function BattleHomeScreen({ onBack, onHome, onWorldBattle, onPrivateRoom 
           >
             🌐 世界対戦
           </button>
-          <p className="text-[11px] text-white/40">知らないプレイヤーとランダムマッチング</p>
+          <p className="text-[11px] text-white/40">
+            知らないプレイヤーとランダムマッチング ・{' '}
+            <span className="text-white/30">{WORLD_BATTLE_RULESET_LABEL[WORLD_BATTLE_RULESET]}</span>
+          </p>
 
           <button
             onClick={onPrivateRoom}
