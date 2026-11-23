@@ -118,4 +118,16 @@ export const localShareRewardRepository: ShareRewardRepository = {
   },
 }
 
+/**
+ * 次フェーズ（item 61-66）: 「PASS所有者はこの日次カウンターを一切消費しない」の判定を、
+ * 結果画面（ResultScreen.tsx/EndlessResultScreen.tsx）側に素のif文として重複させず、
+ * この1箇所へ集約する——ユニットテストでも「hasPass=trueの間は、何回呼んでも
+ * カウンター・報酬済みリストのどちらも一切変化しない」ことをReactを経由せず直接検証できる。
+ */
+export function grantShareRewardIfEligible(hasPass: boolean, resultId: string, now = Date.now()): { granted: boolean; heartCount: number } {
+  if (hasPass) return { granted: false, heartCount: localHeartRepository.getHeartCount(now) }
+  const outcome = localShareRewardRepository.grantShareReward(resultId, now)
+  return { granted: outcome.granted, heartCount: outcome.heartCount }
+}
+
 export { SHARE_REWARD_DAILY_CAP, SHARE_REWARD_HEART_GRANT }

@@ -9,7 +9,7 @@ import { buildCreateChallengeInput } from '../challenge/createChallengeFromResul
 import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSource'
 import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import { buildResultShareUrl } from '../share/resultShareUrl'
-import { localShareRewardRepository, SHARE_REWARD_DAILY_CAP } from '../share/shareRewardRepository'
+import { grantShareRewardIfEligible, localShareRewardRepository, SHARE_REWARD_DAILY_CAP } from '../share/shareRewardRepository'
 import { shareResult } from '../share/shareResult'
 import { trackChallengeCreated, trackResultView, trackShareClick, trackXShareClick, trackXShareRewardGranted } from '../utils/analytics'
 import { captureResultCardPng, downloadPngBlob } from '../utils/shareImage'
@@ -140,8 +140,7 @@ export function ResultScreen({ result, resultId, onRetry, onHome, onChallengeSen
     trackXShareClick('rush')
     const shareUrl = buildResultShareUrl(resultId)
     shareResult({ mode: 'rush', percent: result.percent, resultId, shareUrl })
-    if (hasPass) return
-    const outcome = localShareRewardRepository.grantShareReward(resultId)
+    const outcome = grantShareRewardIfEligible(hasPass, resultId)
     if (outcome.granted) trackXShareRewardGranted('rush')
     setShareRewardRevision((r) => r + 1)
   }

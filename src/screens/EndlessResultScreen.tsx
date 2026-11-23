@@ -6,7 +6,7 @@ import { buildCreateEndlessChallengeInput } from '../challenge/endlessChallenge'
 import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSource'
 import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import { buildResultShareUrl } from '../share/resultShareUrl'
-import { localShareRewardRepository, SHARE_REWARD_DAILY_CAP } from '../share/shareRewardRepository'
+import { grantShareRewardIfEligible, localShareRewardRepository, SHARE_REWARD_DAILY_CAP } from '../share/shareRewardRepository'
 import { shareResult } from '../share/shareResult'
 import { trackChallengeCreated, trackXShareClick, trackXShareRewardGranted } from '../utils/analytics'
 import { getProfile } from '../utils/profileStorage'
@@ -97,8 +97,7 @@ export function EndlessResultScreen({
     trackXShareClick('endless')
     const shareUrl = buildResultShareUrl(resultId)
     shareResult({ mode: 'endless', difficulty, streak: score, resultId, shareUrl })
-    if (hasPass) return
-    const outcome = localShareRewardRepository.grantShareReward(resultId)
+    const outcome = grantShareRewardIfEligible(hasPass, resultId)
     if (outcome.granted) trackXShareRewardGranted('endless')
     setShareRewardRevision((r) => r + 1)
   }
