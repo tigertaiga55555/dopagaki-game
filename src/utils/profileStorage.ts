@@ -66,8 +66,11 @@ function resolveAvatar(stored: { avatar?: unknown; iconId?: unknown }): AvatarRe
   return DEFAULT_AVATAR
 }
 
-/** 次フェーズ（DOPA PASS基盤ラウンド、item 29）: PASS所有者の「お気に入りTitle」最大数。 */
-export const MAX_FAVORITE_TITLES = 3
+/**
+ * 次フェーズ（ゲーム機能クローズラウンド、item 72-74）: サブ称号枠の総数（固定2枠＝
+ * sub1/sub2）。メイン1枠と合わせて「PASS所有者=3枠・無料ユーザー=メイン1枠のみ」。
+ */
+export const SUB_TITLE_SLOT_COUNT = 2
 
 function createDefaultProfile(playerId: PlayerId): PlayerProfile {
   return {
@@ -75,7 +78,7 @@ function createDefaultProfile(playerId: PlayerId): PlayerProfile {
     nickname: buildDefaultNickname(playerId),
     avatar: DEFAULT_AVATAR,
     equippedTitleId: null,
-    favoriteTitleIds: [],
+    subTitleIds: [null, null],
     createdAt: Date.now(),
   }
 }
@@ -117,20 +120,41 @@ export function getProfile(): PlayerProfile {
     return fresh
   }
 
-  const storedFavorites = (stored as { favoriteTitleIds?: unknown }).favoriteTitleIds
-  const favoriteTitleIds = Array.isArray(storedFavorites)
-    ? storedFavorites.filter((id): id is TitleId => typeof id === 'string').slice(0, MAX_FAVORITE_TITLES)
-    : []
+  const subTitleIds = readStoredSubTitleIds(stored)
 
   const merged: PlayerProfile = {
     playerId,
     nickname: typeof stored.nickname === 'string' && stored.nickname.length > 0 ? stored.nickname : buildDefaultNickname(playerId),
     avatar: resolveAvatar(stored),
     equippedTitleId: typeof stored.equippedTitleId === 'string' ? stored.equippedTitleId : null,
-    favoriteTitleIds,
+    subTitleIds,
     createdAt: typeof stored.createdAt === 'number' ? stored.createdAt : Date.now(),
   }
   return merged
+}
+
+/**
+ * 次フェーズ（item 72-74）: 保存形式の読み込み互換性。
+ * - 新形式（subTitleIds: [TitleId|null, TitleId|null]）はそのまま検証して使う。
+ * - 旧形式（favoriteTitleIds: TitleId[]、最大3個のお気に入りリスト）しか無い既存ユーザーの
+ *   データは、先頭から最大SUB_TITLE_SLOT_COUNT個をsub1/sub2へ素直に引き継ぐ——
+ *   「Profileに複数Titleを見せる」という目的は同じ機能の移行であり、無料ユーザーの
+ *   旧データはどのみちequipTitleToSlot側のPASSガードで表示されなくなるだけなので、
+ *   移行時に特別な変換処理は不要（単に読み替えるだけで安全）。
+ */
+function readStoredSubTitleIds(stored: StoredProfileShape): [TitleId | null, TitleId | null] {
+  const storedSub = (stored as { subTitleIds?: unknown }).subTitleIds
+  if (Array.isArray(storedSub)) {
+    const a = typeof storedSub[0] === 'string' ? (storedSub[0] as TitleId) : null
+    const b = typeof storedSub[1] === 'string' ? (storedSub[1] as TitleId) : null
+    return [a, b]
+  }
+  const legacyFavorites = (stored as { favoriteTitleIds?: unknown }).favoriteTitleIds
+  if (Array.isArray(legacyFavorites)) {
+    const ids = legacyFavorites.filter((id): id is TitleId => typeof id === 'string')
+    return [ids[0] ?? null, ids[1] ?? null]
+  }
+  return [null, null]
 }
 
 /** ニックネームを検証・整形してから保存する（前後空白を除去し、最大文字数でclamp）。空になった場合はデフォルトへ戻す。 */
@@ -172,20 +196,77 @@ export function equipTitle(
   if (titleId !== null && !isTitleUnlocked(titleId) && !isPassTitleOwned(titleId)) {
     return { profile, ok: false }
   }
-  const next: PlayerProfile = { ...profile, equippedTitleId: titleId }
+  // 次フェーズ（item 72-74）: equipTitleToSlotと同じ「同じTitleを複数枠に重複させない」
+  // 整合性を、この従来からの単独equip経路（ProfileScreen.tsxのPASS限定Title即時装備
+  // ボタンが今も使う）にも適用する——サブ枠に既にあるTitleをメインへも装備した場合、
+  // サブ枠側の重複表示を自動的に解消する。
+  const subTitleIds: [TitleId | null, TitleId | null] =
+    titleId === null ? profile.subTitleIds : (profile.subTitleIds.map((id) => (id === titleId ? null : id)) as [TitleId | null, TitleId | null])
+  const next: PlayerProfile = { ...profile, equippedTitleId: titleId, subTitleIds }
   saveProfile(next)
   return { profile: next, ok: true }
 }
 
+export type TitleSlot = 'main' | 'sub1' | 'sub2'
+
+/** 次フェーズ（item 72-74）: 指定した枠に現在入っているTitleId（未装備ならnull）。 */
+export function getTitleInSlot(profile: PlayerProfile, slot: TitleSlot): TitleId | null {
+  if (slot === 'main') return profile.equippedTitleId
+  return profile.subTitleIds[slot === 'sub1' ? 0 : 1]
+}
+
+/** 次フェーズ（item 72-74）: このTitleIdが現在どの枠に入っているか（どこにも無ければnull）。 */
+export function findSlotForTitle(profile: PlayerProfile, titleId: TitleId): TitleSlot | null {
+  if (profile.equippedTitleId === titleId) return 'main'
+  if (profile.subTitleIds[0] === titleId) return 'sub1'
+  if (profile.subTitleIds[1] === titleId) return 'sub2'
+  return null
+}
+
 /**
- * 次フェーズ（DOPA PASS基盤ラウンド、item 29）: お気に入りTitleを設定する（最大
- * MAX_FAVORITE_TITLES個、重複は除去）。装備中Title（equippedTitleId、全ユーザー共通・単一）
- * とは別概念——どれも装備状態にはならない、Profileへのピン留め表示専用。
+ * 次フェーズ（ゲーム機能クローズラウンド、item 72-74）: 指定した枠（main/sub1/sub2）へ
+ * Titleを装備する。sub1/sub2はPASS所有者だけが使える——hasPass=falseでsub枠を指定した
+ * 場合は常にok:falseで何も変更しない（UIがそもそもsub枠のボタン自体を無料ユーザーへ
+ * 見せない設計だが、呼び出し側のガード漏れに対しても二重に安全側へ倒す）。
+ * 未解除のTitleを装備できない制約はequipTitleと完全に同じ。同じTitleを複数枠に重複させない
+ * ——指定した枠以外に既にあれば、そこは自動的に空になる（スワップ的な挙動）。
  */
-export function setFavoriteTitleIds(titleIds: TitleId[]): PlayerProfile {
+export function equipTitleToSlot(
+  titleId: TitleId,
+  slot: TitleSlot,
+  hasPass: boolean,
+  isPassTitleOwned: (titleId: TitleId) => boolean = () => false,
+): { profile: PlayerProfile; ok: boolean } {
   const profile = getProfile()
-  const deduped = Array.from(new Set(titleIds)).slice(0, MAX_FAVORITE_TITLES)
-  const next: PlayerProfile = { ...profile, favoriteTitleIds: deduped }
+  if (slot !== 'main' && !hasPass) return { profile, ok: false }
+  if (!isTitleUnlocked(titleId) && !isPassTitleOwned(titleId)) return { profile, ok: false }
+
+  let equippedTitleId = profile.equippedTitleId === titleId ? null : profile.equippedTitleId
+  const subTitleIds: [TitleId | null, TitleId | null] = [
+    profile.subTitleIds[0] === titleId ? null : profile.subTitleIds[0],
+    profile.subTitleIds[1] === titleId ? null : profile.subTitleIds[1],
+  ]
+
+  if (slot === 'main') equippedTitleId = titleId
+  else if (slot === 'sub1') subTitleIds[0] = titleId
+  else subTitleIds[1] = titleId
+
+  const next: PlayerProfile = { ...profile, equippedTitleId, subTitleIds }
+  saveProfile(next)
+  return { profile: next, ok: true }
+}
+
+/** 次フェーズ（item 72-74）: 指定した枠を未装備に戻す（常に許可——装備の取り消しに制約はない）。 */
+export function unequipTitleFromSlot(slot: TitleSlot): PlayerProfile {
+  const profile = getProfile()
+  let next: PlayerProfile
+  if (slot === 'main') {
+    next = { ...profile, equippedTitleId: null }
+  } else {
+    const subTitleIds: [TitleId | null, TitleId | null] = [...profile.subTitleIds]
+    subTitleIds[slot === 'sub1' ? 0 : 1] = null
+    next = { ...profile, subTitleIds }
+  }
   saveProfile(next)
   return next
 }

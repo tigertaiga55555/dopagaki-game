@@ -444,15 +444,19 @@ export interface PlayerProfile {
   /** Ver.6 Phase 5.1: 旧来の`iconId`フラットフィールドから移行。既存ユーザーの保存値は
    *  utils/profileStorage.tsのgetProfile()が透過的に{kind:'preset', iconId}へ変換する。 */
   avatar: AvatarRef
-  /** 装備中Title（config/titles.tsのTitleDef.id）。未装備はnull。 */
+  /** メイン称号枠（config/titles.tsのTitleDef.id）。未装備はnull。全ユーザー共通・battle/challenge/friend-profile等の既存参照箇所すべてにそのまま伝わる（変更なし）。 */
   equippedTitleId: TitleId | null
   /**
-   * 次フェーズ（DOPA PASS基盤ラウンド、item 29）: PASS所有者専用の「お気に入りTitle」最大3個
-   * （utils/profileStorage.ts MAX_FAVORITE_TITLES）。装備中Title（equippedTitleId、全ユーザー共通・
-   * 単一のまま変更しない）とは別概念——Profileにピン留め表示するだけで、どれも装備状態には
-   * ならない。PASS非所有者は常に空配列（UIがPASS所有時だけ編集可能にする）。
+   * 次フェーズ（ゲーム機能クローズラウンド、item 72-74）: サブ称号枠2つ（[sub1, sub2]固定長）。
+   * 旧来のfavoriteTitleIds（PASS所有者専用「お気に入り」、装備状態にはならないProfile
+   * ピン留め表示）をこの枠へ統合・置き換えた——「Profileに複数Titleを見せる」という目的が
+   * 完全に重複する2つの並行する仕組みを持たないための整理（最終報告書に判断根拠を記載）。
+   * 表示スコープはfavoriteTitleIdsと同じくProfile画面限定のまま（battle/challenge/
+   * friend-profile等、既存のequippedTitleId伝搬経路には一切含めない——意図的なスコープ外）。
+   * PASS非所有者は常に[null, null]のまま保たれる（utils/profileStorage.tsのequipTitleToSlotが
+   * サブ枠への装備をガードする）。
    */
-  favoriteTitleIds: TitleId[]
+  subTitleIds: [TitleId | null, TitleId | null]
   createdAt: number
 }
 

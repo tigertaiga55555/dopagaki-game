@@ -1,6 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { checkDopaPercentAchievements } from './achievementStorage'
-import { equipTitle, getOrCreatePlayerId, getProfile, setFavoriteTitleIds, updateIcon, updateNickname } from './profileStorage'
+import {
+  equipTitle,
+  equipTitleToSlot,
+  findSlotForTitle,
+  getOrCreatePlayerId,
+  getProfile,
+  getTitleInSlot,
+  unequipTitleFromSlot,
+  updateIcon,
+  updateNickname,
+} from './profileStorage'
 
 function installFakeLocalStorage(): Storage {
   const store = new Map<string, string>()
@@ -112,13 +122,70 @@ describe('profileStorage (Ver.6 Phase 5: 匿名player_id・ローカルプロフ
     expect(result.ok).toBe(false)
   })
 
-  it('次フェーズ（DOPA PASS基盤ラウンド、item 29）: setFavoriteTitleIdsは最大3件・重複除去で保存する', () => {
-    const profile = setFavoriteTitleIds(['a', 'b', 'a', 'c', 'd'])
-    expect(profile.favoriteTitleIds).toEqual(['a', 'b', 'c'])
-    expect(getProfile().favoriteTitleIds).toEqual(['a', 'b', 'c'])
+  it('初期プロフィールのsubTitleIdsは[null, null]', () => {
+    expect(getProfile().subTitleIds).toEqual([null, null])
   })
 
-  it('初期プロフィールのfavoriteTitleIdsは空配列', () => {
-    expect(getProfile().favoriteTitleIds).toEqual([])
+  describe('次フェーズ（ゲーム機能クローズラウンド、item 72-74）: 3枠（main/sub1/sub2）のTitle装備', () => {
+    it('PASS所有者はsub1/sub2へ装備できる', () => {
+      checkDopaPercentAchievements(100)
+      const result = equipTitleToSlot('dopa100', 'sub1', true)
+      expect(result.ok).toBe(true)
+      expect(result.profile.subTitleIds[0]).toBe('dopa100')
+      expect(getTitleInSlot(result.profile, 'sub1')).toBe('dopa100')
+    })
+
+    it('無料ユーザー（hasPass=false）はsub1/sub2へ装備できない（何も変化しない）', () => {
+      checkDopaPercentAchievements(100)
+      const before = getProfile()
+      const result = equipTitleToSlot('dopa100', 'sub1', false)
+      expect(result.ok).toBe(false)
+      expect(getProfile().subTitleIds).toEqual(before.subTitleIds)
+    })
+
+    it('無料ユーザーでもmain枠へは装備できる', () => {
+      checkDopaPercentAchievements(100)
+      const result = equipTitleToSlot('dopa100', 'main', false)
+      expect(result.ok).toBe(true)
+      expect(result.profile.equippedTitleId).toBe('dopa100')
+    })
+
+    it('未解除のTitleはどの枠にも装備できない', () => {
+      const result = equipTitleToSlot('dopa500', 'sub1', true)
+      expect(result.ok).toBe(false)
+    })
+
+    it('同じTitleを複数枠に重複させない: sub1にあるTitleをmainへ装備すると、sub1は自動的に空になる', () => {
+      checkDopaPercentAchievements(100)
+      equipTitleToSlot('dopa100', 'sub1', true)
+      const result = equipTitleToSlot('dopa100', 'main', true)
+      expect(result.profile.equippedTitleId).toBe('dopa100')
+      expect(result.profile.subTitleIds[0]).toBeNull()
+    })
+
+    it('findSlotForTitle: 現在どの枠に入っているかを正しく返す（どこにも無ければnull）', () => {
+      checkDopaPercentAchievements(100)
+      const result = equipTitleToSlot('dopa100', 'sub2', true)
+      expect(findSlotForTitle(result.profile, 'dopa100')).toBe('sub2')
+      expect(findSlotForTitle(result.profile, 'dopa500')).toBeNull()
+    })
+
+    it('unequipTitleFromSlot: 指定した枠だけを未装備に戻す（他の枠には影響しない）', () => {
+      checkDopaPercentAchievements(100)
+      checkDopaPercentAchievements(120)
+      equipTitleToSlot('dopa100', 'main', true)
+      equipTitleToSlot('dopa120', 'sub1', true)
+      const after = unequipTitleFromSlot('sub1')
+      expect(after.subTitleIds[0]).toBeNull()
+      expect(after.equippedTitleId).toBe('dopa100')
+    })
+
+    it('equipTitle（従来の単独main装備）もsub枠との重複を解消する', () => {
+      checkDopaPercentAchievements(100)
+      equipTitleToSlot('dopa100', 'sub1', true)
+      const result = equipTitle('dopa100')
+      expect(result.profile.equippedTitleId).toBe('dopa100')
+      expect(result.profile.subTitleIds[0]).toBeNull()
+    })
   })
 })

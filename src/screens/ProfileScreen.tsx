@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { NavBar } from '../components/NavBar'
 import { DopaPassBadge } from '../components/DopaPassBadge'
-import { FavoriteTitlesRow } from '../components/FavoriteTitlesRow'
 import { PassTitleBadge } from '../components/PassTitleBadge'
 import { PassTitleDetailModal } from '../components/PassTitleDetailModal'
 import { TitleBadge } from '../components/TitleBadge'
 import { TitleDetailModal } from '../components/TitleDetailModal'
+import { TitleSlotPickerModal } from '../components/TitleSlotPickerModal'
 import { ACHIEVEMENT_DEFS } from '../config/achievements'
 import { PASS_TITLE_DEFS_BY_ID } from '../config/passTitles'
 import { resolveAvatarEmoji } from '../config/profileConfig'
@@ -14,9 +14,9 @@ import { getTitleRarityTheme } from '../config/titleRarityTheme'
 import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import { getOwnedPassTitleIds, isPassTitleOwned } from '../payment/passTitleGrants'
 import { trackProfileView } from '../utils/analytics'
-import { getUnlockedTitles } from '../utils/achievementStorage'
 import { localPlayerStatsRepository } from '../utils/playerStatsRepository'
-import { equipTitle, getProfile, setFavoriteTitleIds } from '../utils/profileStorage'
+import { equipTitle, getProfile, unequipTitleFromSlot } from '../utils/profileStorage'
+import type { TitleSlot } from '../utils/profileStorage'
 
 interface Props {
   onBack: () => void
@@ -62,6 +62,8 @@ export function ProfileScreen({
   const equippedPassTitle = profile.equippedTitleId ? PASS_TITLE_DEFS_BY_ID[profile.equippedTitleId] : null
   const equippedRegularTitle = !equippedPassTitle && profile.equippedTitleId ? TITLE_DEFS_BY_ID[profile.equippedTitleId] : null
   const [showTitleDetail, setShowTitleDetail] = useState(false)
+  /** 次フェーズ（item 72-74）: サブ枠バッジタップ→管理のみモード（pendingTitleId無し）でモーダルを開く。 */
+  const [slotPickerOpen, setSlotPickerOpen] = useState(false)
 
   // 次フェーズ（item 12）: LEGENDARY/MYTHICを装備している間だけ、アバターリング/
   // プレイヤーカードへ軽くレアリティのテーマ色を広げる（COMMON/RARE/EPICは従来の見た目の
@@ -148,12 +150,36 @@ export function ProfileScreen({
           </button>
         </div>
 
+        {/*
+          次フェーズ（ゲーム機能クローズラウンド、item 72-74）: 旧お気に入りTitle行を、
+          実際に装備されているサブ枠（sub1/sub2）の表示へ置き換えた。メインの称号バッジ
+          （上のカード内、プレイヤー名直下）より明確に控えめ・小さいピルで表示し、
+          390px幅でもカードレイアウトを崩さない。PASS非所有者はサブ枠が常に使えないため
+          この行自体を出さない（空の枠を見せてタップできない、という中途半端なUIにしない）。
+        */}
         {hasPass && (
-          <FavoriteTitlesRow
-            favoriteTitleIds={profile.favoriteTitleIds}
-            unlockedTitleIds={getUnlockedTitles().map((t) => t.id)}
-            onChange={(next) => setProfile(setFavoriteTitleIds(next))}
-          />
+          <div className="flex w-full max-w-xs items-center justify-center gap-2">
+            {profile.subTitleIds.map((id, index) => {
+              const slot: TitleSlot = index === 0 ? 'sub1' : 'sub2'
+              const def = id ? TITLE_DEFS_BY_ID[id] : null
+              const passDef = id ? PASS_TITLE_DEFS_BY_ID[id] : null
+              const theme = def ? getTitleRarityTheme(def.rarity) : null
+              return (
+                <button
+                  key={slot}
+                  onClick={() => setSlotPickerOpen(true)}
+                  className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold active:scale-95 ${
+                    def || passDef
+                      ? `${theme ? theme.badgeBorderClass : 'border-amber-400/50'} ${theme ? theme.badgeBackgroundClass : 'bg-amber-500/10'} ${theme ? theme.badgeTextClass : 'text-amber-200'}`
+                      : 'border-white/10 bg-white/5 text-white/30'
+                  }`}
+                >
+                  <span className="text-[8px] font-black tracking-widest opacity-60">{index === 0 ? 'サブ1' : 'サブ2'}</span>
+                  <span>{def?.name ?? passDef?.name ?? '未装備'}</span>
+                </button>
+              )
+            })}
+          </div>
         )}
 
         {/* プレイヤー記録 */}
@@ -214,6 +240,16 @@ export function ProfileScreen({
       {showTitleDetail && equippedPassTitle && <PassTitleDetailModal title={equippedPassTitle} onClose={() => setShowTitleDetail(false)} />}
       {showTitleDetail && equippedRegularTitle && (
         <TitleDetailModal achievementId={equippedRegularTitle.unlockedByAchievementId} unlocked onClose={() => setShowTitleDetail(false)} />
+      )}
+      {slotPickerOpen && (
+        <TitleSlotPickerModal
+          profile={profile}
+          hasPass={hasPass}
+          onUnequip={(slot) => {
+            setProfile(unequipTitleFromSlot(slot))
+          }}
+          onClose={() => setSlotPickerOpen(false)}
+        />
       )}
     </div>
   )

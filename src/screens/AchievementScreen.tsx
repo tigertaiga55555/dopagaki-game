@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavBar } from '../components/NavBar'
 import { TitleDetailModal } from '../components/TitleDetailModal'
+import { TitleSlotPickerModal } from '../components/TitleSlotPickerModal'
 import { ACHIEVEMENT_DEFS } from '../config/achievements'
 import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
 import { ENDLESS_THEME } from '../config/endlessTheme'
 import { TITLE_DEFS_BY_ID } from '../config/titles'
+import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import { getUnlockedAchievements, getUnseenUnlockedAchievementIds, markAllUnlockedAchievementsSeen } from '../utils/achievementStorage'
 import { trackTitleEquipped } from '../utils/analytics'
-import { equipTitle, getProfile } from '../utils/profileStorage'
-import type { AchievementCategory, AchievementId } from '../types'
+import { equipTitleToSlot, findSlotForTitle, getProfile, unequipTitleFromSlot } from '../utils/profileStorage'
+import type { AchievementCategory, AchievementId, TitleId } from '../types'
+import type { TitleSlot } from '../utils/profileStorage'
 
 interface Props {
   onBack: () => void
@@ -34,6 +37,9 @@ const FILTER_TABS: { id: FilterTab; label: string }[] = [
 ]
 
 const BATTLE_CATEGORIES: AchievementCategory[] = ['worldBattle', 'friendBattle']
+
+/** 次フェーズ（item 72-74）: カード上の「装備中（メイン）」等、短い枠ラベル。 */
+const SLOT_SHORT_LABEL: Record<TitleSlot, string> = { main: 'メイン', sub1: 'サブ1', sub2: 'サブ2' }
 
 function matchesFilter(category: AchievementCategory, filter: FilterTab): boolean {
   if (filter === 'all') return true
@@ -86,18 +92,35 @@ export function AchievementScreen({ onBack, onHome }: Props) {
     return unseen
   })
   const unlockedMap = getUnlockedAchievements()
-  const equippedTitleId = getProfile().equippedTitleId
+  const [profile, setProfile] = useState(() => getProfile())
+  const hasPass = qaLocalEntitlementRepository.hasEntitlement('DOPA_PASS')
+  /**
+   * 次フェーズ（ゲーム機能クローズラウンド、item 72-74）: 「装備する」タップで即装備せず、
+   * まずTitleSlotPickerModal（main/sub1/sub2のプレビュー）を見せて枠を選ばせる。
+   * pickerTitleId=選択中のTitle（モーダルを開くきっかけになったTitle）。
+   */
+  const [pickerTitleId, setPickerTitleId] = useState<TitleId | null>(null)
 
   const unlockedCount = Object.keys(unlockedMap).length
   const visibleDefs = ACHIEVEMENT_DEFS.filter((d) => matchesFilter(d.category, filter))
 
-  function handleEquip(titleId: string, alreadyEquipped: boolean) {
-    const next = alreadyEquipped ? null : titleId
-    const result = equipTitle(next)
+  function handleEquipToSlot(slot: TitleSlot) {
+    if (!pickerTitleId) return
+    const result = equipTitleToSlot(pickerTitleId, slot, hasPass)
     if (result.ok) {
-      trackTitleEquipped(next)
+      trackTitleEquipped(pickerTitleId)
+      setProfile(result.profile)
       setRevision((r) => r + 1)
     }
+    setPickerTitleId(null)
+  }
+
+  function handleUnequipSlot(slot: TitleSlot) {
+    const next = unequipTitleFromSlot(slot)
+    trackTitleEquipped(null)
+    setProfile(next)
+    setRevision((r) => r + 1)
+    setPickerTitleId(null)
   }
 
   return (
@@ -137,7 +160,8 @@ export function AchievementScreen({ onBack, onHome }: Props) {
           {visibleDefs.map((def) => {
             const unlocked = unlockedMap[def.id] !== undefined
             const title = TITLE_DEFS_BY_ID[def.id]
-            const isEquipped = equippedTitleId === def.id
+            const equippedSlot = findSlotForTitle(profile, def.id)
+            const isEquipped = equippedSlot !== null
             const difficultyTheme = def.endlessDifficulty ? ENDLESS_THEME[def.endlessDifficulty] : null
             const battleModeLabel = BATTLE_MODE_LABEL[def.category]
             const hidden = def.secret && !unlocked
@@ -186,13 +210,13 @@ export function AchievementScreen({ onBack, onHome }: Props) {
                   <button
                     onClick={(event) => {
                       event.stopPropagation()
-                      handleEquip(title.id, isEquipped)
+                      setPickerTitleId(title.id)
                     }}
                     className={`mt-1 rounded-full px-2 py-1 text-[10px] font-bold active:scale-95 ${
                       isEquipped ? 'bg-fuchsia-500/30 text-fuchsia-200' : 'bg-white/10 text-white/70'
                     }`}
                   >
-                    {isEquipped ? '装備中' : '装備する'}
+                    {isEquipped ? `装備中（${SLOT_SHORT_LABEL[equippedSlot]}）` : '装備する'}
                   </button>
                 )}
               </div>
@@ -202,6 +226,16 @@ export function AchievementScreen({ onBack, onHome }: Props) {
       </div>
 
       {detailId && <TitleDetailModal achievementId={detailId} unlocked={unlockedMap[detailId] !== undefined} onClose={() => setDetailId(null)} />}
+      {pickerTitleId && (
+        <TitleSlotPickerModal
+          profile={profile}
+          hasPass={hasPass}
+          pendingTitleId={pickerTitleId}
+          onEquip={handleEquipToSlot}
+          onUnequip={handleUnequipSlot}
+          onClose={() => setPickerTitleId(null)}
+        />
+      )}
     </div>
   )
 }
