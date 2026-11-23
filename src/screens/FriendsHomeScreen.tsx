@@ -15,8 +15,18 @@ interface Props {
   onSubscribePresence: (playerIds: string[]) => void
   onOpenFriendProfile: (playerId: string) => void
   onRequirePass: () => void
-  onInviteToExistingRoom: (toPlayerId: string, roomCode: string) => void
-  onCreateRoomAndInvite: (toPlayerId: string) => void
+  /** 次フェーズ（item 75-77）: 戻り値で成否・理由を返す（トースト表示に使う）。プレゼンス（オンライン状態）はもう一切見ない。 */
+  onInviteToExistingRoom: (toPlayerId: string, roomCode: string) => Promise<{ ok: boolean; reason?: string }>
+  onCreateRoomAndInvite: (toPlayerId: string) => Promise<{ ok: boolean; reason?: string }>
+}
+
+const INVITE_ERROR_REASON_LABEL: Record<string, string> = {
+  not_friends: 'フレンドではない相手には送れません',
+  already_member: 'すでにこのルームのメンバーです',
+  room_closed: 'このルームは終了しています',
+  full: 'ルームが満員です',
+  self_invite: '自分自身は招待できません',
+  not_configured: '招待の送信に失敗しました。もう一度お試しください。',
 }
 
 const PRESENCE_LABEL: Record<'online' | 'playing' | 'offline', string> = {
@@ -58,6 +68,8 @@ export function FriendsHomeScreen({
   const [activeRoomCode, setActiveRoomCode] = useState<string | null>(null)
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null)
   const [busyInviteId, setBusyInviteId] = useState<string | null>(null)
+  const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set())
+  const [inviteToast, setInviteToast] = useState<{ message: string; kind: 'success' | 'error' } | null>(null)
 
   async function reload() {
     const [code, requests, friendList] = await Promise.all([
@@ -105,18 +117,26 @@ export function FriendsHomeScreen({
     reload()
   }
 
+  /**
+   * 次フェーズ（item 75-77）: 実際に報告されたバグ（オフラインの相手にはボタン自体が
+   * 出ず、一生招待できなかった）の修正。プレゼンス状態はもう一切見ない——クリック自体は
+   * 常に試行でき、適格性はサーバー側（POST /api/rooms/private/:roomCode/invite）が判断する。
+   */
   async function handleInviteClick(friend: FriendSummary) {
     if (!hasPass) {
       onRequirePass()
       return
     }
     setBusyInviteId(friend.playerId)
-    if (activeRoomCode) {
-      onInviteToExistingRoom(friend.playerId, activeRoomCode)
-    } else {
-      await onCreateRoomAndInvite(friend.playerId)
-    }
+    const result = activeRoomCode ? await onInviteToExistingRoom(friend.playerId, activeRoomCode) : await onCreateRoomAndInvite(friend.playerId)
     setBusyInviteId(null)
+    if (result.ok) {
+      setInvitedIds((prev) => new Set(prev).add(friend.playerId))
+      setInviteToast({ message: `${friend.profile.nickname}に招待を送りました`, kind: 'success' })
+    } else {
+      setInviteToast({ message: INVITE_ERROR_REASON_LABEL[result.reason ?? ''] ?? '招待の送信に失敗しました。もう一度お試しください。', kind: 'error' })
+    }
+    setTimeout(() => setInviteToast(null), 2600)
   }
 
   return (
@@ -180,10 +200,15 @@ export function FriendsHomeScreen({
 
         <div className="w-full max-w-xs flex-1 space-y-2">
           <p className="text-[10px] font-black tracking-widest text-white/40">フレンド（{friends.length}）</p>
+          {inviteToast && (
+            <p className={`text-center text-[11px] font-bold ${inviteToast.kind === 'success' ? 'text-emerald-300' : 'text-rose-300'}`}>
+              {inviteToast.message}
+            </p>
+          )}
           {friends.length === 0 && <p className="mt-6 text-center text-sm font-bold text-white/40">まだフレンドがいません</p>}
           {friends.map((friend) => {
             const presence = presenceSnapshot[friend.playerId] ?? friend.presence
-            const canInvite = presence !== 'offline'
+            const invited = invitedIds.has(friend.playerId)
             return (
               <div key={friend.playerId} className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2.5">
                 <span className="text-xl">{resolveAvatarEmoji(friend.profile.avatar)}</span>
@@ -199,17 +224,28 @@ export function FriendsHomeScreen({
                 >
                   プロフィール
                 </button>
-                {canInvite && (
-                  <button
-                    onClick={() => handleInviteClick(friend)}
-                    disabled={busyInviteId === friend.playerId}
-                    className={`rounded-full px-2.5 py-1 text-[10px] font-black active:scale-95 disabled:opacity-50 ${
-                      hasPass ? 'bg-fuchsia-500/30 text-fuchsia-200' : 'bg-amber-500/20 text-amber-300'
-                    }`}
-                  >
-                    {hasPass ? (activeRoomCode ? 'ルームに招待' : 'ルームを作成して招待') : '🔒 ルームに招待'}
-                  </button>
-                )}
+                {/*
+                  次フェーズ（item 75-77）: プレゼンス（オンライン状態）に関わらず常に
+                  このボタンを出す——実際に報告されたバグ（オフラインだとボタン自体が
+                  消え、一生招待できなかった）の修正。適格性はクリック後、サーバー側が判断する。
+                */}
+                <button
+                  onClick={() => handleInviteClick(friend)}
+                  disabled={busyInviteId === friend.playerId || invited}
+                  className={`rounded-full px-2.5 py-1 text-[10px] font-black active:scale-95 disabled:opacity-50 ${
+                    hasPass ? 'bg-fuchsia-500/30 text-fuchsia-200' : 'bg-amber-500/20 text-amber-300'
+                  }`}
+                >
+                  {!hasPass
+                    ? '🔒 ルームに招待'
+                    : invited
+                      ? '招待済み'
+                      : busyInviteId === friend.playerId
+                        ? '送信中…'
+                        : activeRoomCode
+                          ? 'ルームに招待'
+                          : 'ルームを作成して招待'}
+                </button>
               </div>
             )
           })}

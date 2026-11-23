@@ -3,10 +3,9 @@ import { NavBar } from '../../components/NavBar'
 import { resolveAvatarEmoji } from '../../config/profileConfig'
 import { listFriends } from '../../friends/friendsClient'
 import type { FriendSummary } from '../../friends/types'
-import type { PresenceSnapshot } from '../../presence/presenceTypes'
-import { connectToPrivateRoom, type PrivateRoomSocket } from '../../battle/privateRoomClient'
+import { connectToPrivateRoom, getOutgoingRoomInvites, type PrivateRoomSocket } from '../../battle/privateRoomClient'
 import { buildPrivateRoomUrl } from '../../battle/privateRoomUrl'
-import { visibleTableCount, type PrivateRoomMember, type PrivateRoomState, type PrivateRoomTable } from '../../battle/privateRoomEngine'
+import { PRIVATE_ROOM_MAX_MEMBERS, visibleTableCount, type PrivateRoomMember, type PrivateRoomState, type PrivateRoomTable } from '../../battle/privateRoomEngine'
 import type { RoomClosedReason } from '../../battle/privateRoomTypes'
 import type { BattleFormat, BattleOpponentProfile } from '../../battle/types'
 import type { EndlessDifficulty } from '../../types'
@@ -35,10 +34,12 @@ interface Props {
    * stale値を受け取っても、既に退出済みの試合へ二度と入らないことを保証する。
    */
   isMatchAlreadyHandled: (matchId: string) => boolean
-  /** 次フェーズ（item 50）: 「フレンドを招待」ボタンのための、FriendsHomeScreenと共通のプレゼンス購読。 */
-  presenceSnapshot: PresenceSnapshot
-  onSubscribePresence: (playerIds: string[]) => void
-  onInviteFriend: (toPlayerId: string) => void
+  /**
+   * 次フェーズ（item 75-77）: 戻り値で成否・理由を返す（トースト・per-friend状態表示に使う）。
+   * item 75-77で判明した実バグの修正により、招待可否はもうプレゼンス（オンライン状態）を
+   * 一切見ない——presenceSnapshot/onSubscribePresenceはこの画面ではもう不要になった。
+   */
+  onInviteFriend: (toPlayerId: string) => Promise<{ ok: boolean; reason?: string }>
   /** 次フェーズ（item 48）: メンバーカードをタップした時、FriendProfileScreenを開く。 */
   onOpenMemberProfile: (playerId: string) => void
 }
@@ -70,8 +71,6 @@ export function PrivateRoomLobbyScreen({
   onRoomClosed,
   onEnterMatch,
   isMatchAlreadyHandled,
-  presenceSnapshot,
-  onSubscribePresence,
   onInviteFriend,
   onOpenMemberProfile,
 }: Props) {
@@ -166,12 +165,20 @@ export function PrivateRoomLobbyScreen({
           <p className="break-all text-[10px] text-white/30">{buildPrivateRoomUrl(roomCode)}</p>
         </div>
 
-        <button
-          onClick={() => setInviteModalOpen(true)}
-          className="w-full max-w-xs rounded-2xl border border-fuchsia-400/30 bg-fuchsia-500/10 py-2.5 text-sm font-black text-fuchsia-200 active:scale-95"
-        >
-          👥 フレンドを招待
-        </button>
+        {/*
+          次フェーズ（item 75-77）: 「フレンドを招待」はルームのホストだけが行える
+          （このラウンドで明文化された正しい適格性ルール——以前は誰でも押せたが、
+          サーバー側（POST /api/rooms/private/:roomCode/invite）もnot_hostで拒否する
+          ため、非ホストにはボタン自体を出さず「押せるのに必ず失敗する」UIにしない）。
+        */}
+        {isHost && (
+          <button
+            onClick={() => setInviteModalOpen(true)}
+            className="w-full max-w-xs rounded-2xl border border-fuchsia-400/30 bg-fuchsia-500/10 py-2.5 text-sm font-black text-fuchsia-200 active:scale-95"
+          >
+            👥 フレンドを招待
+          </button>
+        )}
 
         {connError && <p className="text-xs font-bold text-rose-300">{connError}</p>}
 
@@ -259,12 +266,13 @@ export function PrivateRoomLobbyScreen({
       {inviteModalOpen && (
         <InviteFriendModal
           playerId={playerId}
-          presenceSnapshot={presenceSnapshot}
-          onSubscribePresence={onSubscribePresence}
-          onInvite={(toPlayerId) => {
-            onInviteFriend(toPlayerId)
-            sendMessage({ v: 1, type: 'touch_activity' })
-            setInviteModalOpen(false)
+          roomCode={roomCode}
+          memberPlayerIds={members.map((m) => m.playerId)}
+          roomFull={members.length >= PRIVATE_ROOM_MAX_MEMBERS}
+          onInvite={async (toPlayerId) => {
+            const result = await onInviteFriend(toPlayerId)
+            if (result.ok) sendMessage({ v: 1, type: 'touch_activity' })
+            return result
           }}
           onClose={() => setInviteModalOpen(false)}
         />
@@ -469,50 +477,92 @@ function ConfirmCloseModal({ onConfirm, onCancel }: { onConfirm: () => void; onC
   )
 }
 
-/** item 50: ルームの中からフレンドを招待する（FriendsHomeScreenの導線とは別の起点、送受信の仕組みは共通）。 */
+type InviteFriendRowState = 'idle' | 'sending' | 'invited' | 'error'
+
+const ERROR_REASON_LABEL: Record<string, string> = {
+  not_host: 'ホストだけがフレンドを招待できます',
+  not_friends: 'フレンドではない相手には送れません',
+  already_member: 'すでにこのルームのメンバーです',
+  room_closed: 'このルームは終了しています',
+  full: 'ルームが満員です',
+  self_invite: '自分自身は招待できません',
+  not_configured: '招待の送信に失敗しました。もう一度お試しください。',
+}
+
+/**
+ * item 50（→item 75-77で実バグ修正）: ルームの中からフレンドを招待する
+ * （FriendsHomeScreenの導線とは別の起点、送受信の仕組みは共通）。
+ *
+ * item 75-77: 以前はpresence（オンライン状態）だけで「招待」ボタンの活性/非活性を
+ * 決めていたため、相手がオフラインだと構造的に一生招待できなかった（実際に報告された
+ * バグ）。プレゼンスを一切見ない正しい適格性（参加中／既に招待済み／満員）だけで
+ * per-friendの状態を決め、送信自体はオンライン/オフラインに関わらず常に試せるようにする。
+ */
 function InviteFriendModal({
   playerId,
-  presenceSnapshot,
-  onSubscribePresence,
+  roomCode,
+  memberPlayerIds,
+  roomFull,
   onInvite,
   onClose,
 }: {
   playerId: string
-  presenceSnapshot: PresenceSnapshot
-  onSubscribePresence: (playerIds: string[]) => void
-  onInvite: (toPlayerId: string) => void
+  roomCode: string
+  memberPlayerIds: string[]
+  roomFull: boolean
+  onInvite: (toPlayerId: string) => Promise<{ ok: boolean; reason?: string }>
   onClose: () => void
 }) {
   const [friends, setFriends] = useState<FriendSummary[] | null>(null)
+  const [outgoingInvited, setOutgoingInvited] = useState<Set<string>>(new Set())
+  const [rowState, setRowState] = useState<Record<string, InviteFriendRowState>>({})
+  const [toast, setToast] = useState<{ message: string; kind: 'success' | 'error' } | null>(null)
 
   useEffect(() => {
-    listFriends(playerId).then((list) => {
-      setFriends(list)
-      onSubscribePresence(list.map((f) => f.playerId))
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playerId])
+    listFriends(playerId).then(setFriends)
+    getOutgoingRoomInvites(roomCode).then((ids) => setOutgoingInvited(new Set(ids)))
+  }, [playerId, roomCode])
+
+  async function handleInvite(friend: FriendSummary) {
+    setRowState((s) => ({ ...s, [friend.playerId]: 'sending' }))
+    const result = await onInvite(friend.playerId)
+    if (result.ok) {
+      setRowState((s) => ({ ...s, [friend.playerId]: 'invited' }))
+      setOutgoingInvited((prev) => new Set(prev).add(friend.playerId))
+      setToast({ message: `${friend.profile.nickname}に招待を送りました`, kind: 'success' })
+    } else {
+      setRowState((s) => ({ ...s, [friend.playerId]: 'error' }))
+      setToast({ message: ERROR_REASON_LABEL[result.reason ?? ''] ?? '招待の送信に失敗しました。もう一度お試しください。', kind: 'error' })
+    }
+    setTimeout(() => setToast(null), 2600)
+  }
 
   return (
     <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 px-6" onClick={onClose}>
       <div className="anim-pop w-full max-w-xs rounded-3xl border border-white/10 bg-[#1a0e2e] p-5 text-left" onClick={(e) => e.stopPropagation()}>
         <p className="mb-3 text-center text-sm font-black text-white">フレンドを招待</p>
+        {toast && (
+          <p className={`mb-2 text-center text-xs font-bold ${toast.kind === 'success' ? 'text-emerald-300' : 'text-rose-300'}`}>{toast.message}</p>
+        )}
         {friends === null && <p className="text-center text-xs font-bold text-white/50">読み込み中…</p>}
         {friends !== null && friends.length === 0 && <p className="text-center text-xs font-bold text-white/40">まだフレンドがいません</p>}
         <div className="max-h-56 space-y-1.5 overflow-y-auto">
           {friends?.map((f) => {
-            const presence = presenceSnapshot[f.playerId] ?? f.presence
-            const canInvite = presence !== 'offline'
+            const isMember = memberPlayerIds.includes(f.playerId)
+            const isInvited = outgoingInvited.has(f.playerId) || rowState[f.playerId] === 'invited'
+            const sending = rowState[f.playerId] === 'sending'
+            const label = isMember ? '参加中' : isInvited ? '招待済み' : roomFull ? '満員' : sending ? '送信中…' : '招待'
+            const disabled = isMember || isInvited || roomFull || sending
             return (
               <div key={f.playerId} className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2">
                 <span className="text-lg">{resolveAvatarEmoji(f.profile.avatar)}</span>
                 <p className="min-w-0 flex-1 truncate text-sm font-bold text-white">{f.profile.nickname}</p>
                 <button
-                  onClick={() => onInvite(f.playerId)}
-                  disabled={!canInvite}
-                  className="rounded-full bg-fuchsia-500/30 px-2.5 py-1 text-[10px] font-black text-fuchsia-200 active:scale-95 disabled:opacity-30"
+                  onClick={() => handleInvite(f)}
+                  disabled={disabled}
+                  className="rounded-full bg-fuchsia-500/30 px-2.5 py-1 text-[10px] font-black text-fuchsia-200 active:scale-95 disabled:opacity-40"
                 >
-                  招待
+                  {label}
                 </button>
               </div>
             )

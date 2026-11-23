@@ -1,6 +1,7 @@
 import { isPrivateRoomClientMessage } from './privateRoomTypes'
 import type { CreatePrivateRoomResponse, PrivateRoomClientMessage, PrivateRoomServerMessage, PrivateRoomStatusResponse } from './privateRoomTypes'
 import type { BattleOpponentProfile } from './types'
+import type { PublicProfileSnapshot } from '../friends/types'
 
 /**
  * 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM）: battle/battleClient.tsと
@@ -117,5 +118,59 @@ export async function getActiveRoomForPlayer(playerId: string): Promise<ActiveRo
     return body.ok && body.roomCode ? { roomCode: body.roomCode, isHost: body.isHost } : null
   } catch {
     return null
+  }
+}
+
+export type SendRoomInviteReason = 'not_host' | 'not_friends' | 'already_member' | 'room_closed' | 'full' | 'self_invite' | 'not_configured'
+
+/**
+ * 次フェーズ（ゲーム機能クローズラウンド、item 75-77）: ルームからのフレンド招待。
+ * 実在の報告バグ（招待ボタンがオンライン状態だけで無効化され、オフラインの相手には
+ * 一生招待できなかった）の修正——プレゼンス状態を一切見ない、サーバー権威の適格性判定
+ * （ホスト本人・フレンド関係・未参加・定員未満・ルーム有効）をPOST /api/rooms/private/
+ * :roomCode/invite側で行い、成功すれば必ずD1へ永続化する。戻り値のreasonをUIが
+ * そのまま文言分岐に使える。
+ */
+export async function sendRoomInvite(roomCode: string, fromPlayerId: string, toPlayerId: string): Promise<{ ok: boolean; reason?: SendRoomInviteReason }> {
+  try {
+    const res = await fetch(`/api/rooms/private/${encodeURIComponent(roomCode)}/invite`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fromPlayerId, toPlayerId }),
+    })
+    const body = (await res.json()) as { ok: boolean; reason?: SendRoomInviteReason }
+    return body
+  } catch {
+    return { ok: false, reason: 'not_configured' }
+  }
+}
+
+/** item 75-77: ロビーの招待モーダルが「招待済み」状態を出すために使う。 */
+export async function getOutgoingRoomInvites(roomCode: string): Promise<string[]> {
+  try {
+    const res = await fetch(`/api/rooms/private/${encodeURIComponent(roomCode)}/invites/outgoing`)
+    if (!res.ok) return []
+    const body = (await res.json()) as { ok: boolean; toPlayerIds?: string[] }
+    return body.ok ? (body.toPlayerIds ?? []) : []
+  } catch {
+    return []
+  }
+}
+
+export interface IncomingRoomInvite {
+  roomCode: string
+  fromProfile: PublicProfileSnapshot
+  createdAt: number
+}
+
+/** item 75-77: FRIENDS画面を開いた時／アプリ起動時に、オフライン中に届いていた招待も含めて必ず拾う。 */
+export async function listIncomingRoomInvites(playerId: string): Promise<IncomingRoomInvite[]> {
+  try {
+    const res = await fetch(`/api/rooms/private/invites/incoming?playerId=${encodeURIComponent(playerId)}`)
+    if (!res.ok) return []
+    const body = (await res.json()) as { ok: boolean; value?: IncomingRoomInvite[] }
+    return body.ok ? (body.value ?? []) : []
+  } catch {
+    return []
   }
 }

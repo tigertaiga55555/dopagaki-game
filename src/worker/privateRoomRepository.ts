@@ -26,6 +26,13 @@ export interface ActiveRoomForPlayer {
   isHost: boolean
 }
 
+/** item 75-77: FRIENDS画面へ表示する、自分宛ての未処理ルーム招待。 */
+export interface PendingRoomInvite {
+  roomCode: string
+  fromPlayerId: string
+  createdAt: number
+}
+
 export interface ClosedRoomSession {
   roomCode: string
   hostPlayerId: string
@@ -51,6 +58,21 @@ export interface PrivateRoomRepository {
 
   /** item 44: ルームが閉じた/期限切れになった瞬間に1回だけ呼ぶ。セッションサマリー＋試合履歴detailをまとめて書き込む。 */
   recordClosedRoomSession(session: ClosedRoomSession, matches: PrivateRoomMatchHistoryEntry[]): Promise<void>
+
+  /**
+   * item 75-77: ルームからのフレンド招待をサーバー側で永続化する唯一の書き込み口。
+   * (room_code, to_player_id)が既に存在する場合は何もしない（同じ招待の二重送信防止、
+   * DB制約そのものにも同じガードがあるためここでは単にcatchして無視するだけでよい）。
+   */
+  createRoomInvite(roomCode: string, fromPlayerId: string, toPlayerId: string, nowMs: number): Promise<void>
+  /** item 75-77: このルームから既に招待済みのplayerId一覧（ロビーのInviteFriendModalが「招待済み」状態を出すために使う）。 */
+  listOutgoingInvitesForRoom(roomCode: string): Promise<string[]>
+  /** item 75-77: 自分宛ての未処理招待一覧（FRIENDS画面を開いた時に表示する）。 */
+  listPendingInvitesForPlayer(playerId: string): Promise<PendingRoomInvite[]>
+  /** item 75-77: 招待を受けた側が実際にそのルームへ参加した瞬間、または招待自体を取り消す時に呼ぶ。 */
+  deleteRoomInvite(roomCode: string, toPlayerId: string): Promise<void>
+  /** item 75-77: ルームが閉じた/期限切れになった瞬間、そのルーム宛ての招待を一括で消す（clearMembershipsForRoomと対の掃除）。 */
+  clearInvitesForRoom(roomCode: string): Promise<void>
 }
 
 export function createD1PrivateRoomRepository(db: D1Database): PrivateRoomRepository {
@@ -136,6 +158,38 @@ export function createD1PrivateRoomRepository(db: D1Database): PrivateRoomReposi
         ),
       ]
       await db.batch(statements)
+    },
+
+    async createRoomInvite(roomCode, fromPlayerId, toPlayerId, nowMs) {
+      try {
+        await db
+          .prepare(`INSERT INTO private_room_invites (room_code, to_player_id, from_player_id, created_at) VALUES (?, ?, ?, ?)`)
+          .bind(roomCode, toPlayerId, fromPlayerId, nowMs)
+          .run()
+      } catch {
+        // (room_code, to_player_id)の複合PRIMARY KEY制約違反＝既に招待済み。静かに無視する（二重送信防止）。
+      }
+    },
+
+    async listOutgoingInvitesForRoom(roomCode) {
+      const { results } = await db.prepare(`SELECT to_player_id FROM private_room_invites WHERE room_code = ?`).bind(roomCode).all<{ to_player_id: string }>()
+      return (results ?? []).map((r) => r.to_player_id)
+    },
+
+    async listPendingInvitesForPlayer(playerId) {
+      const { results } = await db
+        .prepare(`SELECT room_code, from_player_id, created_at FROM private_room_invites WHERE to_player_id = ? ORDER BY created_at DESC`)
+        .bind(playerId)
+        .all<{ room_code: string; from_player_id: string; created_at: number }>()
+      return (results ?? []).map((r) => ({ roomCode: r.room_code, fromPlayerId: r.from_player_id, createdAt: r.created_at }))
+    },
+
+    async deleteRoomInvite(roomCode, toPlayerId) {
+      await db.prepare(`DELETE FROM private_room_invites WHERE room_code = ? AND to_player_id = ?`).bind(roomCode, toPlayerId).run()
+    },
+
+    async clearInvitesForRoom(roomCode) {
+      await db.prepare(`DELETE FROM private_room_invites WHERE room_code = ?`).bind(roomCode).run()
     },
   }
 }

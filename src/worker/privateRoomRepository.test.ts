@@ -15,6 +15,9 @@ function createPrivateRoomFakeD1Database() {
   const memberships = new Map<string, { player_id: string; room_code: string; joined_at: number }>()
   const sessions: Record<string, unknown>[] = []
   const matchHistoryRows: Record<string, unknown>[] = []
+  // item 75-77: (room_code, to_player_id)の複合キーをMapキー文字列化してシミュレートする。
+  const invites = new Map<string, { room_code: string; to_player_id: string; from_player_id: string; created_at: number }>()
+  const inviteKey = (roomCode: string, toPlayerId: string) => `${roomCode}::${toPlayerId}`
 
   function prepare(query: string) {
     let boundValues: unknown[] = []
@@ -57,6 +60,25 @@ function createPrivateRoomFakeD1Database() {
           matchHistoryRows.push({ id, session_id: sessionId, room_code: roomCode, table_id: tableId })
           return { success: true, meta: {} }
         }
+        if (query.startsWith('INSERT INTO private_room_invites')) {
+          const [roomCode, toPlayerId, fromPlayerId, createdAt] = boundValues as [string, string, string, number]
+          const key = inviteKey(roomCode, toPlayerId)
+          if (invites.has(key)) {
+            throw new Error('UNIQUE constraint failed: private_room_invites.room_code, private_room_invites.to_player_id')
+          }
+          invites.set(key, { room_code: roomCode, to_player_id: toPlayerId, from_player_id: fromPlayerId, created_at: createdAt })
+          return { success: true, meta: {} }
+        }
+        if (query.startsWith('DELETE FROM private_room_invites WHERE room_code = ? AND to_player_id = ?')) {
+          const [roomCode, toPlayerId] = boundValues as [string, string]
+          invites.delete(inviteKey(roomCode, toPlayerId))
+          return { success: true, meta: {} }
+        }
+        if (query.startsWith('DELETE FROM private_room_invites WHERE room_code = ?')) {
+          const [roomCode] = boundValues as [string]
+          for (const [key, row] of invites) if (row.room_code === roomCode) invites.delete(key)
+          return { success: true, meta: {} }
+        }
         throw new Error(`private room fake D1: unsupported run() query: ${query}`)
       },
       async first<T>() {
@@ -72,6 +94,22 @@ function createPrivateRoomFakeD1Database() {
         }
         throw new Error(`private room fake D1: unsupported first() query: ${query}`)
       },
+      async all<T>() {
+        if (query.startsWith('SELECT to_player_id FROM private_room_invites WHERE room_code = ?')) {
+          const [roomCode] = boundValues as [string]
+          const results = [...invites.values()].filter((r) => r.room_code === roomCode).map((r) => ({ to_player_id: r.to_player_id }))
+          return { results: results as T[], success: true, meta: {} }
+        }
+        if (query.startsWith('SELECT room_code, from_player_id, created_at FROM private_room_invites WHERE to_player_id = ?')) {
+          const [toPlayerId] = boundValues as [string]
+          const results = [...invites.values()]
+            .filter((r) => r.to_player_id === toPlayerId)
+            .sort((a, b) => b.created_at - a.created_at)
+            .map((r) => ({ room_code: r.room_code, from_player_id: r.from_player_id, created_at: r.created_at }))
+          return { results: results as T[], success: true, meta: {} }
+        }
+        throw new Error(`private room fake D1: unsupported all() query: ${query}`)
+      },
     }
     return stmt
   }
@@ -82,7 +120,7 @@ function createPrivateRoomFakeD1Database() {
     return out
   }
 
-  return { prepare, batch, _rows: rows, _memberships: memberships, _sessions: sessions, _matchHistoryRows: matchHistoryRows }
+  return { prepare, batch, _rows: rows, _memberships: memberships, _sessions: sessions, _matchHistoryRows: matchHistoryRows, _invites: invites }
 }
 
 function sampleMatch(overrides: Partial<PrivateRoomMatchHistoryEntry> = {}): PrivateRoomMatchHistoryEntry {
@@ -214,6 +252,72 @@ describe('createD1PrivateRoomRepository (DOPA PASS基盤ラウンド、item 15 P
       await repo.recordClosedRoomSession({ roomCode: 'ABCDEF', hostPlayerId: 'host1', createdAt: 1000, endedAt: 2000, memberCount: 1, matchCount: 0 }, [])
       expect(db._sessions).toHaveLength(1)
       expect(db._matchHistoryRows).toHaveLength(0)
+    })
+  })
+
+  describe('item 75-77: private_room_invites（オフライン配信可能なルーム招待の永続化）', () => {
+    it('createRoomInvite後、listPendingInvitesForPlayerに現れる', async () => {
+      const db = createPrivateRoomFakeD1Database()
+      const repo = createD1PrivateRoomRepository(db as never)
+      await repo.createRoomInvite('ABCDEF', 'host1', 'friend1', 1000)
+      expect(await repo.listPendingInvitesForPlayer('friend1')).toEqual([{ roomCode: 'ABCDEF', fromPlayerId: 'host1', createdAt: 1000 }])
+    })
+
+    it('同じ(roomCode, toPlayerId)への2回目のcreateRoomInviteは何も変えない（二重送信防止）', async () => {
+      const db = createPrivateRoomFakeD1Database()
+      const repo = createD1PrivateRoomRepository(db as never)
+      await repo.createRoomInvite('ABCDEF', 'host1', 'friend1', 1000)
+      await repo.createRoomInvite('ABCDEF', 'host1', 'friend1', 2000)
+      const pending = await repo.listPendingInvitesForPlayer('friend1')
+      expect(pending).toHaveLength(1)
+      expect(pending[0].createdAt).toBe(1000)
+    })
+
+    it('listOutgoingInvitesForRoom: そのルームから招待済みのplayerId一覧を返す（ロビーの「招待済み」表示に使う）', async () => {
+      const db = createPrivateRoomFakeD1Database()
+      const repo = createD1PrivateRoomRepository(db as never)
+      await repo.createRoomInvite('ABCDEF', 'host1', 'friend1', 1000)
+      await repo.createRoomInvite('ABCDEF', 'host1', 'friend2', 1000)
+      await repo.createRoomInvite('OTHER1', 'host2', 'friend3', 1000)
+      const outgoing = await repo.listOutgoingInvitesForRoom('ABCDEF')
+      expect(outgoing.sort()).toEqual(['friend1', 'friend2'])
+    })
+
+    it('deleteRoomInvite: 指定した招待だけを削除する（参加済みになった相手の招待を消す用途）', async () => {
+      const db = createPrivateRoomFakeD1Database()
+      const repo = createD1PrivateRoomRepository(db as never)
+      await repo.createRoomInvite('ABCDEF', 'host1', 'friend1', 1000)
+      await repo.createRoomInvite('ABCDEF', 'host1', 'friend2', 1000)
+      await repo.deleteRoomInvite('ABCDEF', 'friend1')
+      expect(await repo.listPendingInvitesForPlayer('friend1')).toEqual([])
+      expect(await repo.listPendingInvitesForPlayer('friend2')).toHaveLength(1)
+    })
+
+    it('clearInvitesForRoom: そのルーム宛ての招待を一括で消す（ルームが閉じた/期限切れになった時）', async () => {
+      const db = createPrivateRoomFakeD1Database()
+      const repo = createD1PrivateRoomRepository(db as never)
+      await repo.createRoomInvite('ABCDEF', 'host1', 'friend1', 1000)
+      await repo.createRoomInvite('ABCDEF', 'host1', 'friend2', 1000)
+      await repo.createRoomInvite('OTHER1', 'host2', 'friend3', 1000)
+      await repo.clearInvitesForRoom('ABCDEF')
+      expect(await repo.listPendingInvitesForPlayer('friend1')).toEqual([])
+      expect(await repo.listPendingInvitesForPlayer('friend2')).toEqual([])
+      expect(await repo.listPendingInvitesForPlayer('friend3')).toHaveLength(1)
+    })
+
+    it('招待の無い相手はlistPendingInvitesForPlayerが空配列を返す', async () => {
+      const db = createPrivateRoomFakeD1Database()
+      const repo = createD1PrivateRoomRepository(db as never)
+      expect(await repo.listPendingInvitesForPlayer('nobody')).toEqual([])
+    })
+
+    it('新しい順（降順）で返す', async () => {
+      const db = createPrivateRoomFakeD1Database()
+      const repo = createD1PrivateRoomRepository(db as never)
+      await repo.createRoomInvite('ROOM01', 'host1', 'friend1', 1000)
+      await repo.createRoomInvite('ROOM02', 'host2', 'friend1', 2000)
+      const pending = await repo.listPendingInvitesForPlayer('friend1')
+      expect(pending.map((p) => p.roomCode)).toEqual(['ROOM02', 'ROOM01'])
     })
   })
 })

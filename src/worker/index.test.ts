@@ -1147,3 +1147,223 @@ describe('worker fetch handler: /api/presence/ws (FRIENDS/ナビ刷新ラウン�
     expect(res.status).toBe(200)
   })
 })
+
+/**
+ * 次フェーズ（ゲーム機能クローズラウンド、item 75-77）: POST /api/rooms/private/:roomCode/invite
+ * 等のルート層テスト。実際に報告されたバグ（招待ボタンが相手のオンライン状態だけで
+ * 無効化され、オフラインの相手には一生招待できなかった）の修正——ここではプレゼンスを
+ * 一切見ない、サーバー権威の適格性判定（ホスト本人・フレンド関係・未参加・定員未満・
+ * ルーム有効）が正しく機能することを検証する。
+ */
+function fakePrivateRoomStatusNamespace(memberCount: number, closed = false) {
+  return {
+    idFromName: (name: string) => name,
+    get: () => ({
+      fetch: async (input: RequestInfo) => {
+        const url = typeof input === 'string' ? input : (input as Request).url
+        if (url.endsWith('/internal/status')) {
+          return new Response(JSON.stringify({ ok: true, closed, memberCount }), { status: 200 })
+        }
+        return new Response(JSON.stringify({ ok: true }), { status: 200 })
+      },
+    }),
+  }
+}
+
+async function seedHostedRoom(db: ReturnType<typeof createFakeD1Database>, hostPlayerId: string, roomCode: string) {
+  const repo = createD1PrivateRoomRepository(db as never)
+  await repo.claimRoomForHost(hostPlayerId, roomCode, 1000)
+}
+
+describe('worker fetch handler: POST /api/rooms/private/:roomCode/invite (item 75-77)', () => {
+  it('ホスト本人・フレンド・未参加・定員未満なら成功し、D1へ永続化される（相手がOFFLINEでも成功する——実際に報告されたバグの修正）', async () => {
+    const db = createFakeD1Database()
+    await seedHostedRoom(db, 'host1', 'ABCDEF')
+    db._seedFriendship('host1', 'friend1')
+    db._seedPublicProfile('host1', 'ホスト太郎')
+    const env = { CHALLENGE_DB: db as never, PRIVATE_ROOM: fakePrivateRoomStatusNamespace(1) as never }
+    const res = await worker.fetch(
+      new Request('https://example.com/api/rooms/private/ABCDEF/invite', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fromPlayerId: 'host1', toPlayerId: 'friend1' }),
+      }),
+      env,
+    )
+    expect(await res.json()).toEqual({ ok: true })
+    const repo = createD1PrivateRoomRepository(db as never)
+    expect(await repo.listPendingInvitesForPlayer('friend1')).toEqual([{ roomCode: 'ABCDEF', fromPlayerId: 'host1', createdAt: expect.any(Number) }])
+  })
+
+  it('ホストでない人が送ろうとするとnot_host', async () => {
+    const db = createFakeD1Database()
+    await seedHostedRoom(db, 'host1', 'ABCDEF')
+    db._seedFriendship('guest1', 'friend1')
+    const env = { CHALLENGE_DB: db as never, PRIVATE_ROOM: fakePrivateRoomStatusNamespace(1) as never }
+    const res = await worker.fetch(
+      new Request('https://example.com/api/rooms/private/ABCDEF/invite', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fromPlayerId: 'guest1', toPlayerId: 'friend1' }),
+      }),
+      env,
+    )
+    expect(await res.json()).toEqual({ ok: false, reason: 'not_host' })
+  })
+
+  it('フレンドでない相手にはnot_friends', async () => {
+    const db = createFakeD1Database()
+    await seedHostedRoom(db, 'host1', 'ABCDEF')
+    const env = { CHALLENGE_DB: db as never, PRIVATE_ROOM: fakePrivateRoomStatusNamespace(1) as never }
+    const res = await worker.fetch(
+      new Request('https://example.com/api/rooms/private/ABCDEF/invite', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fromPlayerId: 'host1', toPlayerId: 'stranger1' }),
+      }),
+      env,
+    )
+    expect(await res.json()).toEqual({ ok: false, reason: 'not_friends' })
+  })
+
+  it('既にそのルームのメンバーにはalready_member', async () => {
+    const db = createFakeD1Database()
+    await seedHostedRoom(db, 'host1', 'ABCDEF')
+    db._seedFriendship('host1', 'friend1')
+    const repo = createD1PrivateRoomRepository(db as never)
+    await repo.recordMembership('friend1', 'ABCDEF', 1000)
+    const env = { CHALLENGE_DB: db as never, PRIVATE_ROOM: fakePrivateRoomStatusNamespace(2) as never }
+    const res = await worker.fetch(
+      new Request('https://example.com/api/rooms/private/ABCDEF/invite', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fromPlayerId: 'host1', toPlayerId: 'friend1' }),
+      }),
+      env,
+    )
+    expect(await res.json()).toEqual({ ok: false, reason: 'already_member' })
+  })
+
+  it('定員（8人）に達したルームへはfull', async () => {
+    const db = createFakeD1Database()
+    await seedHostedRoom(db, 'host1', 'ABCDEF')
+    db._seedFriendship('host1', 'friend1')
+    const env = { CHALLENGE_DB: db as never, PRIVATE_ROOM: fakePrivateRoomStatusNamespace(8) as never }
+    const res = await worker.fetch(
+      new Request('https://example.com/api/rooms/private/ABCDEF/invite', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fromPlayerId: 'host1', toPlayerId: 'friend1' }),
+      }),
+      env,
+    )
+    expect(await res.json()).toEqual({ ok: false, reason: 'full' })
+  })
+
+  it('終了済みのルームへはroom_closed', async () => {
+    const db = createFakeD1Database()
+    await seedHostedRoom(db, 'host1', 'ABCDEF')
+    db._seedFriendship('host1', 'friend1')
+    const env = { CHALLENGE_DB: db as never, PRIVATE_ROOM: fakePrivateRoomStatusNamespace(1, true) as never }
+    const res = await worker.fetch(
+      new Request('https://example.com/api/rooms/private/ABCDEF/invite', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fromPlayerId: 'host1', toPlayerId: 'friend1' }),
+      }),
+      env,
+    )
+    expect(await res.json()).toEqual({ ok: false, reason: 'room_closed' })
+  })
+
+  it('自分自身へはself_invite', async () => {
+    const db = createFakeD1Database()
+    await seedHostedRoom(db, 'host1', 'ABCDEF')
+    const env = { CHALLENGE_DB: db as never, PRIVATE_ROOM: fakePrivateRoomStatusNamespace(1) as never }
+    const res = await worker.fetch(
+      new Request('https://example.com/api/rooms/private/ABCDEF/invite', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fromPlayerId: 'host1', toPlayerId: 'host1' }),
+      }),
+      env,
+    )
+    expect(await res.json()).toEqual({ ok: false, reason: 'self_invite' })
+  })
+
+  it('同じ招待を二重送信しても1件しか残らない（二重送信防止）', async () => {
+    const db = createFakeD1Database()
+    await seedHostedRoom(db, 'host1', 'ABCDEF')
+    db._seedFriendship('host1', 'friend1')
+    const env = { CHALLENGE_DB: db as never, PRIVATE_ROOM: fakePrivateRoomStatusNamespace(1) as never }
+    const send = () =>
+      worker.fetch(
+        new Request('https://example.com/api/rooms/private/ABCDEF/invite', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ fromPlayerId: 'host1', toPlayerId: 'friend1' }),
+        }),
+        env,
+      )
+    await send()
+    const second = await send()
+    expect(await second.json()).toEqual({ ok: true })
+    const repo = createD1PrivateRoomRepository(db as never)
+    expect(await repo.listPendingInvitesForPlayer('friend1')).toHaveLength(1)
+  })
+
+  it('CHALLENGE_DB/PRIVATE_ROOMのいずれかが無ければnot_configured', async () => {
+    const res = await worker.fetch(
+      new Request('https://example.com/api/rooms/private/ABCDEF/invite', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fromPlayerId: 'host1', toPlayerId: 'friend1' }),
+      }),
+      {} as never,
+    )
+    const body = (await res.json()) as ChallengeApiResult<never>
+    expect(body.ok).toBe(false)
+    if (!body.ok) expect(body.error).toBe('not_configured')
+  })
+})
+
+describe('worker fetch handler: GET /api/rooms/private/:roomCode/invites/outgoing (item 75-77)', () => {
+  it('そのルームから招待済みのplayerId一覧を返す（ロビーの「招待済み」表示用）', async () => {
+    const db = createFakeD1Database()
+    const repo = createD1PrivateRoomRepository(db as never)
+    await repo.createRoomInvite('ABCDEF', 'host1', 'friend1', 1000)
+    const env = { CHALLENGE_DB: db as never }
+    const res = await worker.fetch(new Request('https://example.com/api/rooms/private/ABCDEF/invites/outgoing'), env)
+    expect(await res.json()).toEqual({ ok: true, toPlayerIds: ['friend1'] })
+  })
+})
+
+describe('worker fetch handler: GET /api/rooms/private/invites/incoming (item 75-77)', () => {
+  it('自分宛ての未処理招待（fromProfile込み）を返す——オフライン中に届いていたものも含めて拾える', async () => {
+    const db = createFakeD1Database()
+    db._seedPublicProfile('host1', 'ホスト太郎')
+    const repo = createD1PrivateRoomRepository(db as never)
+    await repo.createRoomInvite('ABCDEF', 'host1', 'friend1', 1000)
+    const env = { CHALLENGE_DB: db as never }
+    const res = await worker.fetch(new Request('https://example.com/api/rooms/private/invites/incoming?playerId=friend1'), env)
+    const body = (await res.json()) as { ok: boolean; value: { roomCode: string; fromProfile: { nickname: string }; createdAt: number }[] }
+    expect(body.ok).toBe(true)
+    expect(body.value).toHaveLength(1)
+    expect(body.value[0].roomCode).toBe('ABCDEF')
+    expect(body.value[0].fromProfile.nickname).toBe('ホスト太郎')
+  })
+
+  it('playerId未指定は400', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const res = await worker.fetch(new Request('https://example.com/api/rooms/private/invites/incoming'), env)
+    expect(res.status).toBe(400)
+  })
+
+  it('招待の無いplayerIdは空配列', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const res = await worker.fetch(new Request('https://example.com/api/rooms/private/invites/incoming?playerId=nobody'), env)
+    expect(await res.json()).toEqual({ ok: true, value: [] })
+  })
+})

@@ -18,6 +18,16 @@ export function createFakeD1Database() {
   // 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 46-47）: private_room_memberships
   // （player_idがPRIMARY KEY、今どのルームに居るか）。
   const privateRoomMemberships = new Map<string, { player_id: string; room_code: string; joined_at: number }>()
+  // 次フェーズ（ゲーム機能クローズラウンド、item 75-77）: private_room_invites
+  // （(room_code, to_player_id)が複合キー）。
+  const privateRoomInvites = new Map<string, { room_code: string; to_player_id: string; from_player_id: string; created_at: number }>()
+  const inviteKey = (roomCode: string, toPlayerId: string) => `${roomCode}::${toPlayerId}`
+  // item 75-77: POST /api/rooms/private/:roomCode/inviteがareFriends/getPublicProfileも
+  // 必要とするため、friendsTestFakeD1.tsの最小限サブセットだけをここにも用意する
+  // （friendshipsはplayer_a_id < player_b_idの正準順で1行だけ保持する）。
+  const friendships = new Set<string>()
+  const publicProfiles = new Map<string, Record<string, unknown>>()
+  const friendshipKey = (a: string, b: string) => (a < b ? `${a}::${b}` : `${b}::${a}`)
 
   function prepare(query: string) {
     let boundValues: unknown[] = []
@@ -134,6 +144,47 @@ export function createFakeD1Database() {
           // ルート層のテストでは履歴の書き込み内容自体までは検証しない（privateRoomRepository.test.tsで既に検証済み）。
           return { success: true, meta: {} }
         }
+        if (query.startsWith('INSERT INTO private_room_invites')) {
+          const [roomCode, toPlayerId, fromPlayerId, createdAt] = boundValues as [string, string, string, number]
+          const key = inviteKey(roomCode, toPlayerId)
+          if (privateRoomInvites.has(key)) throw new Error('UNIQUE constraint failed: private_room_invites')
+          privateRoomInvites.set(key, { room_code: roomCode, to_player_id: toPlayerId, from_player_id: fromPlayerId, created_at: createdAt })
+          return { success: true, meta: {} }
+        }
+        if (query.startsWith('DELETE FROM private_room_invites WHERE room_code = ? AND to_player_id = ?')) {
+          const [roomCode, toPlayerId] = boundValues as [string, string]
+          privateRoomInvites.delete(inviteKey(roomCode, toPlayerId))
+          return { success: true, meta: {} }
+        }
+        if (query.startsWith('DELETE FROM private_room_invites WHERE room_code = ?')) {
+          const [roomCode] = boundValues as [string]
+          for (const [key, row] of privateRoomInvites) if (row.room_code === roomCode) privateRoomInvites.delete(key)
+          return { success: true, meta: {} }
+        }
+        // item 75-77: テストのセットアップ用（本番のfriendsRepository.tsは専用のON CONFLICT文を使うが、
+        // このルート層テストでは「既に友達である」という前提条件を作れればよいので最小限でよい）。
+        if (query.startsWith('INSERT INTO friendships')) {
+          const [a, b] = boundValues as [string, string]
+          friendships.add(friendshipKey(a, b))
+          return { success: true, meta: {} }
+        }
+        if (query.startsWith('INSERT INTO player_public_profiles')) {
+          const [playerId, nickname, avatarJson] = boundValues as [string, string, string]
+          publicProfiles.set(playerId, {
+            nickname,
+            avatar_json: avatarJson,
+            equipped_title_id: null,
+            has_dopa_pass: 0,
+            best_dopa_percent: 0,
+            endless_beginner_best: 0,
+            endless_intermediate_best: 0,
+            endless_advanced_best: 0,
+            world_battle_wins: 0,
+            achievement_count: 0,
+            updated_at: Date.now(),
+          })
+          return { success: true, meta: {} }
+        }
         throw new Error(`fake D1: unsupported run() query: ${query}`)
       },
       async first<T>() {
@@ -146,6 +197,14 @@ export function createFakeD1Database() {
           const [playerId] = boundValues as [string]
           const row = privateRoomMemberships.get(playerId)
           return (row ? { room_code: row.room_code } : null) as T | null
+        }
+        if (query.startsWith('SELECT 1 FROM friendships WHERE player_a_id = ? AND player_b_id = ?')) {
+          const [a, b] = boundValues as [string, string]
+          return (friendships.has(friendshipKey(a, b)) ? ({ '1': 1 } as unknown as T) : null)
+        }
+        if (query.startsWith('SELECT * FROM player_public_profiles WHERE player_id = ?')) {
+          const [playerId] = boundValues as [string]
+          return (publicProfiles.get(playerId) as T | undefined) ?? null
         }
         if (query.startsWith('SELECT * FROM challenges WHERE id = ?')) {
           const id = boundValues[0] as string
@@ -164,6 +223,19 @@ export function createFakeD1Database() {
         throw new Error(`fake D1: unsupported first() query: ${query}`)
       },
       async all<T>() {
+        if (query.startsWith('SELECT to_player_id FROM private_room_invites WHERE room_code = ?')) {
+          const [roomCode] = boundValues as [string]
+          const results = [...privateRoomInvites.values()].filter((r) => r.room_code === roomCode).map((r) => ({ to_player_id: r.to_player_id }))
+          return { results: results as T[], success: true, meta: {} }
+        }
+        if (query.startsWith('SELECT room_code, from_player_id, created_at FROM private_room_invites WHERE to_player_id = ?')) {
+          const [toPlayerId] = boundValues as [string]
+          const results = [...privateRoomInvites.values()]
+            .filter((r) => r.to_player_id === toPlayerId)
+            .sort((a, b) => b.created_at - a.created_at)
+            .map((r) => ({ room_code: r.room_code, from_player_id: r.from_player_id, created_at: r.created_at }))
+          return { results: results as T[], success: true, meta: {} }
+        }
         if (query.startsWith('SELECT * FROM challenges WHERE id IN')) {
           const ids = boundValues as string[]
           const results = ids.map((id) => rows.get(id)).filter((row): row is Record<string, unknown> => row !== undefined)
@@ -223,5 +295,35 @@ export function createFakeD1Database() {
     return out
   }
 
-  return { prepare, batch, _rows: rows, _attemptRows: attemptRows, _privateRooms: privateRooms, _privateRoomMemberships: privateRoomMemberships }
+  return {
+    prepare,
+    batch,
+    _rows: rows,
+    _attemptRows: attemptRows,
+    _privateRooms: privateRooms,
+    _privateRoomMemberships: privateRoomMemberships,
+    _privateRoomInvites: privateRoomInvites,
+    _friendships: friendships,
+    _publicProfiles: publicProfiles,
+    /** item 75-77: テストのセットアップ専用——SQL経由ではなく直接friendshipsへ入れる近道。 */
+    _seedFriendship(a: string, b: string) {
+      friendships.add(friendshipKey(a, b))
+    },
+    /** item 75-77: テストのセットアップ専用——getPublicProfileが何かを返すようにする近道。 */
+    _seedPublicProfile(playerId: string, nickname: string) {
+      publicProfiles.set(playerId, {
+        nickname,
+        avatar_json: JSON.stringify({ kind: 'preset', iconId: 'flame' }),
+        equipped_title_id: null,
+        has_dopa_pass: 0,
+        best_dopa_percent: 0,
+        endless_beginner_best: 0,
+        endless_intermediate_best: 0,
+        endless_advanced_best: 0,
+        world_battle_wins: 0,
+        achievement_count: 0,
+        updated_at: Date.now(),
+      })
+    },
+  }
 }

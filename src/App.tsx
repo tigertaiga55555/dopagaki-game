@@ -42,7 +42,7 @@ import { WorldMatchingScreen } from './screens/battle/WorldMatchingScreen'
 import { TitleScreen } from './screens/TitleScreen'
 import { addCreatedChallengeId } from './challenge/createdChallengesStorage'
 import { extractChallengeIdFromLocation } from './challenge/url'
-import { createPrivateRoom } from './battle/privateRoomClient'
+import { createPrivateRoom, listIncomingRoomInvites, sendRoomInvite } from './battle/privateRoomClient'
 import { extractPrivateRoomCodeFromLocation } from './battle/privateRoomUrl'
 import { buildEndlessSharePayload, buildRushSharePayload, createShareNonce, encodeResultSharePayload } from './share/resultSharePayload'
 import { extractResultShareIdFromLocation } from './share/resultShareUrl'
@@ -56,7 +56,7 @@ import { trackChallengePlayed, trackGameStart, trackReplayStart, type PassPaywal
 import { unlockAudio } from './utils/audioContext'
 import { runMigrationsOnce } from './utils/migrations'
 import { getOrCreatePlayerId, getProfile } from './utils/profileStorage'
-import { buildPublicProfileSnapshot, syncPublicProfile } from './utils/publicProfileSync'
+import { syncPublicProfile } from './utils/publicProfileSync'
 import { sfx } from './utils/sound'
 import { checkAndConsumeInterstitial, recordEligiblePlayCompleted } from './utils/adPolicyStorage'
 import { qaLocalEntitlementRepository } from './payment/entitlementRepository'
@@ -245,8 +245,21 @@ export default function App() {
    * ポーリングループは作らず、起動時＋Homeへ戻るたびの最小限の再取得だけにする。
    */
   const [pendingFriendRequestCount, setPendingFriendRequestCount] = useState(0)
+  /**
+   * 次フェーズ（ゲーム機能クローズラウンド、item 75-77）: オフライン中に届いていたルーム
+   * 招待も含めた、自分宛ての未処理ルーム招待の総数（バッジ用）。ライブpush
+   * （room_invite_received）だけに頼らず、起動時＋Homeへ戻るたびにD1の正本を問い合わせる。
+   */
+  const [pendingRoomInviteCount, setPendingRoomInviteCount] = useState(0)
+  /** 同じルーム招待バナーを同一セッション中に何度も出し直さない（サーバー側では消さない、あとで再度参照されうる）。 */
+  const dismissedRoomInviteRoomCodesRef = useRef<Set<string>>(new Set())
   const refreshPendingFriendRequests = useCallback(() => {
     listIncomingFriendRequests(getOrCreatePlayerId()).then((reqs) => setPendingFriendRequestCount(reqs.length))
+    listIncomingRoomInvites(getOrCreatePlayerId()).then((invites) => {
+      setPendingRoomInviteCount(invites.length)
+      const next = invites.find((inv) => !dismissedRoomInviteRoomCodesRef.current.has(inv.roomCode))
+      if (next) setIncomingInvite((prev) => prev ?? { fromProfile: next.fromProfile, roomCode: next.roomCode })
+    })
   }, [])
   useEffect(() => {
     refreshPendingFriendRequests()
@@ -254,7 +267,7 @@ export default function App() {
   useEffect(() => {
     if (screen === 'title') refreshPendingFriendRequests()
   }, [screen, refreshPendingFriendRequests])
-  const friendsUnreadCount = pendingFriendRequestCount + (incomingInvite ? 1 : 0)
+  const friendsUnreadCount = pendingFriendRequestCount + pendingRoomInviteCount
 
   /**
    * Ver.6 Phase 5.0追加: GA4のgame_start（常に）とreplay_start（結果画面からのリトライ時のみ）を
@@ -532,35 +545,30 @@ export default function App() {
   )
 
   /**
-   * 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 31）: フレンド一覧の「ルームに招待」
-   * （既存のアクティブルームがある場合）。ナビゲーションは一切変えない——招待する側は
-   * FriendsHomeScreenに留まる。
+   * 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 31 → ゲーム機能クローズラウンド、item 75-77で
+   * 実バグ修正）: フレンド一覧の「ルームに招待」（既存のアクティブルームがある場合）。
+   * ナビゲーションは一切変えない——招待する側はFriendsHomeScreenに留まる。
+   *
+   * item 75-77: 以前はpresenceのライブpush（send_room_invite）だけに頼っており、相手が
+   * オフラインなら招待そのものが消えていた。POST /api/rooms/private/:roomCode/invite
+   * （サーバー側で必ずD1へ永続化し、オンラインならベストエフォートで即時pushも行う）へ
+   * 置き換えた。戻り値のreasonをそのまま呼び出し元（ロビー/FriendsHomeScreenのモーダル）
+   * へ返し、トースト文言・per-friend状態の判断に使わせる。
    */
-  const inviteToExistingRoom = useCallback((toPlayerId: string, roomCode: string) => {
-    presenceSocketRef.current?.send({
-      v: 1,
-      type: 'send_room_invite',
-      toPlayerId,
-      fromProfile: buildPublicProfileSnapshot(),
-      roomCode,
-    })
+  const inviteToExistingRoom = useCallback(async (toPlayerId: string, roomCode: string) => {
+    return sendRoomInvite(roomCode, getOrCreatePlayerId(), toPlayerId)
   }, [])
 
-  /** 次フェーズ（item 31）: 「ルームを作成して招待」（まだアクティブルームが無い場合）。作成した自分もそのロビーへ入る。 */
+  /** 次フェーズ（item 31 → item 75-77）: 「ルームを作成して招待」（まだアクティブルームが無い場合）。作成した自分もそのロビーへ入る。 */
   const createRoomAndInvite = useCallback(
     async (toPlayerId: string) => {
       const playerId = getOrCreatePlayerId()
       const myProfile = toBattleProfile(getProfile())
       const res = await createPrivateRoom(playerId, myProfile)
-      if (!res) return
-      presenceSocketRef.current?.send({
-        v: 1,
-        type: 'send_room_invite',
-        toPlayerId,
-        fromProfile: buildPublicProfileSnapshot(),
-        roomCode: res.roomCode,
-      })
+      if (!res) return { ok: false as const }
+      const result = await sendRoomInvite(res.roomCode, playerId, toPlayerId)
       enterPrivateRoomLobby(res.roomCode)
+      return result
     },
     [enterPrivateRoomLobby],
   )
@@ -624,11 +632,11 @@ export default function App() {
     [goHome],
   )
 
-  /** 次フェーズ（item 50）: ロビーの中からの「フレンドを招待」。既にこの部屋に居るので、ナビゲーションは一切変えない。 */
+  /** 次フェーズ（item 50 → item 75-77）: ロビーの中からの「フレンドを招待」。既にこの部屋に居るので、ナビゲーションは一切変えない。 */
   const inviteFriendFromLobby = useCallback(
-    (toPlayerId: string) => {
-      if (!privateRoomCode) return
-      inviteToExistingRoom(toPlayerId, privateRoomCode)
+    async (toPlayerId: string) => {
+      if (!privateRoomCode) return { ok: false as const }
+      return inviteToExistingRoom(toPlayerId, privateRoomCode)
     },
     [privateRoomCode, inviteToExistingRoom],
   )
@@ -815,8 +823,6 @@ export default function App() {
               onRoomClosed={handlePrivateRoomClosed}
               onEnterMatch={handlePrivateRoomEnterMatch}
               isMatchAlreadyHandled={isPrivateMatchAlreadyHandled}
-              presenceSnapshot={presenceSnapshot}
-              onSubscribePresence={subscribeFriendPresence}
               onInviteFriend={inviteFriendFromLobby}
               onOpenMemberProfile={openFriendProfile}
             />
@@ -872,7 +878,17 @@ export default function App() {
         />
       )}
       {incomingInvite && (
-        <RoomInviteBanner fromProfile={incomingInvite.fromProfile} onAccept={acceptRoomInvite} onDismiss={() => setIncomingInvite(null)} />
+        <RoomInviteBanner
+          fromProfile={incomingInvite.fromProfile}
+          onAccept={acceptRoomInvite}
+          onDismiss={() => {
+            // item 75-77: サーバー側の招待そのものは消さない（後で改めて参加できる／
+            // 次回起動時にFRIENDSの未読バッジへはまだ反映される）。このセッション中、
+            // 同じルームの招待バナーだけを再び出さないようにする。
+            dismissedRoomInviteRoomCodesRef.current.add(incomingInvite.roomCode)
+            setIncomingInvite(null)
+          }}
+        />
       )}
     </div>
   )

@@ -3,6 +3,7 @@ import { compareChallengePerformance, compareEndlessStreak } from '../challenge/
 import { isValidChallengeId, validateCreateChallengeAttemptInput, validateCreateChallengeInput } from './validation'
 import { createD1BattleRepository } from './battleRepository'
 import { generateBattleProblemSet } from '../battle/battleProblemSet'
+import { PRIVATE_ROOM_MAX_MEMBERS } from '../battle/privateRoomEngine'
 import { generateRoomCode, isValidRoomCode } from '../battle/roomCode'
 import { Matchmaker } from './durableObjects/matchmaker'
 import { BattleRoom } from './durableObjects/battleRoom'
@@ -458,6 +459,111 @@ async function handlePrivateRoomStatus(roomCode: string, env: Env): Promise<Resp
   return json(statusBody, 200)
 }
 
+interface SendRoomInviteBody {
+  fromPlayerId: string
+  toPlayerId: string
+}
+
+export type SendRoomInviteReason = 'not_host' | 'not_friends' | 'already_member' | 'room_closed' | 'full' | 'self_invite'
+
+/**
+ * 次フェーズ（ゲーム機能クローズラウンド、item 75-77）: POST /api/rooms/private/:roomCode/invite。
+ * 実際に報告されたバグ（ロビーの「フレンドを招待」で招待ボタンが常に無効化され、誰も
+ * 招待できない）の根本原因は、クライアント側のcanInvite判定が相手のオンライン状態
+ * （presence !== 'offline'）だけで決まっていたこと——オフライン中の相手は構造的に
+ * 一生招待できなかった。この関数が、プレゼンス状態を一切見ない正しい適格性判定
+ * （ホスト本人・フレンド関係・未参加・定員未満・ルーム有効）をサーバー権威で行い、
+ * 満たせば必ずD1へ永続化する（オンライン/オフラインに関わらず常に書き込む——
+ * 「今すぐ気づいてもらう」ためのライブpushは、この永続化が成功した場合の追加の
+ * 最適化に過ぎず、ライブpushの成否が招待そのものの成否を左右しない）。
+ */
+async function handleSendRoomInvite(request: Request, roomCode: string, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB || !env.PRIVATE_ROOM) {
+    return errorResponse({ ok: false, error: 'not_configured', message: 'Private room backend is not configured on this environment yet' })
+  }
+  const body = (await request.json().catch(() => null)) as Partial<SendRoomInviteBody> | null
+  if (!body || typeof body.fromPlayerId !== 'string' || typeof body.toPlayerId !== 'string') {
+    return errorResponse({ ok: false, error: 'invalid_input', message: 'fromPlayerId and toPlayerId are required' })
+  }
+  if (body.fromPlayerId === body.toPlayerId) {
+    return json({ ok: false, reason: 'self_invite' satisfies SendRoomInviteReason }, 200)
+  }
+
+  const roomRepo = createD1PrivateRoomRepository(env.CHALLENGE_DB)
+  const friendsRepo = createD1FriendsRepository(env.CHALLENGE_DB)
+
+  const hostRoomCode = await roomRepo.getActiveRoomForHost(body.fromPlayerId)
+  if (hostRoomCode !== roomCode) {
+    return json({ ok: false, reason: 'not_host' satisfies SendRoomInviteReason }, 200)
+  }
+
+  const friends = await friendsRepo.areFriends(body.fromPlayerId, body.toPlayerId)
+  if (!friends) {
+    return json({ ok: false, reason: 'not_friends' satisfies SendRoomInviteReason }, 200)
+  }
+
+  const targetActive = await roomRepo.getActiveRoomForPlayer(body.toPlayerId)
+  if (targetActive?.roomCode === roomCode) {
+    return json({ ok: false, reason: 'already_member' satisfies SendRoomInviteReason }, 200)
+  }
+
+  const stub = env.PRIVATE_ROOM.get(env.PRIVATE_ROOM.idFromName(roomCode))
+  const statusRes = await stub.fetch('https://private-room.internal/internal/status')
+  const status = (await statusRes.json()) as PrivateRoomStatusResponse
+  if (!status.ok || status.closed) {
+    return json({ ok: false, reason: 'room_closed' satisfies SendRoomInviteReason }, 200)
+  }
+  if (status.memberCount >= PRIVATE_ROOM_MAX_MEMBERS) {
+    return json({ ok: false, reason: 'full' satisfies SendRoomInviteReason }, 200)
+  }
+
+  await roomRepo.createRoomInvite(roomCode, body.fromPlayerId, body.toPlayerId, Date.now())
+
+  // ベストエフォートのライブpush（失敗しても招待自体の成否には影響しない——上でD1へ永続化済み）。
+  if (env.PRESENCE_HUB) {
+    const fromProfile = await friendsRepo.getPublicProfile(body.fromPlayerId)
+    if (fromProfile) {
+      const presenceStub = env.PRESENCE_HUB.get(env.PRESENCE_HUB.idFromName('global'))
+      await presenceStub
+        .fetch('https://presence-hub.internal/internal/notify-room-invite', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ toPlayerId: body.toPlayerId, fromProfile, roomCode }),
+        })
+        .catch(() => {})
+    }
+  }
+
+  return json({ ok: true }, 200)
+}
+
+/** GET /api/rooms/private/:roomCode/invites/outgoing。ロビーの招待モーダルが「招待済み」状態を出すために使う。 */
+async function handleListOutgoingRoomInvites(roomCode: string, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB) return json({ ok: true, toPlayerIds: [] }, 200)
+  const repo = createD1PrivateRoomRepository(env.CHALLENGE_DB)
+  const toPlayerIds = await repo.listOutgoingInvitesForRoom(roomCode)
+  return json({ ok: true, toPlayerIds }, 200)
+}
+
+/**
+ * GET /api/rooms/private/invites/incoming?playerId=X。FRIENDS画面を開いた時、オフライン中に
+ * 届いていた招待も含めて必ず拾えるようにする（item 75-77の核心）。
+ */
+async function handleListIncomingRoomInvites(request: Request, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB) return json({ ok: true, value: [] }, 200)
+  const url = new URL(request.url)
+  const playerId = url.searchParams.get('playerId')
+  if (!playerId) return errorResponse({ ok: false, error: 'invalid_input', message: 'playerId is required' })
+  const roomRepo = createD1PrivateRoomRepository(env.CHALLENGE_DB)
+  const friendsRepo = createD1FriendsRepository(env.CHALLENGE_DB)
+  const pending = await roomRepo.listPendingInvitesForPlayer(playerId)
+  const value = await Promise.all(
+    pending.map(async (p) => ({ roomCode: p.roomCode, fromProfile: await friendsRepo.getPublicProfile(p.fromPlayerId), createdAt: p.createdAt })),
+  )
+  // プロフィールを一度もアップロードしていない相手からの招待は、安全に除外する（架空のプロフィールを作らない）。
+  return json({ ok: true, value: value.filter((v): v is { roomCode: string; fromProfile: PublicProfileSnapshot; createdAt: number } => v.fromProfile !== null) }, 200)
+}
+
 /**
  * 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 27）: FRIENDS機能のルート群。
  * friend_codes/friend_requests/friendships/player_public_profilesはいずれも既存の
@@ -651,6 +757,19 @@ export default {
         return errorResponse({ ok: false, error: 'not_configured', message: 'Private room backend is not configured on this environment yet' })
       }
       return handlePrivateRoomStatus(decodeURIComponent(privateRoomStatusMatch[1]), env)
+    }
+
+    // 次フェーズ（ゲーム機能クローズラウンド、item 75-77）: ルーム招待（永続化＋ベストエフォートのライブpush）。
+    if (url.pathname === '/api/rooms/private/invites/incoming' && request.method === 'GET') {
+      return handleListIncomingRoomInvites(request, env)
+    }
+    const outgoingInvitesMatch = /^\/api\/rooms\/private\/([^/]+)\/invites\/outgoing$/.exec(url.pathname)
+    if (outgoingInvitesMatch && request.method === 'GET') {
+      return handleListOutgoingRoomInvites(decodeURIComponent(outgoingInvitesMatch[1]), env)
+    }
+    const sendInviteMatch = /^\/api\/rooms\/private\/([^/]+)\/invite$/.exec(url.pathname)
+    if (sendInviteMatch && request.method === 'POST') {
+      return handleSendRoomInvite(request, decodeURIComponent(sendInviteMatch[1]), env)
     }
 
     const privateRoomWsMatch = /^\/api\/rooms\/private\/([^/]+)\/ws$/.exec(url.pathname)

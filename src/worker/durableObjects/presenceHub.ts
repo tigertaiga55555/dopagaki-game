@@ -55,11 +55,33 @@ export class PresenceHub implements DurableObject {
     }
   }
 
+  /**
+   * 次フェーズ（ゲーム機能クローズラウンド、item 75-77）: 招待相手が今まさに接続中なら
+   * その場でroom_invite_receivedを届ける（届かなければ何もしない——呼び出し元
+   * （worker/index.tsのPOST /api/rooms/private/:roomCode/invite）が、届いたかどうかに
+   * 関わらず必ずD1へ永続化しているため、ここでの配信はあくまで「今すぐ気づいてもらう」
+   * ための最適化に過ぎない。真の正本はD1のprivate_room_invitesテーブル側）。
+   */
+  private deliverRoomInviteIfOnline(toPlayerId: string, fromProfile: PublicProfileSnapshot, roomCode: string): boolean {
+    const target = this.ctx.getWebSockets().find((other) => this.attachment(other)?.playerId === toPlayerId)
+    if (!target) return false
+    this.send(target, { v: 1, type: 'room_invite_received', fromProfile, roomCode })
+    return true
+  }
+
   async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url)
+    if (request.method === 'POST' && url.pathname === '/internal/notify-room-invite') {
+      const body = (await request.json().catch(() => null)) as { toPlayerId?: string; fromProfile?: PublicProfileSnapshot; roomCode?: string } | null
+      if (!body || typeof body.toPlayerId !== 'string' || !body.fromProfile || typeof body.roomCode !== 'string') {
+        return new Response('invalid body', { status: 400 })
+      }
+      const delivered = this.deliverRoomInviteIfOnline(body.toPlayerId, body.fromProfile, body.roomCode)
+      return new Response(JSON.stringify({ ok: true, delivered }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('expected websocket', { status: 400 })
     }
-    const url = new URL(request.url)
     const playerId = url.searchParams.get('playerId')
     if (!playerId) return new Response('playerId is required', { status: 400 })
 
@@ -96,20 +118,6 @@ export class PresenceHub implements DurableObject {
       const snapshot: PresenceSnapshot = {}
       for (const id of parsed.playerIds) snapshot[id] = this.presenceOf(id)
       this.send(ws, { v: 1, type: 'presence_snapshot', snapshot })
-      return
-    }
-
-    if (parsed.type === 'send_room_invite') {
-      const target = this.ctx.getWebSockets().find((other) => this.attachment(other)?.playerId === parsed.toPlayerId)
-      if (target) {
-        this.send(target, {
-          v: 1,
-          type: 'room_invite_received',
-          fromProfile: parsed.fromProfile as PublicProfileSnapshot,
-          roomCode: parsed.roomCode,
-        })
-      }
-      this.send(ws, { v: 1, type: 'room_invite_result', delivered: target !== undefined })
       return
     }
   }

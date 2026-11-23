@@ -14,6 +14,14 @@ import type { PublicProfileSnapshot } from '../friends/types'
  * 要らない）。③このHubはPRIVATE ROOM招待の配信チャネルにも相乗りする（招待したい
  * 相手が「オンライン」である＝まさにこのHubへの接続を持っている、という定義に
  * 一致するため、新しい配信経路を別途作らずに済む）。
+ *
+ * 次フェーズ（ゲーム機能クローズラウンド、item 75-77）: 招待の「送信」自体はもう
+ * このWebSocketクライアントメッセージ（send_room_invite）経由で行わない——
+ * オフライン中の相手に送った招待がライブpushだけに依存すると消えてしまう実バグが
+ * あったため、POST /api/rooms/private/:roomCode/invite（D1へ必ず永続化した上で、
+ * PresenceHubの内部HTTPエンドポイント経由で「今オンラインなら」追加で即時pushする）
+ * へ置き換えた。room_invite_received（サーバー→クライアント、ライブpush自体）は
+ * そのまま残す——「今すぐ気づいてもらう」ための配信チャネルとしては引き続き有効。
  */
 export const PRESENCE_PROTOCOL_VERSION = 1
 
@@ -27,19 +35,13 @@ export type PresenceClientMessage =
   | (BaseMessage & { type: 'set_state'; state: PresenceState })
   /** フレンド一覧画面が、表示中のフレンドIDぶんだけ購読する。購読は毎回全件を置き換える（累積しない）。 */
   | (BaseMessage & { type: 'subscribe'; playerIds: string[] })
-  | (BaseMessage & {
-      type: 'send_room_invite'
-      toPlayerId: string
-      fromProfile: PublicProfileSnapshot
-      roomCode: string
-    })
 
 export type PresenceSnapshot = Record<string, 'online' | 'playing' | 'offline'>
 
 export type PresenceServerMessage =
   | (BaseMessage & { type: 'presence_snapshot'; snapshot: PresenceSnapshot })
+  /** item 75-77: ライブpush経由の即時通知（永続化の正本はD1のprivate_room_invites）。 */
   | (BaseMessage & { type: 'room_invite_received'; fromProfile: PublicProfileSnapshot; roomCode: string })
-  | (BaseMessage & { type: 'room_invite_result'; delivered: boolean })
 
 export function isPresenceClientMessage(raw: unknown): raw is PresenceClientMessage {
   if (typeof raw !== 'object' || raw === null) return false

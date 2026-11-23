@@ -153,6 +153,8 @@ export class PrivateRoom implements DurableObject {
       )
       await repo.clearMembershipsForRoom(state.roomCode)
       await repo.releaseRoomForHost(state.hostPlayerId)
+      // item 75-77: ルームが本当に消えた以上、このルーム宛ての未処理招待も意味を失う。
+      await repo.clearInvitesForRoom(state.roomCode)
     }
     await this.ctx.storage.deleteAll()
     await this.ctx.storage.deleteAlarm()
@@ -233,7 +235,10 @@ export class PrivateRoom implements DurableObject {
     if (!result.ok) return new Response(result.reason, { status: result.reason === 'full' ? 409 : 410 })
     await this.saveStateAndScheduleExpiry(result.state)
     if (this.env.CHALLENGE_DB) {
-      await createD1PrivateRoomRepository(this.env.CHALLENGE_DB).recordMembership(playerId, state.roomCode, Date.now())
+      const repo = createD1PrivateRoomRepository(this.env.CHALLENGE_DB)
+      await repo.recordMembership(playerId, state.roomCode, Date.now())
+      // item 75-77: 実際に参加した以上、この人宛てのこのルームの招待（あれば）はもう役目を終えている。
+      await repo.deleteRoomInvite(state.roomCode, playerId)
     }
 
     const pair = new WebSocketPair()
