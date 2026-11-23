@@ -264,6 +264,16 @@ export interface UseRushGameOptions {
    * 渡さないため挙動は変わらない）。Battle機能がこれをサーバーへのanswerイベント送信に使う。
    */
   onQuestionResolved?: (info: { correct: boolean; reactionMs: number; scoreDelta: number; bonusGainDelta: number }) => void
+  /**
+   * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 53: Heart消費タイミング修正）:
+   * START→3・2・1カウントダウンが終わり、実際にSTART（＝最初の問題）が表示される
+   * まさにその瞬間（下のtick()内、remaining<=0の分岐、既存のsfx.gameStart()/
+   * startBgm()/showGoFlash:trueと全く同じ1回限りの遷移点）に1回だけ呼ばれる。
+   * 呼び出し元（PlayScreen.tsx）がHeart消費をここへ移すためだけに新設した——
+   * 以前はPlayScreenのマウント直後（カウントダウンが始まる前）に消費していたため、
+   * 3・2・1の途中でやめても返却されない不具合があった。
+   */
+  onCountdownComplete?: () => void
 }
 
 export function useRushGame(
@@ -273,6 +283,8 @@ export function useRushGame(
 ) {
   const onQuestionResolvedRef = useRef(options?.onQuestionResolved)
   onQuestionResolvedRef.current = options?.onQuestionResolved
+  const onCountdownCompleteRef = useRef(options?.onCountdownComplete)
+  onCountdownCompleteRef.current = options?.onCountdownComplete
   const replayQuestionsRef = useRef(options?.replayQuestions)
   const replayIndexRef = useRef(0)
   const recordedRef = useRef<ChallengeProblemSetItem[]>([])
@@ -760,6 +772,10 @@ export function useRushGame(
             bgmStartedRef.current = true
             sfx.gameStart()
             startBgm()
+            // item 53: STARTが実際に表示される、まさにこの1回限りの遷移点でHeartを消費する
+            // （bgmStartedRefの既存の一回限りガードへそのまま相乗りする——このifブロック自体が
+            // startTimeRefの遷移により二度と再実行されないため、二重発火の余地はない）。
+            onCountdownCompleteRef.current?.()
           }
           const spec = buildNextQuestionSpec()
           setSnapshot((s) => ({ ...s, currentSpec: spec, showGoFlash: true }))

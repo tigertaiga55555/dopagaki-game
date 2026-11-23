@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { getOverdriveFrameClass, getOverdriveTier, LimitErrorOverlay, OverdriveAmbience, OverdriveRevealOverlay } from '../components/OverdriveFx'
 import { QuitButton } from '../components/QuitButton'
@@ -60,33 +60,39 @@ const PARTICLE_POSITIONS = Array.from({ length: 8 }).map((_, i) => ({ x: (i * 12
 
 export function PlayScreen({ onFinish, onQuit, replayQuestions, onQuestionResolved, onFinalTrialProgress, battleHud, official = true }: Props) {
   const [finalEntryStats, setFinalEntryStats] = useState<PlayStats | null>(null)
-  const { snapshot, handleQuestionResult, getRecordedProblemSet, replayIndex } = useRushGame(
-    (payload) => onFinish(computeFinalResult(payload, getRecordedProblemSet(), official)),
-    (stats) => setFinalEntryStats(stats),
-    { replayQuestions, onQuestionResolved },
-  )
-  const [muted, setMutedState] = useState(isMuted())
-  const shakeWrapperRef = useRef<HTMLDivElement>(null)
 
   /**
-   * 次フェーズ（DOPA HEART本実装、item 9）: このマウント自体が「START→3・2・1→GO」の
-   * カウントダウンが実際に進み始める瞬間（useRushGame.tsのpreStartRefと同じ基準点、
-   * engine/preCountdown.tsの設計メモ参照）。official=trueの場合（本番のHome「START」
-   * 経由のみ）だけ消費する——Challenge（official=false、replayQuestions付き）・
-   * Battle（official=false）はここを経由しても一切消費しない（item 7/13）。
-   * 120%→FinalTrialScreen・200%→Challenge500Screenへの内部引き継ぎはこのPlayScreen自身を
-   * 再マウントしないため、1プレイにつき必ず1回だけ消費される（二重消費なし）。
+   * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 53: Heart消費タイミング修正）:
+   * 以前はこのPlayScreenのマウント直後（＝3・2・1のカウントダウンが始まる前）に
+   * 消費していたため、カウントダウンの途中でやめても返却されない不具合があった。
+   * 正しい基準点は「STARTが実際に表示される瞬間」——useRushGame.ts側のtick()内、
+   * 3・2・1が終わって最初の問題が出題される1回限りの遷移点（onCountdownComplete）
+   * へ移した。official=trueの場合（本番のHome「START」経由のみ）だけ消費する——
+   * Challenge（official=false、replayQuestions付き）・Battle（official=false）は
+   * 一切消費しない（item 7/13、既存方針を維持）。120%→FinalTrialScreen・
+   * 200%→Challenge500Screenへの内部引き継ぎはこのPlayScreen自身を再マウントせず、
+   * useRushGameのtick()内の該当分岐も二度と再実行されないため、1プレイにつき必ず
+   * 1回だけ消費される（二重消費なし）。heartConsumedRefは、二重レンダリング等で
+   * onCountdownCompleteが万一2回呼ばれても消費が2回走らないようにする、べき等性の
+   * ための追加の安全網（ユーザー指示）。
    */
   const heartConsumedRef = useRef(false)
-  useEffect(() => {
+  const handleCountdownComplete = useCallback(() => {
     if (!official || heartConsumedRef.current) return
     heartConsumedRef.current = true
     // 次フェーズ（DOPA PASS基盤ラウンド、item 26）: DOPA PASS所有者はHeartを消費しない。
     // 無料ユーザーのHeart消費ロジック自体（この呼び出し自体）は一切変更しない——
     // bypass引数はheartRepository.ts側が前ラウンドから既に持っていた境界。
     localHeartRepository.consumeHeart(Date.now(), qaLocalEntitlementRepository.hasEntitlement('UNLIMITED_HEART'))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [official])
+
+  const { snapshot, handleQuestionResult, getRecordedProblemSet, replayIndex } = useRushGame(
+    (payload) => onFinish(computeFinalResult(payload, getRecordedProblemSet(), official)),
+    (stats) => setFinalEntryStats(stats),
+    { replayQuestions, onQuestionResolved, onCountdownComplete: handleCountdownComplete },
+  )
+  const [muted, setMutedState] = useState(isMuted())
+  const shakeWrapperRef = useRef<HTMLDivElement>(null)
 
   const visual = getVisualLevelDef(snapshot.visualLevel)
   const CurrentQuestion = snapshot.currentSpec ? QUESTION_MODULES[snapshot.currentSpec.type].Component : null

@@ -127,30 +127,32 @@ export function EndlessPlayScreen({ difficulty, onFinish, onQuit, qaMode = false
   const timerBarRef = useRef<HTMLDivElement>(null)
   const theme = ENDLESS_THEME[difficulty]
 
+  /**
+   * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 53: Heart消費タイミング修正）:
+   * 以前はphaseが最初に'countdown'になった瞬間（＝3・2・1が始まる前、画面マウント直後／
+   * 上級はルール説明を閉じた直後）に消費していたため、3・2・1の途中でやめても返却されない
+   * 不具合があった。正しい基準点は「STARTが実際に表示される瞬間」——usePreCountdownの
+   * onDone（3・2・1が終わってstart()が呼ばれる、まさにその1回限りの遷移点）へ移した。
+   * qaMode（ENDLESS Challenge挑戦時のreplayQuestions付き呼び出し、またはPreview専用QA
+   * 起動）では一切消費しない（item 7/13、既存方針を維持）。heartConsumedRefは、
+   * onDoneが万一2回呼ばれても消費が2回走らないようにする、べき等性のための安全網
+   * （ユーザー指示）。
+   */
+  const heartConsumedRef = useRef(false)
   const countdownValue = usePreCountdown({
     enabled: phase === 'countdown',
     onDone: () => {
       if (startedRef.current) return
       startedRef.current = true
+      if (!qaMode && !heartConsumedRef.current) {
+        heartConsumedRef.current = true
+        // 次フェーズ（DOPA PASS基盤ラウンド、item 26）: DOPA PASS所有者はHeartを消費しない。
+        localHeartRepository.consumeHeart(Date.now(), qaLocalEntitlementRepository.hasEntitlement('UNLIMITED_HEART'))
+      }
       start()
       setPhase('playing')
     },
   })
-
-  /**
-   * 次フェーズ（DOPA HEART本実装、item 9）: phaseが最初に'countdown'になった瞬間
-   * （初級/中級は画面マウント直後、上級はルール説明を閉じた直後）がHeart消費トリガー地点
-   * （engine/preCountdown.tsの基準点と同じ）。qaMode（ENDLESS Challenge挑戦時の
-   * replayQuestions付き呼び出し、またはPreview専用QA起動）では一切消費しない
-   * （item 7/13——既存のqaMode遮断機構を official同様そのまま再利用する）。
-   */
-  const heartConsumedRef = useRef(false)
-  useEffect(() => {
-    if (phase !== 'countdown' || qaMode || heartConsumedRef.current) return
-    heartConsumedRef.current = true
-    // 次フェーズ（DOPA PASS基盤ラウンド、item 26）: DOPA PASS所有者はHeartを消費しない。
-    localHeartRepository.consumeHeart(Date.now(), qaLocalEntitlementRepository.hasEntitlement('UNLIMITED_HEART'))
-  }, [phase, qaMode])
 
   // BGM（utils/bgm.ts）は難易度ごとに別の既存アンビエントをそのまま再利用する。
   // 初級＝通常ゲームの6段階エンジン（0〜120%全体を代表する固定stageIndex＋streakで密度アップ）、
