@@ -68,6 +68,14 @@ export interface FriendsRepository {
    * 届いている未処理の申請）/noneの4値だけを返す。
    */
   getRelationshipStatus(viewerId: string, targetId: string): Promise<FriendRelationshipStatus>
+  /**
+   * 次フェーズ（ゲーム機能クローズラウンド、item 80）: フレンド解除。friendshipsの正準1行
+   * だけを削除する——Challenge履歴・ルーム対戦履歴・World Battle履歴はどれも別テーブル
+   * （friendshipsを一切参照しない）のため、構造的に一切触れない。削除後は
+   * sendRequestCoreのexistingFriendshipチェックも素通りするため、どちらからでも
+   * 新しいフレンド申請を送り直せる。
+   */
+  removeFriend(playerIdA: string, playerIdB: string): Promise<void>
 }
 
 export type FriendRelationshipStatus = 'friends' | 'pending_outgoing' | 'pending_incoming' | 'none'
@@ -249,6 +257,11 @@ export function createD1FriendsRepository(db: D1Database): FriendsRepository {
       const [a, b] = canonicalPair(playerIdA, playerIdB)
       const row = await db.prepare(`SELECT 1 FROM friendships WHERE player_a_id = ? AND player_b_id = ?`).bind(a, b).first()
       return row !== null
+    },
+
+    async removeFriend(playerIdA, playerIdB) {
+      const [a, b] = canonicalPair(playerIdA, playerIdB)
+      await db.prepare(`DELETE FROM friendships WHERE player_a_id = ? AND player_b_id = ?`).bind(a, b).run()
     },
 
     async getRelationshipStatus(viewerId, targetId) {

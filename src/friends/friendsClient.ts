@@ -116,6 +116,24 @@ export async function getFriendRelationshipStatus(viewerId: string, targetId: st
   }
 }
 
+/**
+ * 次フェーズ（ゲーム機能クローズラウンド、item 80）: フレンド解除。Challenge履歴・
+ * ルーム対戦履歴・World Battle履歴には一切触れない（friendshipsの正準1行だけを消す）。
+ */
+export async function removeFriend(playerId: string, friendPlayerId: string): Promise<boolean> {
+  try {
+    const res = await fetch('/api/friends/remove', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ playerId, friendPlayerId }),
+    })
+    const body = (await res.json()) as { ok: boolean }
+    return body.ok
+  } catch {
+    return false
+  }
+}
+
 export async function upsertPublicProfile(playerId: string, profile: PublicProfileSnapshot): Promise<boolean> {
   try {
     const res = await fetch(`/api/players/${encodeURIComponent(playerId)}/profile`, {

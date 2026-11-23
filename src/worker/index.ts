@@ -680,6 +680,23 @@ async function handleGetRelationshipStatus(request: Request, env: Env): Promise<
   return json({ ok: true, status }, 200)
 }
 
+/**
+ * 次フェーズ（ゲーム機能クローズラウンド、item 80）: POST /api/friends/remove。
+ * friendshipsの正準1行だけを消す——Challenge履歴・ルーム対戦履歴・World Battle履歴は
+ * どれも別テーブルのため構造的に一切触れない。削除後はどちらからでも新しいフレンド
+ * 申請を送り直せる（sendRequestCoreのexistingFriendshipチェックが素通りするため）。
+ */
+async function handleRemoveFriend(request: Request, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB) return errorResponse({ ok: false, error: 'not_configured', message: 'Friends backend is not configured on this environment yet' })
+  const body = (await request.json().catch(() => null)) as Partial<{ playerId: string; friendPlayerId: string }> | null
+  if (!body || typeof body.playerId !== 'string' || typeof body.friendPlayerId !== 'string') {
+    return errorResponse({ ok: false, error: 'invalid_input', message: 'playerId and friendPlayerId are required' })
+  }
+  const repo = createD1FriendsRepository(env.CHALLENGE_DB)
+  await repo.removeFriend(body.playerId, body.friendPlayerId)
+  return json({ ok: true }, 200)
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
@@ -814,6 +831,9 @@ export default {
     }
     if (url.pathname === '/api/friends/relationship' && request.method === 'GET') {
       return handleGetRelationshipStatus(request, env)
+    }
+    if (url.pathname === '/api/friends/remove' && request.method === 'POST') {
+      return handleRemoveFriend(request, env)
     }
     const playerProfileMatch = /^\/api\/players\/([^/]+)\/profile$/.exec(url.pathname)
     if (playerProfileMatch && request.method === 'GET') {

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
+import { ConfirmRemoveFriendModal } from '../components/ConfirmRemoveFriendModal'
 import { NavBar } from '../components/NavBar'
 import { DopaPassBadge } from '../components/DopaPassBadge'
 import { resolveAvatarEmoji } from '../config/profileConfig'
 import { TITLE_DEFS_BY_ID } from '../config/titles'
 import { PASS_TITLE_DEFS_BY_ID } from '../config/passTitles'
-import { getFriendPublicProfile, getFriendRelationshipStatus, sendFriendRequestByPlayerId } from '../friends/friendsClient'
+import { getFriendPublicProfile, getFriendRelationshipStatus, removeFriend, sendFriendRequestByPlayerId } from '../friends/friendsClient'
 import type { FriendRelationshipStatus, PublicProfileSnapshot } from '../friends/types'
 
 interface Props {
@@ -39,6 +40,10 @@ export function FriendProfileScreen({ onBack, onHome, playerId, viewerPlayerId }
   const isSelf = playerId === viewerPlayerId
   const [relationship, setRelationship] = useState<FriendRelationshipStatus | null>(null)
   const [requestSent, setRequestSent] = useState(false)
+  /** 次フェーズ（ゲーム機能クローズラウンド、item 80）: フレンド削除。常に確認モーダルを挟む（誤タップ防止）。 */
+  const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false)
+  const [removeBusy, setRemoveBusy] = useState(false)
+  const [removed, setRemoved] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -59,6 +64,21 @@ export function FriendProfileScreen({ onBack, onHome, playerId, viewerPlayerId }
   async function handleSendRequest() {
     setRequestSent(true)
     await sendFriendRequestByPlayerId(viewerPlayerId, playerId)
+  }
+
+  /**
+   * 次フェーズ（item 80）: フレンド削除。friendshipsの正準1行だけを消す
+   * （Challenge履歴・ルーム対戦履歴・World Battle履歴には一切触れない）。
+   * 解除後はどちらからでも新しいフレンド申請を送り直せる（再度友達になれる、
+   * 完全に取り消し可能な操作）。
+   */
+  async function handleConfirmRemove() {
+    setRemoveBusy(true)
+    await removeFriend(viewerPlayerId, playerId)
+    setRemoveBusy(false)
+    setConfirmRemoveOpen(false)
+    setRemoved(true)
+    setRelationship('none')
   }
 
   const equippedPassTitle = state.status === 'ready' && state.profile.equippedTitleId ? PASS_TITLE_DEFS_BY_ID[state.profile.equippedTitleId] : null
@@ -118,7 +138,28 @@ export function FriendProfileScreen({ onBack, onHome, playerId, viewerPlayerId }
             <p className="text-[9px] text-white/25">最後に更新: {new Date(state.profile.updatedAt).toLocaleDateString('ja-JP')}</p>
           </div>
         )}
+
+        {/*
+          次フェーズ（item 80）: フレンド削除は、relationship==='friends'の間だけ・
+          画面の一番下に・最小限の目立たない文字リンクとして置く（誤タップを避ける
+          ための意図的な配置——主要な情報・操作からは明確に離す）。
+        */}
+        {state.status === 'ready' && !isSelf && relationship === 'friends' && !removed && (
+          <button onClick={() => setConfirmRemoveOpen(true)} className="mt-2 text-[10px] font-bold text-white/25 underline underline-offset-2">
+            フレンド削除
+          </button>
+        )}
+        {removed && <p className="mt-2 text-[10px] font-bold text-white/40">フレンドを削除しました</p>}
       </div>
+
+      {confirmRemoveOpen && state.status === 'ready' && (
+        <ConfirmRemoveFriendModal
+          nickname={state.profile.nickname}
+          busy={removeBusy}
+          onConfirm={handleConfirmRemove}
+          onCancel={() => setConfirmRemoveOpen(false)}
+        />
+      )}
     </div>
   )
 }

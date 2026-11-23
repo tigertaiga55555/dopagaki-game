@@ -167,4 +167,52 @@ describe('friendsRepository (次フェーズ: FRIENDS/ナビ刷新ラウンド i
       expect(await repo.getRelationshipStatus('p2', 'p1')).toBe('pending_incoming')
     })
   })
+
+  describe('removeFriend（ゲーム機能クローズラウンド、item 80）', () => {
+    it('フレンド解除後、areFriendsはfalseを返す（どちらの引数順でも）', async () => {
+      const repo = createD1FriendsRepository(createFriendsFakeD1Database() as never)
+      await repo.upsertPublicProfile('p1', fakeProfile('Alice'))
+      const codeB = await repo.getOrCreateFriendCode('p2', 1000)
+      await repo.sendRequestByCode('p1', codeB, 1000)
+      const incoming = await repo.listIncomingRequests('p2')
+      await repo.respondToRequest(incoming[0].requestId, 'p2', 'accept', 2000)
+      expect(await repo.areFriends('p1', 'p2')).toBe(true)
+
+      await repo.removeFriend('p1', 'p2')
+      expect(await repo.areFriends('p1', 'p2')).toBe(false)
+      expect(await repo.areFriends('p2', 'p1')).toBe(false)
+    })
+
+    it('フレンド解除後、getRelationshipStatusはnoneになる', async () => {
+      const repo = createD1FriendsRepository(createFriendsFakeD1Database() as never)
+      await repo.upsertPublicProfile('p1', fakeProfile('Alice'))
+      const codeB = await repo.getOrCreateFriendCode('p2', 1000)
+      await repo.sendRequestByCode('p1', codeB, 1000)
+      const incoming = await repo.listIncomingRequests('p2')
+      await repo.respondToRequest(incoming[0].requestId, 'p2', 'accept', 2000)
+
+      await repo.removeFriend('p2', 'p1')
+      expect(await repo.getRelationshipStatus('p1', 'p2')).toBe('none')
+      expect(await repo.getRelationshipStatus('p2', 'p1')).toBe('none')
+    })
+
+    it('フレンド解除後、どちらからでも新しいフレンド申請を送り直せる', async () => {
+      const repo = createD1FriendsRepository(createFriendsFakeD1Database() as never)
+      await repo.upsertPublicProfile('p1', fakeProfile('Alice'))
+      const codeB = await repo.getOrCreateFriendCode('p2', 1000)
+      await repo.sendRequestByCode('p1', codeB, 1000)
+      const incoming = await repo.listIncomingRequests('p2')
+      await repo.respondToRequest(incoming[0].requestId, 'p2', 'accept', 2000)
+      await repo.removeFriend('p1', 'p2')
+
+      const codeA = await repo.getOrCreateFriendCode('p1', 1000)
+      const result = await repo.sendRequestByCode('p2', codeA, 3000)
+      expect(result).toEqual({ status: 'pending' })
+    })
+
+    it('存在しないフレンド関係をremoveFriendしても何も起きない（冪等）', async () => {
+      const repo = createD1FriendsRepository(createFriendsFakeD1Database() as never)
+      await expect(repo.removeFriend('p1', 'p2')).resolves.toBeUndefined()
+    })
+  })
 })

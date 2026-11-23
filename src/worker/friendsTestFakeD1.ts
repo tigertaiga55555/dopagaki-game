@@ -112,6 +112,11 @@ export function createFriendsFakeD1Database() {
           if (!friendships.has(key)) friendships.set(key, createdAt)
           return { success: true, meta: {} }
         }
+        if (query.startsWith('DELETE FROM friendships WHERE player_a_id = ? AND player_b_id = ?')) {
+          const [a, b] = boundValues as [string, string]
+          friendships.delete(friendshipKey(a, b))
+          return { success: true, meta: {} }
+        }
         throw new Error(`friends fake D1: unsupported run() query: ${query}`)
       },
       async first<T>() {
