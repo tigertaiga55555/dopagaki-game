@@ -390,7 +390,18 @@ export class BattleRoom implements DurableObject {
    * PRIVATE_ROOMバインディングが無い環境（未デプロイ時）やnotify先が無い通常の
    * World/Friend Battleでは何もしない。
    */
-  private async notifyPrivateRoomIfAny(matchId: string, winner: BattleWinner): Promise<void> {
+  /**
+   * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 44）: PRIVATE ROOMの試合履歴
+   * フィードに実データ（DOPA%／STREAK）を残せるよう、戦績の加算だけでなく、
+   * 試合の詳細（normal=両者のfinalDopaPercent、endless=両者のstreak）も一緒に通知する。
+   * detailを省略しても既存のWorld/Friend Battle呼び出しには一切影響しない
+   * （PrivateRoom側のdetailは任意フィールドのため、undefinedで埋まるだけ）。
+   */
+  private async notifyPrivateRoomIfAny(
+    matchId: string,
+    winner: BattleWinner,
+    detail?: { playerAFinalDopaPercent?: number; playerBFinalDopaPercent?: number; playerAStreak?: number; playerBStreak?: number },
+  ): Promise<void> {
     const roomCode = await this.ctx.storage.get<string>(NOTIFY_PRIVATE_ROOM_KEY)
     if (!roomCode || !this.env.PRIVATE_ROOM) return
     const outcome: 'a' | 'b' | 'draw' = winner === 'playerA' ? 'a' : winner === 'playerB' ? 'b' : 'draw'
@@ -399,7 +410,7 @@ export class BattleRoom implements DurableObject {
       await stub.fetch('https://private-room.internal/internal/match-finished', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ matchId, outcome }),
+        body: JSON.stringify({ matchId, outcome, detail }),
       })
     } catch {
       // PrivateRoom DOが既に閉じられている等。BattleRoom側の正式な終了処理は継続する。
@@ -421,7 +432,7 @@ export class BattleRoom implements DurableObject {
       // activeMatchがまだこのmatchIdを指したまま（通知が未到達）になり、同じ終了済みマッチへ
       // 再入室してしまう（実際にPlaywright E2Eで再現した不具合）。通知を先に完了させておけば、
       // クライアントがどれだけ速く反応しても、ロビー側は既にactiveMatch=nullを返す。
-      await this.notifyPrivateRoomIfAny(state.matchId, result.winner)
+      await this.notifyPrivateRoomIfAny(state.matchId, result.winner, { playerAStreak: result.playerAStreak, playerBStreak: result.playerBStreak })
       const [playerA, playerB] = state.players
       if (playerA) this.send(this.socketFor(playerA.playerId), { v: 1, type: 'endless_battle_finish', result, viewerIsPlayerA: true })
       if (playerB) this.send(this.socketFor(playerB.playerId), { v: 1, type: 'endless_battle_finish', result, viewerIsPlayerA: false })
@@ -437,7 +448,10 @@ export class BattleRoom implements DurableObject {
     // PrivateRoom DOへの通知をプレイヤーへのbattle_finish送信より必ず先に完了させる
     // （World Battleのmode==='world'分岐ではroomCode未設定のため、この呼び出し自体が
     // 何もしない早期returnになるだけで、既存のWorld Battle挙動には一切影響しない）。
-    await this.notifyPrivateRoomIfAny(state.matchId, result.winner)
+    await this.notifyPrivateRoomIfAny(state.matchId, result.winner, {
+      playerAFinalDopaPercent: result.playerA.performance.finalDopaPercent,
+      playerBFinalDopaPercent: result.playerB.performance.finalDopaPercent,
+    })
 
     const [playerA, playerB] = state.players
     if (playerA) this.send(this.socketFor(playerA.playerId), { v: 1, type: 'battle_finish', result, viewerIsPlayerA: true })

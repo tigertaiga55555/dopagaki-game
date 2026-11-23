@@ -24,6 +24,10 @@ interface Props {
  * NORMAL対戦が既にmode:'friend'としてこれらをそのまま再利用しているため（内部名を'private'へ
  * 改名することも検討したが、BattleMode型・各テスト・Worker側ルーティングなど影響範囲が
  * 広く、今回のラウンドでの機能的な利益がないため見送った——判断の根拠として記録する）。
+ *
+ * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 42）: ユーザー向け表示は
+ * 「🤝 友達と対戦」へ改名した（"PRIVATE ROOM"という内部コード名はデータモデル・
+ * ファイル名としては引き続き使うが、画面上には一切出さない）。
  */
 export function BattleHomeScreen({ onBack, onHome, onWorldBattle, onPrivateRoom }: Props) {
   return (
@@ -47,9 +51,9 @@ export function BattleHomeScreen({ onBack, onHome, onWorldBattle, onPrivateRoom 
             onClick={onPrivateRoom}
             className="mt-2 w-full rounded-2xl border border-fuchsia-400/30 bg-fuchsia-500/10 py-4 text-base font-black tracking-widest text-fuchsia-200 transition-transform active:scale-95"
           >
-            🚪 PRIVATE ROOM
+            🤝 友達と対戦
           </button>
-          <p className="text-[11px] text-white/40">最大8人・友達の参加はいつでも無料・何度でも対戦</p>
+          <p className="text-[11px] text-white/40">最大8人で集まって何度でも対戦</p>
         </div>
       </div>
     </div>

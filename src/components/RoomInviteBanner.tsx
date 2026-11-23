@@ -21,7 +21,7 @@ export function RoomInviteBanner({ fromProfile, onAccept, onDismiss }: Props) {
         <p className="min-w-0 flex-1 text-xs font-bold leading-snug text-white">
           {fromProfile.nickname}さんから
           <br />
-          PRIVATE ROOMに招待されました
+          友達と対戦に招待されました
         </p>
         <div className="flex flex-col gap-1">
           <button onClick={onAccept} className="rounded-full bg-fuchsia-500 px-3 py-1 text-[11px] font-black text-white active:scale-95">

@@ -141,4 +141,30 @@ describe('friendsRepository (次フェーズ: FRIENDS/ナビ刷新ラウンド i
     const summaries = await buildFriendSummaries(repo, 'p1')
     expect(summaries).toEqual([{ playerId: 'p2', profile: fakeProfile('Bob'), friendSince: 2000 }])
   })
+
+  describe('getRelationshipStatus (item 48)', () => {
+    it('何の関係もなければnone', async () => {
+      const repo = createD1FriendsRepository(createFriendsFakeD1Database() as never)
+      expect(await repo.getRelationshipStatus('p1', 'p2')).toBe('none')
+    })
+
+    it('既に友達ならfriends（どちらの視点でも）', async () => {
+      const repo = createD1FriendsRepository(createFriendsFakeD1Database() as never)
+      const codeB = await repo.getOrCreateFriendCode('p2', 1000)
+      await repo.sendRequestByCode('p1', codeB, 1000)
+      await repo.upsertPublicProfile('p1', fakeProfile('Alice'))
+      const incoming = await repo.listIncomingRequests('p2')
+      await repo.respondToRequest(incoming[0].requestId, 'p2', 'accept', 2000)
+      expect(await repo.getRelationshipStatus('p1', 'p2')).toBe('friends')
+      expect(await repo.getRelationshipStatus('p2', 'p1')).toBe('friends')
+    })
+
+    it('自分が送った未処理の申請はpending_outgoing、相手から見るとpending_incoming', async () => {
+      const repo = createD1FriendsRepository(createFriendsFakeD1Database() as never)
+      const codeB = await repo.getOrCreateFriendCode('p2', 1000)
+      await repo.sendRequestByCode('p1', codeB, 1000)
+      expect(await repo.getRelationshipStatus('p1', 'p2')).toBe('pending_outgoing')
+      expect(await repo.getRelationshipStatus('p2', 'p1')).toBe('pending_incoming')
+    })
+  })
 })

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import worker from './index'
 import { createFakeD1Database } from './testFakeD1'
 import { createFriendsFakeD1Database } from './friendsTestFakeD1'
+import { createD1PrivateRoomRepository } from './privateRoomRepository'
 import type { ChallengeApiResult, ChallengeAttemptListResult, ChallengeAttemptRecord, ChallengePerformance, ChallengeRecord } from '../challenge/types'
 
 function samplePerformance(overrides: Partial<ChallengePerformance> = {}): ChallengePerformance {
@@ -916,6 +917,30 @@ describe('worker fetch handler: POST/GET /api/rooms/private (DOPA PASS基盤ラ�
     const after = await worker.fetch(new Request('https://example.com/api/rooms/private/active/host1'), env)
     expect(await after.json()).toEqual({ ok: true, roomCode: createdBody.value.roomCode })
   })
+
+  it('GET /api/rooms/private/membership/:playerId: 参加していなければroomCode=null、参加中ならroomCode/isHostを返す（item 46-47）', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+
+    const before = await worker.fetch(new Request('https://example.com/api/rooms/private/membership/p1'), env)
+    expect(await before.json()).toEqual({ ok: true, roomCode: null, isHost: false })
+
+    const repo = createD1PrivateRoomRepository(db as never)
+    await repo.claimRoomForHost('p1', 'ABCDEF', 1000)
+    await repo.recordMembership('p1', 'ABCDEF', 1000)
+    await repo.recordMembership('p2', 'ABCDEF', 2000)
+
+    const hostRes = await worker.fetch(new Request('https://example.com/api/rooms/private/membership/p1'), env)
+    expect(await hostRes.json()).toEqual({ ok: true, roomCode: 'ABCDEF', isHost: true })
+
+    const guestRes = await worker.fetch(new Request('https://example.com/api/rooms/private/membership/p2'), env)
+    expect(await guestRes.json()).toEqual({ ok: true, roomCode: 'ABCDEF', isHost: false })
+  })
+
+  it('GET /api/rooms/private/membership/:playerId: CHALLENGE_DB未設定時はroomCode=nullで安全に失敗する', async () => {
+    const res = await worker.fetch(new Request('https://example.com/api/rooms/private/membership/p1'), {} as never)
+    expect(await res.json()).toEqual({ ok: true, roomCode: null, isHost: false })
+  })
 })
 
 /**
@@ -1024,9 +1049,65 @@ describe('worker fetch handler: FRIENDSルート群 (FRIENDS/ナビ刷新ラウ�
     expect(friendsBody.value).toEqual([expect.objectContaining({ playerId: 'p1', presence: 'offline' })])
   })
 
+  it('POST /api/friends/requests/by-player-id: playerIdを直接指定して申請を送れる（item 48）', async () => {
+    const env = friendsEnv()
+    const res = await worker.fetch(
+      new Request('https://example.com/api/friends/requests/by-player-id', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fromPlayerId: 'p1', toPlayerId: 'p2' }),
+      }),
+      env,
+    )
+    expect(await res.json()).toEqual({ ok: true, status: 'pending' })
+
+    const incomingRes = await worker.fetch(new Request('https://example.com/api/friends/requests/incoming?playerId=p2'), env)
+    const incomingBody = (await incomingRes.json()) as { ok: true; value: { fromPlayerId: string }[] }
+    expect(incomingBody.value).toHaveLength(0) // p1の公開プロフィールが無いため一覧には出ないが、申請行自体は作られている
+
+    const selfRes = await worker.fetch(
+      new Request('https://example.com/api/friends/requests/by-player-id', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fromPlayerId: 'p1', toPlayerId: 'p1' }),
+      }),
+      env,
+    )
+    expect(await selfRes.json()).toEqual({ ok: false, reason: 'self_request' })
+  })
+
   it('GET /api/players/:playerId/profile: 未登録ならnot_found', async () => {
     const res = await worker.fetch(new Request('https://example.com/api/players/nobody/profile'), friendsEnv())
     expect(res.status).toBe(404)
+  })
+
+  it('GET /api/friends/relationship: 何の関係もなければnone、申請中はpending_outgoing/incoming（item 48）', async () => {
+    const env = friendsEnv()
+    const noneRes = await worker.fetch(new Request('https://example.com/api/friends/relationship?viewerId=p1&targetId=p2'), env)
+    expect(await noneRes.json()).toEqual({ ok: true, status: 'none' })
+
+    const codeRes = await worker.fetch(
+      new Request('https://example.com/api/friends/code', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ playerId: 'p2' }),
+      }),
+      env,
+    )
+    const { code } = (await codeRes.json()) as { code: string }
+    await worker.fetch(
+      new Request('https://example.com/api/friends/requests', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ fromPlayerId: 'p1', toCode: code }),
+      }),
+      env,
+    )
+
+    const outgoingRes = await worker.fetch(new Request('https://example.com/api/friends/relationship?viewerId=p1&targetId=p2'), env)
+    expect(await outgoingRes.json()).toEqual({ ok: true, status: 'pending_outgoing' })
+    const incomingRes = await worker.fetch(new Request('https://example.com/api/friends/relationship?viewerId=p2&targetId=p1'), env)
+    expect(await incomingRes.json()).toEqual({ ok: true, status: 'pending_incoming' })
   })
 
   it('CHALLENGE_DB未設定時はnot_configured/空配列で安全に失敗する', async () => {

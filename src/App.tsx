@@ -46,7 +46,9 @@ import { extractPrivateRoomCodeFromLocation } from './battle/privateRoomUrl'
 import type { BattleFormat } from './battle/types'
 import { connectToPresenceHub, type PresenceSocket } from './presence/presenceClient'
 import type { PresenceSnapshot } from './presence/presenceTypes'
+import { listIncomingFriendRequests } from './friends/friendsClient'
 import type { PublicProfileSnapshot } from './friends/types'
+import type { RoomClosedReason } from './battle/privateRoomTypes'
 import { trackChallengePlayed, trackGameStart, trackReplayStart, type PassPaywallSource } from './utils/analytics'
 import { unlockAudio } from './utils/audioContext'
 import { runMigrationsOnce } from './utils/migrations'
@@ -211,6 +213,23 @@ export default function App() {
   const subscribeFriendPresence = useCallback((playerIds: string[]) => {
     presenceSocketRef.current?.send({ v: 1, type: 'subscribe', playerIds })
   }, [])
+
+  /**
+   * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 49）: Home左上のFRIENDS入口の
+   * 未読バッジ＝届いている友達申請数＋（表示中のPRIVATE ROOM招待バナーがあれば+1）。
+   * ポーリングループは作らず、起動時＋Homeへ戻るたびの最小限の再取得だけにする。
+   */
+  const [pendingFriendRequestCount, setPendingFriendRequestCount] = useState(0)
+  const refreshPendingFriendRequests = useCallback(() => {
+    listIncomingFriendRequests(getOrCreatePlayerId()).then((reqs) => setPendingFriendRequestCount(reqs.length))
+  }, [])
+  useEffect(() => {
+    refreshPendingFriendRequests()
+  }, [refreshPendingFriendRequests])
+  useEffect(() => {
+    if (screen === 'title') refreshPendingFriendRequests()
+  }, [screen, refreshPendingFriendRequests])
+  const friendsUnreadCount = pendingFriendRequestCount + (incomingInvite ? 1 : 0)
 
   /**
    * Ver.6 Phase 5.0追加: GA4のgame_start（常に）とreplay_start（結果画面からのリトライ時のみ）を
@@ -559,12 +578,31 @@ export default function App() {
     replaceScreen('privateRoomLobby')
   }, [replaceScreen])
 
-  /** ロビーを抜ける（自分の意思で退出、またはhostがルームを閉じた）。1つだけ戻る＝popScreen。 */
-  const leavePrivateRoom = useCallback(() => {
-    setPrivateRoomCode(null)
-    setPrivateRoomMatch(null)
-    popScreen()
-  }, [popScreen])
+  /**
+   * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 46-47）: 本当にルームが消えた
+   * （ホストが明示的に閉じた、または6時間無活動で期限切れになった）時だけ呼ばれる——
+   * 「← 戻る」「⌂ ホーム」はこれを一切経由しない（部屋への参加状態はサーバー側で
+   * 維持され続けるため、単なる画面移動だけで退出扱いにはならない）。
+   */
+  const [roomClosedNotice, setRoomClosedNotice] = useState<RoomClosedReason | null>(null)
+  const handlePrivateRoomClosed = useCallback(
+    (reason: RoomClosedReason) => {
+      setPrivateRoomCode(null)
+      setPrivateRoomMatch(null)
+      setRoomClosedNotice(reason)
+      goHome()
+    },
+    [goHome],
+  )
+
+  /** 次フェーズ（item 50）: ロビーの中からの「フレンドを招待」。既にこの部屋に居るので、ナビゲーションは一切変えない。 */
+  const inviteFriendFromLobby = useCallback(
+    (toPlayerId: string) => {
+      if (!privateRoomCode) return
+      inviteToExistingRoom(toPlayerId, privateRoomCode)
+    },
+    [privateRoomCode, inviteToExistingRoom],
+  )
 
   return (
     <div className="relative mx-auto min-h-dvh w-full max-w-[430px] overflow-hidden bg-[#0b0620]">
@@ -597,12 +635,23 @@ export default function App() {
                 onOpenAchievements={openAchievements}
                 onOpenRanking={openRanking}
                 onOpenFriends={openFriends}
+                friendsUnreadCount={friendsUnreadCount}
               />
               {migrationUnlocked.length > 0 && (
                 <div className="pointer-events-none fixed inset-x-0 top-6 z-50 flex flex-col items-center px-6">
                   <div className="pointer-events-auto">
                     <AchievementUnlockBanner newlyUnlocked={migrationUnlocked} />
                   </div>
+                </div>
+              )}
+              {roomClosedNotice && (
+                <div className="pointer-events-none fixed inset-x-0 top-20 z-50 flex justify-center px-6">
+                  <button
+                    onClick={() => setRoomClosedNotice(null)}
+                    className="pointer-events-auto anim-pop rounded-full bg-black/80 px-4 py-2 text-xs font-bold text-white/80 active:opacity-70"
+                  >
+                    {roomClosedNotice === 'host_closed' ? 'ルームが閉じられました' : '6時間操作がなかったため、ルームが終了しました'}
+                  </button>
                 </div>
               )}
             </>
@@ -726,10 +775,15 @@ export default function App() {
               roomCode={privateRoomCode}
               playerId={getOrCreatePlayerId()}
               myProfile={toBattleProfile(getProfile())}
-              onLeave={leavePrivateRoom}
+              onBack={popScreen}
               onHome={goHome}
+              onRoomClosed={handlePrivateRoomClosed}
               onEnterMatch={handlePrivateRoomEnterMatch}
               isMatchAlreadyHandled={isPrivateMatchAlreadyHandled}
+              presenceSnapshot={presenceSnapshot}
+              onSubscribePresence={subscribeFriendPresence}
+              onInviteFriend={inviteFriendFromLobby}
+              onOpenMemberProfile={openFriendProfile}
             />
           )}
           {screen === 'privateRoomMatch' && privateRoomMatch && (
@@ -768,7 +822,7 @@ export default function App() {
             />
           )}
           {screen === 'friendProfile' && friendProfilePlayerId && (
-            <FriendProfileScreen onBack={popScreen} onHome={goHome} playerId={friendProfilePlayerId} />
+            <FriendProfileScreen onBack={popScreen} onHome={goHome} playerId={friendProfilePlayerId} viewerPlayerId={getOrCreatePlayerId()} />
           )}
         </>
       )}

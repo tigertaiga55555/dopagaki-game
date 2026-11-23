@@ -54,10 +54,61 @@ export interface FriendsRepository {
   getOrCreateFriendCode(playerId: string, nowMs: number): Promise<string>
   /** codeから申請を送る。自己宛て・既に友達・既にpending中の申請はガードして正常終了する（サーバー側で確実に弾く）。 */
   sendRequestByCode(fromPlayerId: string, toCode: string, nowMs: number): Promise<SendRequestResult>
+  /** 次フェーズ（item 48）: ロビーのメンバーカード→プロフィールから、既に知っているplayerIdへ直接送る（コード入力を経由しない）。ガードはsendRequestByCodeと同じ。 */
+  sendRequestByPlayerId(fromPlayerId: string, toPlayerId: string, nowMs: number): Promise<SendRequestResult>
   listIncomingRequests(playerId: string): Promise<IncomingFriendRequest[]>
   respondToRequest(requestId: string, responderPlayerId: string, action: 'accept' | 'reject', nowMs: number): Promise<RespondResult>
   listFriends(playerId: string): Promise<{ playerId: string; friendSince: number }[]>
   areFriends(playerIdA: string, playerIdB: string): Promise<boolean>
+  /**
+   * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 48）: ロビーのメンバーカード→
+   * FriendProfileScreenから「フレンド申請」ボタンの表示を判断するための関係性。
+   * selfはviewerId===targetIdの場合の呼び出し元側（client）の責務とし、ここでは
+   * friends/pending_outgoing（自分が送った未処理の申請）/pending_incoming（相手から
+   * 届いている未処理の申請）/noneの4値だけを返す。
+   */
+  getRelationshipStatus(viewerId: string, targetId: string): Promise<FriendRelationshipStatus>
+}
+
+export type FriendRelationshipStatus = 'friends' | 'pending_outgoing' | 'pending_incoming' | 'none'
+
+/**
+ * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 48）: sendRequestByCode（人がコードを
+ * 手で入力する導線）とsendRequestByPlayerId（ロビーのメンバーカード→プロフィールから、
+ * playerIdを既に知っている状態で直接送る導線）が共有する、自己/既に友達/重複ガード本体。
+ */
+async function sendRequestCore(db: D1Database, fromPlayerId: string, toPlayerId: string, nowMs: number): Promise<SendRequestResult> {
+  if (toPlayerId === fromPlayerId) return { status: 'rejected', reason: 'self_request' }
+
+  const [a, b] = canonicalPair(fromPlayerId, toPlayerId)
+  const existingFriendship = await db.prepare(`SELECT 1 FROM friendships WHERE player_a_id = ? AND player_b_id = ?`).bind(a, b).first()
+  if (existingFriendship) return { status: 'already_friends' }
+
+  // 相手からの未処理の申請が既に存在する場合は、両者が望んでいるのだから即座に
+  // 友達にする（わざわざ「お互いに申請を送り合う」手間を要求しない、妥当なUX判断）。
+  const reversePending = await db
+    .prepare(`SELECT id FROM friend_requests WHERE from_player_id = ? AND to_player_id = ? AND status = 'pending'`)
+    .bind(toPlayerId, fromPlayerId)
+    .first<{ id: string }>()
+  if (reversePending) {
+    await db.batch([
+      db.prepare(`UPDATE friend_requests SET status = 'accepted', responded_at = ? WHERE id = ?`).bind(nowMs, reversePending.id),
+      db.prepare(`INSERT INTO friendships (player_a_id, player_b_id, created_at) VALUES (?, ?, ?)`).bind(a, b, nowMs),
+    ])
+    return { status: 'already_friends' }
+  }
+
+  const existingPending = await db
+    .prepare(`SELECT id FROM friend_requests WHERE from_player_id = ? AND to_player_id = ? AND status = 'pending'`)
+    .bind(fromPlayerId, toPlayerId)
+    .first()
+  if (existingPending) return { status: 'rejected', reason: 'already_pending' }
+
+  await db
+    .prepare(`INSERT INTO friend_requests (id, from_player_id, to_player_id, status, created_at) VALUES (?, ?, ?, 'pending', ?)`)
+    .bind(crypto.randomUUID(), fromPlayerId, toPlayerId, nowMs)
+    .run()
+  return { status: 'pending' }
 }
 
 export function createD1FriendsRepository(db: D1Database): FriendsRepository {
@@ -129,41 +180,11 @@ export function createD1FriendsRepository(db: D1Database): FriendsRepository {
     async sendRequestByCode(fromPlayerId, toCode, nowMs) {
       const target = await db.prepare(`SELECT player_id FROM friend_codes WHERE code = ?`).bind(toCode).first<{ player_id: string }>()
       if (!target) return { status: 'rejected', reason: 'invalid_code' }
-      const toPlayerId = target.player_id
-      if (toPlayerId === fromPlayerId) return { status: 'rejected', reason: 'self_request' }
+      return sendRequestCore(db, fromPlayerId, target.player_id, nowMs)
+    },
 
-      const [a, b] = canonicalPair(fromPlayerId, toPlayerId)
-      const existingFriendship = await db
-        .prepare(`SELECT 1 FROM friendships WHERE player_a_id = ? AND player_b_id = ?`)
-        .bind(a, b)
-        .first()
-      if (existingFriendship) return { status: 'already_friends' }
-
-      // 相手からの未処理の申請が既に存在する場合は、両者が望んでいるのだから即座に
-      // 友達にする（わざわざ「お互いに申請を送り合う」手間を要求しない、妥当なUX判断）。
-      const reversePending = await db
-        .prepare(`SELECT id FROM friend_requests WHERE from_player_id = ? AND to_player_id = ? AND status = 'pending'`)
-        .bind(toPlayerId, fromPlayerId)
-        .first<{ id: string }>()
-      if (reversePending) {
-        await db.batch([
-          db.prepare(`UPDATE friend_requests SET status = 'accepted', responded_at = ? WHERE id = ?`).bind(nowMs, reversePending.id),
-          db.prepare(`INSERT INTO friendships (player_a_id, player_b_id, created_at) VALUES (?, ?, ?)`).bind(a, b, nowMs),
-        ])
-        return { status: 'already_friends' }
-      }
-
-      const existingPending = await db
-        .prepare(`SELECT id FROM friend_requests WHERE from_player_id = ? AND to_player_id = ? AND status = 'pending'`)
-        .bind(fromPlayerId, toPlayerId)
-        .first()
-      if (existingPending) return { status: 'rejected', reason: 'already_pending' }
-
-      await db
-        .prepare(`INSERT INTO friend_requests (id, from_player_id, to_player_id, status, created_at) VALUES (?, ?, ?, 'pending', ?)`)
-        .bind(crypto.randomUUID(), fromPlayerId, toPlayerId, nowMs)
-        .run()
-      return { status: 'pending' }
+    async sendRequestByPlayerId(fromPlayerId, toPlayerId, nowMs) {
+      return sendRequestCore(db, fromPlayerId, toPlayerId, nowMs)
     },
 
     async listIncomingRequests(playerId) {
@@ -228,6 +249,26 @@ export function createD1FriendsRepository(db: D1Database): FriendsRepository {
       const [a, b] = canonicalPair(playerIdA, playerIdB)
       const row = await db.prepare(`SELECT 1 FROM friendships WHERE player_a_id = ? AND player_b_id = ?`).bind(a, b).first()
       return row !== null
+    },
+
+    async getRelationshipStatus(viewerId, targetId) {
+      const [a, b] = canonicalPair(viewerId, targetId)
+      const friendship = await db.prepare(`SELECT 1 FROM friendships WHERE player_a_id = ? AND player_b_id = ?`).bind(a, b).first()
+      if (friendship) return 'friends'
+
+      const outgoing = await db
+        .prepare(`SELECT id FROM friend_requests WHERE from_player_id = ? AND to_player_id = ? AND status = 'pending'`)
+        .bind(viewerId, targetId)
+        .first()
+      if (outgoing) return 'pending_outgoing'
+
+      const incoming = await db
+        .prepare(`SELECT id FROM friend_requests WHERE from_player_id = ? AND to_player_id = ? AND status = 'pending'`)
+        .bind(targetId, viewerId)
+        .first()
+      if (incoming) return 'pending_incoming'
+
+      return 'none'
     },
   }
 }

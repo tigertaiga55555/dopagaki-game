@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavBar } from '../../components/NavBar'
-import { createPrivateRoom, getPrivateRoomStatus } from '../../battle/privateRoomClient'
+import { createPrivateRoom, getActiveRoomForPlayer, getPrivateRoomStatus } from '../../battle/privateRoomClient'
 import { normalizeRoomCode, isValidRoomCode } from '../../battle/roomCode'
 import { trackPrivateRoomJoined } from '../../utils/analytics'
 import type { BattleOpponentProfile } from '../../battle/types'
@@ -19,18 +19,38 @@ interface Props {
   initialRoomCode?: string | null
 }
 
-type View = 'menu' | 'join_input'
+type View = 'checking' | 'menu' | 'join_input' | 'returning'
 
 /**
- * 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM）: 「PRIVATE ROOMを作る」
- * 「PRIVATE ROOMに入る」画面。battle/screens/FriendBattleScreen.tsxと同じ構造——
- * ただし「作る」はDOPA PASS限定（free users joining is always free、作成だけが有料）。
+ * 次フェーズ（DOPA PASS基盤ラウンド、item 15 PRIVATE ROOM → FRIENDS/TABLE/ナビ追加調整
+ * ラウンド、item 42/46-47で改修）: 「友達と対戦」を作る/入る画面。
+ *
+ * item 42: ユーザー向け文言から"PRIVATE ROOM"を排除した（内部のファイル名・データモデル
+ * としては引き続き使う）。
+ *
+ * item 46-47: 画面を開いた瞬間、まず「今まさに参加中/作成中のルームがあるか」を
+ * サーバーへ問い合わせる（player_idキーのmembership、クライアント側のstateだけに頼らない）。
+ * あれば、新規作成/参加の案より優先して「参加中のルームに戻る」（自分がホストなら
+ * 「作成中のルームに戻る」）を表示する——ホームへ戻る・アプリをバックグラウンドにする・
+ * 一時的な接続断のいずれも「退出」として扱わないため、この優先導線が常に機能する。
+ * ただし/room/:roomCodeを直接開いた場合（initialRoomCode指定時）は、そのURLの意図を
+ * 優先してjoin_inputへ直行する（既存の挙動を変えない）。
  */
 export function PrivateRoomHomeScreen({ onBack, onHome, onEnterLobby, onRequirePass, hasPass, playerId, myProfile, initialRoomCode }: Props) {
-  const [view, setView] = useState<View>(initialRoomCode ? 'join_input' : 'menu')
+  const [view, setView] = useState<View>(initialRoomCode ? 'join_input' : 'checking')
+  const [activeRoom, setActiveRoom] = useState<{ roomCode: string; isHost: boolean } | null>(null)
   const [codeInput, setCodeInput] = useState(initialRoomCode ?? '')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (initialRoomCode) return
+    getActiveRoomForPlayer(playerId).then((active) => {
+      setActiveRoom(active)
+      setView(active ? 'returning' : 'menu')
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function handleCreate() {
     if (!hasPass) {
@@ -66,6 +86,41 @@ export function PrivateRoomHomeScreen({ onBack, onHome, onEnterLobby, onRequireP
     onEnterLobby(code)
   }
 
+  if (view === 'checking') {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
+        <NavBar onBack={onBack} onHome={onHome} />
+        <p className="text-sm font-bold text-white/50">確認しています…</p>
+      </div>
+    )
+  }
+
+  if (view === 'returning' && activeRoom) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 py-10 text-center">
+        <NavBar onBack={onBack} onHome={onHome} />
+        <h1 className="text-2xl font-black tracking-widest text-white">🤝 友達と対戦</h1>
+        <div className="w-full max-w-xs space-y-4">
+          <button
+            onClick={() => onEnterLobby(activeRoom.roomCode)}
+            className="w-full rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-4 text-base font-black tracking-widest text-white active:scale-95"
+          >
+            {activeRoom.isHost ? '作成中のルームに戻る' : '参加中のルームに戻る'}
+          </button>
+          <p className="text-[11px] text-white/40">
+            ホームに戻ったり、アプリを閉じたりしても参加状態は保たれます。
+          </p>
+          <button
+            onClick={() => setView('menu')}
+            className="w-full rounded-2xl border border-white/15 bg-white/5 py-3 text-sm font-bold text-white/70 active:scale-95"
+          >
+            別のルームを作る／入る
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (view === 'join_input') {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 py-10 text-center">
@@ -93,7 +148,7 @@ export function PrivateRoomHomeScreen({ onBack, onHome, onEnterLobby, onRequireP
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 py-10 text-center">
       <NavBar onBack={onBack} onHome={onHome} />
-      <h1 className="text-2xl font-black tracking-widest text-white">🚪 PRIVATE ROOM</h1>
+      <h1 className="text-2xl font-black tracking-widest text-white">🤝 友達と対戦</h1>
       <p className="text-xs text-white/40">友達だけのロビーを作って、何度でも対戦できます</p>
       {error && <p className="text-xs font-bold text-rose-300">{error}</p>}
       <div className="flex w-full max-w-xs flex-col gap-4">

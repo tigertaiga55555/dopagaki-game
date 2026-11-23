@@ -35,11 +35,11 @@ interface ValuePoint {
  */
 const VALUE_POINTS: ValuePoint[] = [
   {
-    icon: '🚪',
-    title: '最大8人のPRIVATE ROOMを作れる',
-    description: '友達だけで集まれる専用ルームを、何度でも作成できます。World Battle・単発のフレンド対戦URLはもう存在しません——友達との対戦はPRIVATE ROOMだけの特別な体験です。',
+    icon: '🤝',
+    title: '最大8人で「友達と対戦」を作れる',
+    description: '友達だけで集まれる専用ルームを、何度でも作成できます。単発のフレンド対戦URLはもう存在しません——友達との対戦はこのモードだけの特別な体験です。',
   },
-  { icon: '🤝', title: '友達の参加はいつでも無料', description: 'あなたが作ったPRIVATE ROOMに、友達は誰でも無料で何度でも参加・対戦できます。' },
+  { icon: '👥', title: '友達の参加はいつでも無料', description: 'あなたが作ったルームに、友達は誰でも無料で何度でも参加・対戦できます。' },
   { icon: '❤️', title: 'Heart無制限', description: 'DOPA RUSH/ENDLESSの挑戦回数を気にせず、いつでもプレイできます。' },
   { icon: '🚫', title: '広告非表示', description: 'バナー・インタースティシャル広告が一切表示されなくなります。' },
   { icon: '📜', title: '履歴を完全保存', description: 'Challenge・World Battleの全履歴を、件数制限なく確認できます。' },

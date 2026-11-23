@@ -1,5 +1,6 @@
 import type {
   FriendCodeResponse,
+  FriendRelationshipStatus,
   FriendSummary,
   IncomingFriendRequest,
   PublicProfileSnapshot,
@@ -32,6 +33,20 @@ export async function sendFriendRequest(fromPlayerId: string, toCode: string): P
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ fromPlayerId, toCode }),
+    })
+    return (await res.json()) as SendFriendRequestResponse
+  } catch {
+    return { ok: false, reason: 'not_configured' }
+  }
+}
+
+/** 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 48）: ロビーのメンバーカード→プロフィールから、既に知っているplayerIdへ直接送る。 */
+export async function sendFriendRequestByPlayerId(fromPlayerId: string, toPlayerId: string): Promise<SendFriendRequestResponse> {
+  try {
+    const res = await fetch('/api/friends/requests/by-player-id', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fromPlayerId, toPlayerId }),
     })
     return (await res.json()) as SendFriendRequestResponse
   } catch {
@@ -86,6 +101,18 @@ export async function getFriendPublicProfile(playerId: string): Promise<PublicPr
     return body.ok ? (body.value ?? null) : null
   } catch {
     return null
+  }
+}
+
+/** 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 48）: FriendProfileScreenの「フレンド申請」ボタン表示判断。 */
+export async function getFriendRelationshipStatus(viewerId: string, targetId: string): Promise<FriendRelationshipStatus> {
+  try {
+    const res = await fetch(`/api/friends/relationship?viewerId=${encodeURIComponent(viewerId)}&targetId=${encodeURIComponent(targetId)}`)
+    if (!res.ok) return 'none'
+    const body = (await res.json()) as { ok: boolean; status?: FriendRelationshipStatus }
+    return body.ok ? (body.status ?? 'none') : 'none'
+  } catch {
+    return 'none'
   }
 }
 

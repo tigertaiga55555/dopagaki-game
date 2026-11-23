@@ -434,6 +434,19 @@ async function handleGetActiveRoomForHost(hostPlayerId: string, env: Env): Promi
   return json({ ok: true, roomCode }, 200)
 }
 
+/**
+ * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 46-47）: GET
+ * /api/rooms/private/membership/:playerId。「友達と対戦」を開いた瞬間、ホスト/非ホストに
+ * 関わらず「今まさに参加中のルームがあるか」を問い合わせ、ホーム画面に「参加中の
+ * ルームに戻る」（または自分がホストなら「作成中のルームに戻る」）を優先表示するために使う。
+ */
+async function handleGetActiveRoomForPlayer(playerId: string, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB) return json({ ok: true, roomCode: null, isHost: false }, 200)
+  const repo = createD1PrivateRoomRepository(env.CHALLENGE_DB)
+  const active = await repo.getActiveRoomForPlayer(playerId)
+  return json({ ok: true, roomCode: active?.roomCode ?? null, isHost: active?.isHost ?? false }, 200)
+}
+
 /** GET /api/rooms/private/:roomCode。合流前の事前チェック（存在しない/終了済み）。 */
 async function handlePrivateRoomStatus(roomCode: string, env: Env): Promise<Response> {
   if (!isValidRoomCode(roomCode)) {
@@ -471,6 +484,22 @@ async function handleSendFriendRequest(request: Request, env: Env): Promise<Resp
   }
   const repo = createD1FriendsRepository(env.CHALLENGE_DB)
   const result = await repo.sendRequestByCode(body.fromPlayerId, body.toCode.trim().toUpperCase(), Date.now())
+  if (result.status === 'rejected') return json({ ok: false, reason: result.reason }, 200)
+  return json({ ok: true, status: result.status }, 200)
+}
+
+/**
+ * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 48）: ロビーのメンバーカード→
+ * プロフィールから、既に知っているplayerIdへ直接送る（コード入力を経由しない）。
+ */
+async function handleSendFriendRequestByPlayerId(request: Request, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB) return json({ ok: false, reason: 'not_configured' }, 200)
+  const body = (await request.json().catch(() => null)) as Partial<{ fromPlayerId: string; toPlayerId: string }> | null
+  if (!body || typeof body.fromPlayerId !== 'string' || typeof body.toPlayerId !== 'string') {
+    return json({ ok: false, reason: 'invalid_code' }, 200)
+  }
+  const repo = createD1FriendsRepository(env.CHALLENGE_DB)
+  const result = await repo.sendRequestByPlayerId(body.fromPlayerId, body.toPlayerId, Date.now())
   if (result.status === 'rejected') return json({ ok: false, reason: result.reason }, 200)
   return json({ ok: true, status: result.status }, 200)
 }
@@ -527,6 +556,22 @@ async function handleUpsertPublicProfile(request: Request, playerId: string, env
   const repo = createD1FriendsRepository(env.CHALLENGE_DB)
   await repo.upsertPublicProfile(playerId, body.profile)
   return json({ ok: true }, 200)
+}
+
+/**
+ * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 48）: GET
+ * /api/friends/relationship?viewerId=X&targetId=Y。ロビーのメンバーカード→
+ * FriendProfileScreenの「フレンド申請」ボタン表示判断に使う。
+ */
+async function handleGetRelationshipStatus(request: Request, env: Env): Promise<Response> {
+  if (!env.CHALLENGE_DB) return json({ ok: true, status: 'none' }, 200)
+  const url = new URL(request.url)
+  const viewerId = url.searchParams.get('viewerId')
+  const targetId = url.searchParams.get('targetId')
+  if (!viewerId || !targetId) return errorResponse({ ok: false, error: 'invalid_input', message: 'viewerId and targetId are required' })
+  const repo = createD1FriendsRepository(env.CHALLENGE_DB)
+  const status = await repo.getRelationshipStatus(viewerId, targetId)
+  return json({ ok: true, status }, 200)
 }
 
 export default {
@@ -595,6 +640,11 @@ export default {
       return handleGetActiveRoomForHost(decodeURIComponent(activeRoomMatch[1]), env)
     }
 
+    const membershipMatch = /^\/api\/rooms\/private\/membership\/([^/]+)$/.exec(url.pathname)
+    if (membershipMatch && request.method === 'GET') {
+      return handleGetActiveRoomForPlayer(decodeURIComponent(membershipMatch[1]), env)
+    }
+
     const privateRoomStatusMatch = /^\/api\/rooms\/private\/([^/]+)$/.exec(url.pathname)
     if (privateRoomStatusMatch && request.method === 'GET') {
       if (!env.PRIVATE_ROOM) {
@@ -630,6 +680,9 @@ export default {
     if (url.pathname === '/api/friends/requests' && request.method === 'POST') {
       return handleSendFriendRequest(request, env)
     }
+    if (url.pathname === '/api/friends/requests/by-player-id' && request.method === 'POST') {
+      return handleSendFriendRequestByPlayerId(request, env)
+    }
     if (url.pathname === '/api/friends/requests/incoming' && request.method === 'GET') {
       return handleListIncomingFriendRequests(request, env)
     }
@@ -639,6 +692,9 @@ export default {
     }
     if (url.pathname === '/api/friends' && request.method === 'GET') {
       return handleListFriends(request, env)
+    }
+    if (url.pathname === '/api/friends/relationship' && request.method === 'GET') {
+      return handleGetRelationshipStatus(request, env)
     }
     const playerProfileMatch = /^\/api\/players\/([^/]+)\/profile$/.exec(url.pathname)
     if (playerProfileMatch && request.method === 'GET') {

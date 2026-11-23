@@ -50,3 +50,6 @@ export interface UpsertPublicProfileBody {
   playerId: string
   profile: PublicProfileSnapshot
 }
+
+/** 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 48）: FriendProfileScreenの「フレンド申請」ボタン表示判断。 */
+export type FriendRelationshipStatus = 'friends' | 'pending_outgoing' | 'pending_incoming' | 'none'

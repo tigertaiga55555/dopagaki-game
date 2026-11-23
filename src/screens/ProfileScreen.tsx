@@ -66,11 +66,28 @@ export function ProfileScreen({
   // 次フェーズ（item 12）: LEGENDARY/MYTHICを装備している間だけ、アバターリング/
   // プレイヤーカードへ軽くレアリティのテーマ色を広げる（COMMON/RARE/EPICは従来の見た目の
   // ままにし、全体を過剰に色付けしない——ユーザー指示）。PASS限定Title装備時はamber系で統一。
-  const flourishClass = equippedPassTitle
+  const titleFlourishClass = equippedPassTitle
     ? 'border-amber-400/60 shadow-[0_0_24px_rgba(251,191,36,0.3)]'
     : equippedRegularTitle
       ? getTitleRarityTheme(equippedRegularTitle.rarity).profileRingClass
       : ''
+
+  /**
+   * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 52）: DOPA PASS所有の表現を、
+   * 画面中央の大きな「👑 DOPA PASS」バッジ（視線の主役を奪っていた）から、①カード全体を
+   * 囲む薄い金のボーダー/グロー＋②カード上端に乗る小さなバッジ、の2点へ置き換える。
+   *
+   * LEGENDARY/MYTHIC Titleの装飾（titleFlourishClass、虹/金のring+glow）との優先順位
+   * （判断根拠、最終報告書にも記載）: 装備中Titleは「このプレイヤーが実際に達成した
+   * 結果」を見せる演出であり、PASSは「購入状態」という静的なステータスに過ぎない。
+   * 両方を同じアバター/カードのリング位置へ同時に重ねると視覚的に喧嘩するため、
+   * Titleの装飾が何か存在する場合は常にそちらを優先し、PASSの金ボーダーはTitle側に
+   * 装飾が無い場合（COMMON/RAREのTitle装備時、または称号未装備時）だけ、カードの
+   * 外周に控えめに適用する——ただし②の小さな上端バッジは、Titleの装飾の有無に関わらず
+   * 常に表示する（PASS所有という事実そのものが隠れてしまうことは絶対に無いようにする）。
+   */
+  const passCardFlourishClass = hasPass && !titleFlourishClass ? 'ring-1 ring-amber-300/60 shadow-[0_0_18px_rgba(251,191,36,0.22)]' : ''
+  const cardFlourishClass = titleFlourishClass || passCardFlourishClass
 
   useEffect(() => {
     trackProfileView()
@@ -88,17 +105,21 @@ export function ProfileScreen({
       <div className="flex flex-1 flex-col items-center gap-6 px-6 py-4">
         {/* プレイヤーカード */}
         <div
-          className={`flex w-full max-w-xs flex-col items-center gap-3 rounded-3xl border border-fuchsia-400/20 bg-gradient-to-b from-white/[0.06] to-white/[0.02] px-6 py-6 text-center shadow-[0_0_30px_rgba(217,70,239,0.08)] ${flourishClass}`}
+          className={`relative flex w-full max-w-xs flex-col items-center gap-3 rounded-3xl border border-fuchsia-400/20 bg-gradient-to-b from-white/[0.06] to-white/[0.02] px-6 py-6 text-center shadow-[0_0_30px_rgba(217,70,239,0.08)] ${cardFlourishClass}`}
         >
+          {hasPass && (
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[#140a22] p-0.5">
+              <DopaPassBadge compact />
+            </div>
+          )}
+
           <div
             className={`flex h-20 w-20 items-center justify-center rounded-full bg-fuchsia-500/10 text-4xl ${
-              flourishClass || 'border-2 border-fuchsia-400/50 shadow-[0_0_20px_rgba(217,70,239,0.3)]'
+              titleFlourishClass || 'border-2 border-fuchsia-400/50 shadow-[0_0_20px_rgba(217,70,239,0.3)]'
             }`}
           >
             {resolveAvatarEmoji(profile.avatar)}
           </div>
-
-          {hasPass && <DopaPassBadge />}
 
           <p className="text-xl font-black text-white">{profile.nickname}</p>
 

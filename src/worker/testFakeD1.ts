@@ -15,6 +15,9 @@ export function createFakeD1Database() {
   // （host_player_idがPRIMARY KEY）。他のテーブルとは無関係に追加しただけで、既存の
   // Challenge関連クエリ照合には一切影響しない。
   const privateRooms = new Map<string, { host_player_id: string; room_code: string; created_at: number }>()
+  // 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 46-47）: private_room_memberships
+  // （player_idがPRIMARY KEY、今どのルームに居るか）。
+  const privateRoomMemberships = new Map<string, { player_id: string; room_code: string; joined_at: number }>()
 
   function prepare(query: string) {
     let boundValues: unknown[] = []
@@ -117,12 +120,31 @@ export function createFakeD1Database() {
           privateRooms.delete(hostPlayerId)
           return { success: true, meta: {} }
         }
+        if (query.startsWith('INSERT INTO private_room_memberships')) {
+          const [playerId, roomCode, joinedAt] = boundValues as [string, string, number]
+          privateRoomMemberships.set(playerId, { player_id: playerId, room_code: roomCode, joined_at: joinedAt })
+          return { success: true, meta: {} }
+        }
+        if (query.startsWith('DELETE FROM private_room_memberships')) {
+          const [roomCode] = boundValues as [string]
+          for (const [playerId, row] of privateRoomMemberships) if (row.room_code === roomCode) privateRoomMemberships.delete(playerId)
+          return { success: true, meta: {} }
+        }
+        if (query.startsWith('INSERT INTO private_room_sessions') || query.startsWith('INSERT INTO private_room_match_history')) {
+          // ルート層のテストでは履歴の書き込み内容自体までは検証しない（privateRoomRepository.test.tsで既に検証済み）。
+          return { success: true, meta: {} }
+        }
         throw new Error(`fake D1: unsupported run() query: ${query}`)
       },
       async first<T>() {
         if (query.startsWith('SELECT room_code FROM private_rooms WHERE host_player_id = ?')) {
           const [hostPlayerId] = boundValues as [string]
           const row = privateRooms.get(hostPlayerId)
+          return (row ? { room_code: row.room_code } : null) as T | null
+        }
+        if (query.startsWith('SELECT room_code FROM private_room_memberships WHERE player_id = ?')) {
+          const [playerId] = boundValues as [string]
+          const row = privateRoomMemberships.get(playerId)
           return (row ? { room_code: row.room_code } : null) as T | null
         }
         if (query.startsWith('SELECT * FROM challenges WHERE id = ?')) {
@@ -195,5 +217,11 @@ export function createFakeD1Database() {
     return stmt
   }
 
-  return { prepare, _rows: rows, _attemptRows: attemptRows, _privateRooms: privateRooms }
+  async function batch(statements: { run: () => Promise<unknown> }[]) {
+    const out: unknown[] = []
+    for (const statement of statements) out.push(await statement.run())
+    return out
+  }
+
+  return { prepare, batch, _rows: rows, _attemptRows: attemptRows, _privateRooms: privateRooms, _privateRoomMemberships: privateRoomMemberships }
 }

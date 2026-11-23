@@ -98,3 +98,24 @@ export async function getActiveRoomForHost(hostPlayerId: string): Promise<string
     return null
   }
 }
+
+export interface ActiveRoomForPlayer {
+  roomCode: string
+  isHost: boolean
+}
+
+/**
+ * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 46-47）: 「友達と対戦」を開いた瞬間、
+ * ホーム画面（PrivateRoomHomeScreen.tsx）が「参加中/作成中のルームに戻る」を新規作成の
+ * 案より優先して出すかどうかを判断するために使う。
+ */
+export async function getActiveRoomForPlayer(playerId: string): Promise<ActiveRoomForPlayer | null> {
+  try {
+    const res = await fetch(`/api/rooms/private/membership/${encodeURIComponent(playerId)}`)
+    if (!res.ok) return null
+    const body = (await res.json()) as { ok: boolean; roomCode: string | null; isHost: boolean }
+    return body.ok && body.roomCode ? { roomCode: body.roomCode, isHost: body.isHost } : null
+  } catch {
+    return null
+  }
+}

@@ -23,6 +23,11 @@ interface Props {
   onOpenRanking: () => void
   /** 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 27）: フレンド一覧への入口。 */
   onOpenFriends: () => void
+  /**
+   * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 49）: 届いている友達申請＋
+   * ルーム招待の合計数。0より大きい間だけ、FRIENDS入口に小さな未読バッジを出す。
+   */
+  friendsUnreadCount: number
 }
 
 /**
@@ -31,8 +36,23 @@ interface Props {
  * 名称・サブコピー・配色をconfig/homeConfig.tsのデータに基づいて描画するよう
  * 書き換えた（英語タイトルを主役にし、その下に短い日本語説明を添える）。
  * Profile/Achievement/Rankingは従来どおり控えめなテキストリンクのまま維持する。
+ *
+ * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 49）: 下段のサブ導線は
+ * PROFILE/ACHIEVEMENT/RANKINGの3つだけに戻した（前ラウンドでFRIENDSを追加した結果、
+ * 390px幅で4項目が収まらずレイアウトが崩れていた）。FRIENDSは代わりに画面上部・
+ * 左上（Heart表示が右上にあるのに対して、左右のバランスを取る位置）に、3枚の
+ * モードカードより明らかに控えめな小さい入口として独立させた。
  */
-export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProfile, onOpenAchievements, onOpenRanking, onOpenFriends }: Props) {
+export function TitleScreen({
+  onStart,
+  onStartEndless,
+  onStartBattle,
+  onOpenProfile,
+  onOpenAchievements,
+  onOpenRanking,
+  onOpenFriends,
+  friendsUnreadCount,
+}: Props) {
   const best = getBestPercent()
   // 次フェーズ（DOPA PASS基盤ラウンド）: PassQaPanelでの切り替えを即座に全PASS依存UIへ
   // 反映させるための再評価トリガー（qaLocalEntitlementRepositoryはlocalStorage読み取りのため
@@ -48,7 +68,25 @@ export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProf
 
   return (
     <div className="flex min-h-dvh flex-col items-center gap-5 px-6 py-8 text-center">
-      <HeartDisplay unlimited={hasUnlimitedHeart} />
+      <div className="flex w-full items-start justify-between">
+        <button
+          onClick={onOpenFriends}
+          className="relative flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1.5 text-[11px] font-bold text-white/60 active:scale-95"
+          aria-label={`FRIENDS${friendsUnreadCount > 0 ? `（未読${friendsUnreadCount}件）` : ''}`}
+        >
+          <span aria-hidden="true">👥</span>
+          <span>FRIENDS</span>
+          {friendsUnreadCount > 0 && (
+            <span
+              aria-hidden="true"
+              className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black leading-none text-white"
+            >
+              {friendsUnreadCount > 9 ? '9+' : friendsUnreadCount}
+            </span>
+          )}
+        </button>
+        <HeartDisplay unlimited={hasUnlimitedHeart} />
+      </div>
       {/* Ver.6 Phase 9（実機QA反映）: 広告（下部100px枠）を非表示にしたことで、タイトル〜
           PROFILE/ACHIEVEMENT/RANKINGのまとまり全体がjustify-centerのままだと画面上寄りに
           見えるようになった。カード自体のサイズ・配色・フォントサイズは一切変えず、
@@ -101,10 +139,6 @@ export function TitleScreen({ onStart, onStartEndless, onStartBattle, onOpenProf
         <span className="text-white/15">|</span>
         <button onClick={onOpenRanking} className="flex items-center gap-1 active:text-white/60">
           <span aria-hidden="true">📊</span> RANKING
-        </button>
-        <span className="text-white/15">|</span>
-        <button onClick={onOpenFriends} className="flex items-center gap-1 active:text-white/60">
-          <span aria-hidden="true">👥</span> FRIENDS
         </button>
       </div>
 
