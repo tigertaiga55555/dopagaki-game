@@ -4,7 +4,11 @@ import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
 import { ENDLESS_THEME } from '../config/endlessTheme'
 import { buildCreateEndlessChallengeInput } from '../challenge/endlessChallenge'
 import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSource'
-import { trackChallengeCreated } from '../utils/analytics'
+import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
+import { buildResultShareUrl } from '../share/resultShareUrl'
+import { localShareRewardRepository, SHARE_REWARD_DAILY_CAP } from '../share/shareRewardRepository'
+import { shareResult } from '../share/shareResult'
+import { trackChallengeCreated, trackXShareClick, trackXShareRewardGranted } from '../utils/analytics'
 import { getProfile } from '../utils/profileStorage'
 import type { ChallengeProblemSetItem, ChallengeRecord } from '../challenge/types'
 import type { AchievementId, EndlessDifficulty } from '../types'
@@ -22,6 +26,8 @@ interface Props {
   recordedProblemSet: ChallengeProblemSetItem[]
   /** Ver.6 Phase 8: 「挑戦状を送る」が成功した際に呼ばれる（既存ResultScreen.tsxと同じ契約）。 */
   onChallengeSent?: (challenge: ChallengeRecord) => void
+  /** 次フェーズ（ゲーム機能クローズラウンド、item 61-66）: ResultScreen.tsxと同じ契約のresultId。 */
+  resultId: string
 }
 
 /**
@@ -43,11 +49,16 @@ export function EndlessResultScreen({
   onHome,
   recordedProblemSet,
   onChallengeSent,
+  resultId,
 }: Props) {
   const theme = ENDLESS_THEME[difficulty]
   const [challengeBusy, setChallengeBusy] = useState(false)
   const [challengeError, setChallengeError] = useState(false)
   const profile = getProfile()
+  const hasPass = qaLocalEntitlementRepository.hasEntitlement('UNLIMITED_HEART')
+  const [, setShareRewardRevision] = useState(0)
+  const canRewardThisShare = !hasPass && localShareRewardRepository.canRewardResult(resultId)
+  const shareRewardRemainingToday = SHARE_REWARD_DAILY_CAP - localShareRewardRepository.getDailyShareRewardCount()
   const challengeInput = buildCreateEndlessChallengeInput(
     { playerId: profile.playerId, nickname: profile.nickname, icon: profile.avatar, equippedTitleId: profile.equippedTitleId },
     difficulty,
@@ -79,6 +90,17 @@ export function EndlessResultScreen({
     } finally {
       setChallengeBusy(false)
     }
+  }
+
+  /** 次フェーズ（item 61-66）: ResultScreen.tsxのhandleShareToXと同じ契約・同じ独立性。 */
+  function handleShareToX() {
+    trackXShareClick('endless')
+    const shareUrl = buildResultShareUrl(resultId)
+    shareResult({ mode: 'endless', difficulty, streak: score, resultId, shareUrl })
+    if (hasPass) return
+    const outcome = localShareRewardRepository.grantShareReward(resultId)
+    if (outcome.granted) trackXShareRewardGranted('endless')
+    setShareRewardRevision((r) => r + 1)
   }
 
   return (
@@ -118,6 +140,22 @@ export function EndlessResultScreen({
           {challengeError && <p className="text-[10px] font-bold text-white/50">挑戦状の作成に失敗しました。もう一度お試しください。</p>}
         </div>
       )}
+
+      {/* 次フェーズ（item 61-66）: 「挑戦状を送る」（amber、対戦の誘い）とは別の見た目
+          （黒地＝Xのブランドカラー）にして混同を避ける。ボタン自体は常に活性のまま。 */}
+      <div className="flex w-full max-w-xs flex-col items-center gap-1.5">
+        <button
+          onClick={handleShareToX}
+          className="w-full rounded-2xl bg-black py-3.5 text-sm font-black text-white transition-transform active:scale-[0.98]"
+        >
+          𝕏 結果をシェア{!hasPass && canRewardThisShare && ' ❤️+1'}
+        </button>
+        {!hasPass && (
+          <p className="text-[10px] font-bold text-white/40">
+            {canRewardThisShare ? `シェアで+1 Heart（本日あと${Math.max(0, shareRewardRemainingToday)}回）` : '本日のHeart報酬は受取済み'}
+          </p>
+        )}
+      </div>
 
       <div className="flex w-full max-w-xs flex-col gap-3">
         <button

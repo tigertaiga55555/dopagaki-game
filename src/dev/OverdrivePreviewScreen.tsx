@@ -3,6 +3,7 @@ import { getOverdriveFrameClass, getOverdriveTier, GoldenClearOverlay, LimitErro
 import { MILESTONE_TEXT } from '../config/messagesV4'
 import { getOverdriveTitle } from '../config/resultTypesV4'
 import { ResultScreen } from '../screens/ResultScreen'
+import { buildRushSharePayload, createShareNonce, encodeResultSharePayload } from '../share/resultSharePayload'
 import { duckAudio, unlockAudio } from '../utils/audioContext'
 import { setBgmProgress, setOverdriveMode, startBgm, stopBgm } from '../utils/bgm'
 import { isMuted, setMuted, sfx } from '../utils/sound'
@@ -68,6 +69,8 @@ export function OverdrivePreviewScreen() {
   const [showOverdriveBurst, setShowOverdriveBurst] = useState(false)
   const [showMaxBurst, setShowMaxBurst] = useState(false)
   const [muted, setMutedState] = useState(isMuted())
+  /** 次フェーズ（item 61-66）: QA専用画面でも実際のResultScreenと同じresultId契約を満たす。 */
+  const [resultShareId, setResultShareId] = useState('')
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([])
 
   useEffect(() => {
@@ -98,6 +101,7 @@ export function OverdrivePreviewScreen() {
     setShowOverdriveBurst(false)
     setShowMaxBurst(false)
     setDisplayPercent(0)
+    setResultShareId(encodeResultSharePayload(buildRushSharePayload(119, createShareNonce())))
     setPhase('running')
     startBgm()
     // FINAL相当・高COMBO相当の最も濃いBGMレイヤーを最初から鳴らしておく
@@ -169,7 +173,7 @@ export function OverdrivePreviewScreen() {
   const frameClass = getOverdriveFrameClass(overdriveTier) || 'neon-frame'
 
   if (phase === 'result') {
-    return <ResultScreen result={buildPreviewResult()} onRetry={() => setPhase('idle')} onHome={() => setPhase('idle')} />
+    return <ResultScreen result={buildPreviewResult()} resultId={resultShareId} onRetry={() => setPhase('idle')} onHome={() => setPhase('idle')} />
   }
 
   return (

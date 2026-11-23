@@ -138,7 +138,13 @@ export function qaSetHeartCount(count: number, now = Date.now()): void {
 
 /**
  * 次フェーズ（DOPA PASS基盤ラウンド）: リワード広告視聴1回＝即+1 Heart（無料ユーザーのみ、
- * 呼び出し元のutils/rewardedAdStorage.tsが1日3回の上限を別途管理する）。5個の自然回復
+ * 呼び出し元のutils/rewardedAdStorage.tsが1日3回の上限を別途管理する）。
+ * 次フェーズ（ゲーム機能クローズラウンド、item 61-66）: X結果シェア報酬
+ * （share/shareRewardRepository.ts、1日2回まで）も、全く同じ「上限を超えて持てる」
+ * 付与の挙動を必要としたため、新しい関数を増やさずこの関数をそのまま再利用している
+ * ——広告視聴とシェアは完全に独立した日次カウンターだが、Heartの付与メカニクス自体は
+ * 共通でよい（どちらも「1日の上限は呼び出し元が別途管理する、この関数は無条件に+1する
+ * だけ」という契約）。5個の自然回復
  * 上限を超えて持てる設計（例: 5→6）——lastUpdateAtを更新しないため、既存のsettle()の
  * 「count>=HEART_CAPの間は回復を一時停止する」ロジックがそのまま働き、自然回復の挙動自体は
  * 一切変更しない。

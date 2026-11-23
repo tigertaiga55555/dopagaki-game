@@ -7,7 +7,11 @@ import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
 import { getRetryLabel } from '../config/messagesV4'
 import { buildCreateChallengeInput } from '../challenge/createChallengeFromResult'
 import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSource'
-import { trackChallengeCreated, trackResultView, trackShareClick } from '../utils/analytics'
+import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
+import { buildResultShareUrl } from '../share/resultShareUrl'
+import { localShareRewardRepository, SHARE_REWARD_DAILY_CAP } from '../share/shareRewardRepository'
+import { shareResult } from '../share/shareResult'
+import { trackChallengeCreated, trackResultView, trackShareClick, trackXShareClick, trackXShareRewardGranted } from '../utils/analytics'
 import { captureResultCardPng, downloadPngBlob } from '../utils/shareImage'
 import { copyShareText, shareResultWithImage } from '../utils/share'
 import { sfx } from '../utils/sound'
@@ -16,6 +20,13 @@ import type { FinalResultV4 } from '../types'
 
 interface Props {
   result: FinalResultV4
+  /**
+   * 次フェーズ（ゲーム機能クローズラウンド、item 61-66）: このプレイ1回を一意に表す
+   * 共有用ID（App.tsx側でプレイ終了の瞬間に1回だけ生成、同じ結果画面インスタンスが
+   * 再マウントしない限り変わらない）。Heart報酬の「1結果につき1回まで」の判定キー
+   * であり、かつ共有URL（/s/:resultId）の:id部分そのものでもある。
+   */
+  resultId: string
   onRetry: () => void
   /** 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 32-34）: 他の結果画面と揃えた「ホームへ戻る」。 */
   onHome: () => void
@@ -25,7 +36,7 @@ interface Props {
 
 const TOAST_MS = 3200
 
-export function ResultScreen({ result, onRetry, onHome, onChallengeSent }: Props) {
+export function ResultScreen({ result, resultId, onRetry, onHome, onChallengeSent }: Props) {
   const [copied, setCopied] = useState(false)
   const [imageBusy, setImageBusy] = useState(false)
   const [saveBusy, setSaveBusy] = useState(false)
@@ -34,6 +45,13 @@ export function ResultScreen({ result, onRetry, onHome, onChallengeSent }: Props
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const newlyUnlocked = result.newlyUnlockedAchievements ?? []
   const challengeInput = buildCreateChallengeInput(result)
+  const hasPass = qaLocalEntitlementRepository.hasEntitlement('UNLIMITED_HEART')
+  // 次フェーズ（item 61-66）: Heart付与後にボタンの文言（「本日あと◯回」⇄「受取済み」）を
+  // 即座に再評価させるための再読み込みトリガー（localStorageはReact stateではないため、
+  // dev/PassQaPanel.tsxのsetPassRevisionと同じ方針で値自体は使わず再レンダーのためだけに使う）。
+  const [, setShareRewardRevision] = useState(0)
+  const canRewardThisShare = !hasPass && localShareRewardRepository.canRewardResult(resultId)
+  const shareRewardRemainingToday = SHARE_REWARD_DAILY_CAP - localShareRewardRepository.getDailyShareRewardCount()
 
   // Ver.5.0追加(TASK C-12): 200%結果画面へ切り替わった瞬間、完全無音にせず
   // bell/sparkle/victory chordのごく控えめな余韻を一度だけ残す。
@@ -109,6 +127,25 @@ export function ResultScreen({ result, onRetry, onHome, onChallengeSent }: Props
     }
   }
 
+  /**
+   * 次フェーズ（ゲーム機能クローズラウンド、item 61-66）: 「𝕏 結果をシェア」。
+   * Challenge作成（handleSendChallenge）とは完全に独立——どちらを先にやっても後にやっても
+   * 互いに一切影響しない（Challenge側はresultIdを一切参照しない）。
+   * 共有自体（X Web Intentを開く操作）はPASS所有者・日次上限到達後も常に同じボタンで
+   * 行える（ボタンを無効化しない、というユーザー指示）。Heart付与だけが、PASS所有者
+   * なら常にスキップ、無料ユーザーでも「このresultIdは既に付与済み」または「本日の上限
+   * （2回）に到達済み」ならスキップされる。
+   */
+  function handleShareToX() {
+    trackXShareClick('rush')
+    const shareUrl = buildResultShareUrl(resultId)
+    shareResult({ mode: 'rush', percent: result.percent, resultId, shareUrl })
+    if (hasPass) return
+    const outcome = localShareRewardRepository.grantShareReward(resultId)
+    if (outcome.granted) trackXShareRewardGranted('rush')
+    setShareRewardRevision((r) => r + 1)
+  }
+
   /** 「結果をコピー」は従来通り画像を含めず、共有文＋URLのテキストのみコピーする。 */
   const handleCopy = async () => {
     const ok = await copyShareText(result.percent, result.type.name, result.finalTrial, result.challenge500)
@@ -173,6 +210,21 @@ export function ResultScreen({ result, onRetry, onHome, onChallengeSent }: Props
         >
           {challengeBusy ? '挑戦状を作成中…' : '⚔️ 挑戦状を送る'}
         </button>
+      )}
+
+      {/* 次フェーズ（item 61-66）: 「挑戦状を作る」（amber、対戦の誘い）とは意図的に別の
+          見た目（黒地＝Xのブランドカラー）にして混同を避ける。ボタン自体は常に活性のまま
+          （日次上限到達後も「受取済み」の文言に変わるだけ、無効化はしない）。 */}
+      <button
+        onClick={handleShareToX}
+        className="w-full max-w-xs rounded-2xl bg-black py-3.5 text-sm font-black text-white transition-transform active:scale-[0.98]"
+      >
+        𝕏 結果をシェア{!hasPass && canRewardThisShare && ' ❤️+1'}
+      </button>
+      {!hasPass && (
+        <p className="-mt-1 text-[10px] font-bold text-white/40">
+          {canRewardThisShare ? `シェアで+1 Heart（本日あと${Math.max(0, shareRewardRemainingToday)}回）` : '本日のHeart報酬は受取済み'}
+        </p>
       )}
 
       <div className="w-full max-w-xs space-y-2">

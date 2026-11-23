@@ -37,6 +37,12 @@ export type ScreenName =
   | 'friendsHome'
   /** 次フェーズ（item 27）: フレンドの公開プロフィール（ProfileScreenと同じ公開情報の部分集合）。 */
   | 'friendProfile'
+  /**
+   * 次フェーズ（ゲーム機能クローズラウンド、item 61-66）: X結果シェアURL（/s/:id）の着地画面。
+   * 誰でも（フレンド・アカウント不問で）開ける公開ページ——「この結果を見て」という
+   * 認知獲得導線であり、Challenge受信（challengeReceive、対戦の誘い）とは役割が別。
+   */
+  | 'resultShareLanding'
 
 /**
  * Ver.6 Phase 4: Endlessモードの難易度。既存通常ゲームの問題難易度システム

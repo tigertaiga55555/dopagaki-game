@@ -31,6 +31,7 @@ import { ProfileEditScreen } from './screens/ProfileEditScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
 import { RankingScreen } from './screens/RankingScreen'
 import { ResultScreen } from './screens/ResultScreen'
+import { ResultShareLandingScreen } from './screens/ResultShareLandingScreen'
 import { SentChallengesScreen } from './screens/SentChallengesScreen'
 import { BattleHomeScreen } from './screens/battle/BattleHomeScreen'
 import { BattleMatchScreen } from './screens/battle/BattleMatchScreen'
@@ -43,6 +44,8 @@ import { addCreatedChallengeId } from './challenge/createdChallengesStorage'
 import { extractChallengeIdFromLocation } from './challenge/url'
 import { createPrivateRoom } from './battle/privateRoomClient'
 import { extractPrivateRoomCodeFromLocation } from './battle/privateRoomUrl'
+import { buildEndlessSharePayload, buildRushSharePayload, createShareNonce, encodeResultSharePayload } from './share/resultSharePayload'
+import { extractResultShareIdFromLocation } from './share/resultShareUrl'
 import type { BattleFormat } from './battle/types'
 import { connectToPresenceHub, type PresenceSocket } from './presence/presenceClient'
 import type { PresenceSnapshot } from './presence/presenceTypes'
@@ -85,6 +88,8 @@ const PLAYING_SCREENS: ScreenName[] = ['playing', 'endlessPlaying', 'challengePl
 function initialNavStack(): ScreenName[] {
   if (extractChallengeIdFromLocation()) return ['title', 'challengeReceive']
   if (extractPrivateRoomCodeFromLocation()) return ['title', 'privateRoomHome']
+  // 次フェーズ（item 61-66）: X結果シェアURL（/s/:id）も同じ浅いスタック方針。
+  if (extractResultShareIdFromLocation()) return ['title', 'resultShareLanding']
   return ['title']
 }
 
@@ -116,6 +121,17 @@ export default function App() {
 
   const [result, setResult] = useState<FinalResultV4 | null>(null)
   const [playKey, setPlayKey] = useState(0)
+  /**
+   * 次フェーズ（ゲーム機能クローズラウンド、item 61-66）: DOPA RUSH/ENDLESSの結果が
+   * 確定した瞬間（handleFinish/handleEndlessFinish）に1回だけ生成する、このプレイを
+   * 一意に表す共有ID（share/resultSharePayload.tsのencodeResultSharePayload結果そのもの）。
+   * resultスクリーンとendlessResultスクリーンは排他的にしか表示されないため、1つの
+   * stateを共用してよい——同じ結果画面インスタンスが同じシェアボタンを何度押しても
+   * 常に同じIDになる（Heart報酬の「1結果につき1回まで」の判定キーがぶれない）。
+   */
+  const [resultShareId, setResultShareId] = useState<string>('')
+  /** 次フェーズ（item 61-66）: /s/:id（X結果シェアURL）を直接開いた場合の着地用。 */
+  const [initialResultShareId] = useState(() => extractResultShareIdFromLocation())
   // Ver.6 Phase 5.2: Challenge専用の状態。通常ゲーム・Endlessとは完全に独立させる。
   const [challengeId] = useState(() => extractChallengeIdFromLocation())
   const [activeChallenge, setActiveChallenge] = useState<ChallengeRecord | null>(null)
@@ -299,6 +315,8 @@ export default function App() {
       // PRIVATE ROOMでは呼ばない）。
       recordEligiblePlayCompleted()
       setResult(result)
+      // 次フェーズ（item 61-66）: このプレイ専用の共有ID（nonce込み）を1回だけ生成する。
+      setResultShareId(encodeResultSharePayload(buildRushSharePayload(result.percent, createShareNonce())))
       replaceScreen('result')
     },
     [replaceScreen],
@@ -348,9 +366,11 @@ export default function App() {
     (payload: EndlessFinishPayload) => {
       recordEligiblePlayCompleted()
       setEndlessResult(payload)
+      // 次フェーズ（item 61-66）: handleFinishと同じ契約。
+      setResultShareId(encodeResultSharePayload(buildEndlessSharePayload(endlessDifficulty, payload.score, createShareNonce())))
       replaceScreen('endlessResult')
     },
-    [replaceScreen],
+    [replaceScreen, endlessDifficulty],
   )
 
   /**
@@ -669,6 +689,7 @@ export default function App() {
           {screen === 'result' && result && (
             <ResultScreen
               result={result}
+              resultId={resultShareId}
               onRetry={() => maybeGateWithInterstitial(() => startPlay('retry'))}
               onHome={() => maybeGateWithInterstitial(goHome)}
               onChallengeSent={handleChallengeSent}
@@ -687,10 +708,14 @@ export default function App() {
               newlyUnlockedAchievements={endlessResult.newlyUnlockedAchievements}
               recordedProblemSet={endlessResult.recordedProblemSet}
               onChallengeSent={handleChallengeSent}
+              resultId={resultShareId}
               onRetry={() => maybeGateWithInterstitial(() => startEndless(endlessDifficulty))}
               onChangeDifficulty={() => maybeGateWithInterstitial(() => replaceScreen('endlessSelect'))}
               onHome={() => maybeGateWithInterstitial(goHome)}
             />
+          )}
+          {screen === 'resultShareLanding' && initialResultShareId && (
+            <ResultShareLandingScreen resultId={initialResultShareId} onHome={goHome} onStart={() => startPlay('title')} />
           )}
           {screen === 'profile' && (
             <ProfileScreen

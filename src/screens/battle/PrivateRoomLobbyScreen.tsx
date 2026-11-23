@@ -290,8 +290,9 @@ function MemberRow({
     <button
       onClick={onOpenProfile}
       className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left active:scale-[0.98] ${
-        // item 48: 「これは自分」を、ホストの👑クラウンとは明確に別の見た目（フクシアのring+背景）で
-        // 一目で分かるようにする——host表示との混同を避ける。
+        // item 48/60: 「これは自分」を、ホストの👑クラウンとは明確に別の見た目（フクシアのring+背景）で
+        // 一目で分かるようにする——host表示との混同を避ける。item 60: 視覚だけで区別させる
+        // というユーザー指示により、"YOU"等のテキストラベルは一切付けない（ring/背景/avatar ringのみ）。
         isSelf ? 'bg-fuchsia-500/15 ring-1 ring-fuchsia-400/60' : 'bg-white/5'
       }`}
     >
@@ -301,7 +302,6 @@ function MemberRow({
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-black text-white">
           {member.profile.nickname}
-          {isSelf && <span className="ml-1.5 text-[10px] font-black text-fuchsia-300">YOU</span>}
           {isHost && <span className="ml-1.5 text-[10px] font-black text-amber-300">👑 ホスト</span>}
         </p>
         <p className="text-[10px] text-white/40">

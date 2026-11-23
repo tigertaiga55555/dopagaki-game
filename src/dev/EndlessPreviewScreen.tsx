@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { EndlessPlayScreen } from '../screens/EndlessPlayScreen'
 import { EndlessResultScreen } from '../screens/EndlessResultScreen'
 import { EndlessSelectScreen } from '../screens/EndlessSelectScreen'
+import { buildEndlessSharePayload, createShareNonce, encodeResultSharePayload } from '../share/resultSharePayload'
 import type { EndlessDifficulty } from '../types'
 import type { EndlessFinishPayload } from '../engine/useEndlessGame'
 
@@ -21,6 +22,8 @@ export function EndlessPreviewScreen() {
   const [phase, setPhase] = useState<Phase>('select')
   const [difficulty, setDifficulty] = useState<EndlessDifficulty>('beginner')
   const [result, setResult] = useState<EndlessFinishPayload | null>(null)
+  /** 次フェーズ（item 61-66）: QA専用画面でも実際のEndlessResultScreenと同じresultId契約を満たす。 */
+  const [resultShareId, setResultShareId] = useState('')
   const [playKey, setPlayKey] = useState(0)
 
   function handleSelect(d: EndlessDifficulty) {
@@ -31,6 +34,7 @@ export function EndlessPreviewScreen() {
 
   function handleFinish(payload: EndlessFinishPayload) {
     setResult(payload)
+    setResultShareId(encodeResultSharePayload(buildEndlessSharePayload(difficulty, payload.score, createShareNonce())))
     setPhase('result')
   }
 
@@ -63,6 +67,7 @@ export function EndlessPreviewScreen() {
           isNewBest={result.isNewBest}
           newlyUnlockedAchievements={result.newlyUnlockedAchievements}
           recordedProblemSet={result.recordedProblemSet}
+          resultId={resultShareId}
           onRetry={() => handleSelect(difficulty)}
           onChangeDifficulty={() => setPhase('select')}
           onHome={() => setPhase('select')}

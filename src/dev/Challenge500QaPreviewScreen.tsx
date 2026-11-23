@@ -6,6 +6,7 @@ import { Challenge500IntroScreen } from '../screens/Challenge500IntroScreen'
 import { Challenge500Screen } from '../screens/Challenge500Screen'
 import { LimitBreakUnlockScreen } from '../screens/LimitBreakUnlockScreen'
 import { ResultScreen } from '../screens/ResultScreen'
+import { buildRushSharePayload, createShareNonce, encodeResultSharePayload } from '../share/resultSharePayload'
 import { getBestPercent, getPlayCount } from '../utils/storage'
 import type { FinalResultV4 } from '../types'
 
@@ -34,6 +35,8 @@ type Phase = 'unlock' | 'intro' | 'active' | 'result'
 export function Challenge500QaPreviewScreen() {
   const [phase, setPhase] = useState<Phase>('unlock')
   const [result, setResult] = useState<FinalResultV4 | null>(null)
+  /** 次フェーズ（item 61-66）: QA専用画面でも実際のResultScreenと同じresultId契約を満たす。 */
+  const [resultShareId, setResultShareId] = useState('')
   const [playKey, setPlayKey] = useState(0)
 
   function buildFakeBase(): FinalResultV4 {
@@ -68,7 +71,7 @@ export function Challenge500QaPreviewScreen() {
   }
 
   if (phase === 'result' && result) {
-    return <ResultScreen result={result} onRetry={restart} onHome={restart} />
+    return <ResultScreen result={result} resultId={resultShareId} onRetry={restart} onHome={restart} />
   }
 
   return (
@@ -89,7 +92,9 @@ export function Challenge500QaPreviewScreen() {
           qaMode
           onQuit={restart}
           onFinish={(state: Challenge500State) => {
-            setResult(computeChallenge500Result(state, buildFakeBase(), false))
+            const computed = computeChallenge500Result(state, buildFakeBase(), false)
+            setResult(computed)
+            setResultShareId(encodeResultSharePayload(buildRushSharePayload(computed.percent, createShareNonce())))
             setPhase('result')
           }}
         />

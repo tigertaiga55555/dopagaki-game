@@ -62,6 +62,16 @@ export function trackShareClick(): void {
   trackEvent('share_click')
 }
 
+/** 次フェーズ（ゲーム機能クローズラウンド、item 61-66）: 「𝕏 結果をシェア」押下（mode: 'rush'|'endless'）。 */
+export function trackXShareClick(mode: string): void {
+  trackEvent('x_share_click', { mode })
+}
+
+/** 同上: そのシェアで実際にHeart報酬が付与された場合だけ送る（PASS所有者・日次上限超過時は送らない）。 */
+export function trackXShareRewardGranted(mode: string): void {
+  trackEvent('x_share_reward_granted', { mode })
+}
+
 /** 結果画面からの再プレイ。 */
 export function trackReplayStart(): void {
   trackEvent('replay_start')
