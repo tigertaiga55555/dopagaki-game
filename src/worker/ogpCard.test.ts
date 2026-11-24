@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildEndlessSharePayload, buildRushSharePayload, encodeResultSharePayload } from '../share/resultSharePayload'
-import { buildResultOgpCopy, buildResultOgpHtml, isCrawlerUserAgent } from './ogpCard'
+import { buildChallengeOgpHtml, buildResultOgpCopy, buildResultOgpHtml, isCrawlerUserAgent } from './ogpCard'
 
 describe('isCrawlerUserAgent（item 82: X等のリンクプレビュー用クローラー判定）', () => {
   it('Xの公式クローラーUAを検出する', () => {
@@ -47,7 +47,8 @@ describe('buildResultOgpHtml（item 82: /s/:idのOGPカードHTML）', () => {
     expect(html).toContain('428')
     expect(html).toContain('og:description')
     expect(html).toContain('og:image')
-    expect(html).toContain('https://example.workers.dev/og-image-v5.png')
+    // 次フェーズ（item 90-91）: og:imageは静的な共通画像ではなく、この結果専用に動的生成されるPNGを指す。
+    expect(html).toContain(`https://example.workers.dev/s/${resultId}/image.png`)
     expect(html).toContain('twitter:card')
     expect(html).toContain('summary_large_image')
     expect(html).toContain(`https://example.workers.dev/s/${resultId}`)
@@ -85,5 +86,54 @@ describe('buildResultOgpHtml（item 82: /s/:idのOGPカードHTML）', () => {
     const resultId = encodeResultSharePayload(buildRushSharePayload(100, 'nonce-5'))
     const html = buildResultOgpHtml('https://example.workers.dev', resultId)
     expect(html).toContain('http-equiv="refresh"')
+  })
+})
+
+describe('buildChallengeOgpHtml（item 92: /challenge/:idのOGPカード——「挑戦状」フレーミング）', () => {
+  it('DOPA RUSH系Challenge: ニックネーム・creatorScore%・「挑戦状」を含むタイトル/説明文/画像URLを返す', () => {
+    const html = buildChallengeOgpHtml('https://example.workers.dev', 'chal-1', {
+      creatorNickname: 'ドパ太郎',
+      mode: 'normal',
+      creatorScore: 95,
+    })
+    expect(html).toContain('挑戦状')
+    expect(html).toContain('ドパ太郎')
+    expect(html).toContain('95%')
+    expect(html).toContain('https://example.workers.dev/challenge/chal-1/image.png')
+    expect(html).toContain('https://example.workers.dev/challenge/chal-1')
+  })
+
+  it('ENDLESS Challenge: 難易度+STREAKを含む', () => {
+    const html = buildChallengeOgpHtml('https://example.workers.dev', 'chal-2', {
+      creatorNickname: 'ドパ次郎',
+      mode: 'endless',
+      creatorScore: 41,
+      endlessDifficulty: 'advanced',
+    })
+    expect(html).toContain('挑戦状')
+    expect(html).toContain('上級')
+    expect(html).toContain('41')
+    expect(html).toContain('STREAK')
+  })
+
+  it('通常の結果シェア（buildResultOgpHtml）とは異なる文言（「挑戦状」フレーミング）になる——通常カードと視覚的に区別できる', () => {
+    const resultId = encodeResultSharePayload(buildRushSharePayload(95, 'nonce-6'))
+    const resultHtml = buildResultOgpHtml('https://example.workers.dev', resultId)
+    const challengeHtml = buildChallengeOgpHtml('https://example.workers.dev', 'chal-3', {
+      creatorNickname: 'ドパ太郎',
+      mode: 'normal',
+      creatorScore: 95,
+    })
+    expect(resultHtml).not.toContain('挑戦状')
+    expect(challengeHtml).toContain('挑戦状')
+  })
+
+  it('HTMLインジェクション対策: ニックネームはエスケープされる', () => {
+    const html = buildChallengeOgpHtml('https://example.workers.dev', 'chal-4', {
+      creatorNickname: '<script>alert(1)</script>',
+      mode: 'normal',
+      creatorScore: 10,
+    })
+    expect(html).not.toContain('<script>alert')
   })
 })

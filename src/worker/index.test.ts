@@ -1,9 +1,27 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+/**
+ * 次フェーズ（item 90-92）: index.tsはogImageRenderer.ts（workers-og、.wasmのimportを
+ * 含む、Cloudflare Workersランタイム専用）をimportするようになった。vitest（Node環境）
+ * は.wasmのimportを解決できないため、ここで`workers-og`自体をモックし、実際のwasm
+ * ロードへ到達させない——動的og:image生成の実際のラスタライズはwrangler dev実機で検証する
+ * （ogImageHtml.test.tsはHTML文字列の内容だけをNode環境で検証済み）。index.test.ts側では
+ * 「正しいPNG Responseが返ってくる」ことだけを、このフェイク実装で確認する。
+ */
+vi.mock('workers-og', () => ({
+  loadGoogleFont: async () => new ArrayBuffer(0),
+  ImageResponse: class FakeImageResponse extends Response {
+    constructor(html: unknown) {
+      super(typeof html === 'string' ? html : '', { status: 200, headers: { 'content-type': 'image/png' } })
+    }
+  },
+}))
+
 import worker from './index'
 import { createFakeD1Database } from './testFakeD1'
 import { createFriendsFakeD1Database } from './friendsTestFakeD1'
 import { createD1PrivateRoomRepository } from './privateRoomRepository'
-import { buildRushSharePayload, encodeResultSharePayload } from '../share/resultSharePayload'
+import { buildEndlessSharePayload, buildRushSharePayload, encodeResultSharePayload } from '../share/resultSharePayload'
 import type { ChallengeApiResult, ChallengeAttemptListResult, ChallengeAttemptRecord, ChallengePerformance, ChallengeRecord } from '../challenge/types'
 
 function samplePerformance(overrides: Partial<ChallengePerformance> = {}): ChallengePerformance {
@@ -1431,6 +1449,99 @@ describe('worker fetch handler: GET /s/:id（item 82: OGP/X Card）', () => {
   it('ASSETSバインディングが無い環境では、404 JSONへ安全にフォールバックする', async () => {
     const resultId = encodeResultSharePayload(buildRushSharePayload(428, 'nonce-route-3'))
     const res = await worker.fetch(new Request(`https://example.workers.dev/s/${resultId}`), {} as never)
+    expect(res.status).toBe(404)
+  })
+})
+
+/**
+ * 次フェーズ（item 90-91）: /s/:resultId/image.png——動的og:image本体（PNG）のルーティング
+ * テスト。index.test.ts冒頭のvi.mock('workers-og', ...)により、実際のラスタライズ処理は
+ * フェイクに置き換わっている（HTML文字列の内容そのものはogImageHtml.test.tsで検証済み）。
+ * ここでは「正しいパスへ正しくルーティングされ、image/png相当のResponseが返る」ことだけを確認する。
+ */
+describe('worker fetch handler: GET /s/:id/image.png（item 90-91: 動的og:image）', () => {
+  it('正しいresultId（RUSH）なら200でPNG Responseを返す（UAに関わらず）', async () => {
+    const resultId = encodeResultSharePayload(buildRushSharePayload(49, 'nonce-image-1'))
+    const res = await worker.fetch(new Request(`https://example.workers.dev/s/${resultId}/image.png`), {} as never)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('image/png')
+  })
+
+  it('正しいresultId（ENDLESS）でも200でPNG Responseを返す', async () => {
+    const resultId = encodeResultSharePayload(buildEndlessSharePayload('beginner', 16, 'nonce-image-2'))
+    const res = await worker.fetch(new Request(`https://example.workers.dev/s/${resultId}/image.png`), {} as never)
+    expect(res.status).toBe(200)
+  })
+
+  it('壊れた/改ざんされたresultIdには404を返す（架空の画像を作らない）', async () => {
+    const res = await worker.fetch(new Request('https://example.workers.dev/s/not-a-valid-payload/image.png'), {} as never)
+    expect(res.status).toBe(404)
+  })
+})
+
+/**
+ * 次フェーズ（item 92）: /challenge/:id・/challenge/:id/image.png——「挑戦状」OGPのルーティング
+ * テスト。既存のChallenge作成/参加API自体のテストは変更しない——ここで作ったChallengeを
+ * そのままOGPルートで読めることだけを確認する。
+ */
+describe('worker fetch handler: GET /challenge/:id（item 92: 挑戦状のOGP/X Card）', () => {
+  it('Xクローラーには「挑戦状」フレーミングのOGPカードHTMLを返す（ASSETSへは渡さない）', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createSampleChallenge(env)
+    const assets = fakeAssetsFetcher()
+    const res = await worker.fetch(
+      new Request(`https://example.com/challenge/${challenge.id}`, { headers: { 'User-Agent': 'Twitterbot/1.0' } }),
+      { ...env, ASSETS: assets as never } as never,
+    )
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('挑戦状')
+    expect(html).toContain(String(challenge.creatorScore))
+    expect(assets.calls).toHaveLength(0)
+  })
+
+  it('通常のブラウザUAには、env.ASSETS.fetch経由でいつも通りのChallenge受信SPAをそのまま返す', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createSampleChallenge(env)
+    const assets = fakeAssetsFetcher()
+    const res = await worker.fetch(
+      new Request(`https://example.com/challenge/${challenge.id}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)' },
+      }),
+      { ...env, ASSETS: assets as never } as never,
+    )
+    expect(res.status).toBe(200)
+    expect(assets.calls).toHaveLength(1)
+  })
+
+  it('存在しないChallenge idの場合、クローラーUAでもASSETSへフォールスルーする（架空のChallengeを作らない）', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const assets = fakeAssetsFetcher()
+    const res = await worker.fetch(
+      new Request('https://example.com/challenge/does-not-exist', { headers: { 'User-Agent': 'Twitterbot/1.0' } }),
+      { ...env, ASSETS: assets as never } as never,
+    )
+    expect(assets.calls).toHaveLength(1)
+    const html = await res.text()
+    expect(html).not.toContain('挑戦状')
+  })
+
+  it('GET /challenge/:id/image.pngは200でPNG Responseを返す', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const challenge = await createSampleChallenge(env)
+    const res = await worker.fetch(new Request(`https://example.com/challenge/${challenge.id}/image.png`), env)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('image/png')
+  })
+
+  it('存在しないChallenge idのimage.pngには404を返す', async () => {
+    const db = createFakeD1Database()
+    const env = { CHALLENGE_DB: db as never }
+    const res = await worker.fetch(new Request('https://example.com/challenge/does-not-exist/image.png'), env)
     expect(res.status).toBe(404)
   })
 })

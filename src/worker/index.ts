@@ -11,7 +11,10 @@ import { PrivateRoom } from './durableObjects/privateRoom'
 import { PresenceHub } from './durableObjects/presenceHub'
 import { createD1PrivateRoomRepository } from './privateRoomRepository'
 import { buildFriendSummaries, createD1FriendsRepository } from './friendsRepository'
-import { buildResultOgpHtml, isCrawlerUserAgent } from './ogpCard'
+import { buildChallengeOgpHtml, buildResultOgpHtml, isCrawlerUserAgent } from './ogpCard'
+import { buildChallengeImageHtml, buildResultImageHtml } from './ogImageHtml'
+import { renderOgImagePng } from './ogImageRenderer'
+import { decodeResultSharePayload } from '../share/resultSharePayload'
 import type { BattleOpponentProfile, CreateRoomResponse, RoomStatusResponse } from '../battle/types'
 import type { CreatePrivateRoomResponse, PrivateRoomStatusResponse } from '../battle/privateRoomTypes'
 import type { FriendSummary, PublicProfileSnapshot } from '../friends/types'
@@ -710,11 +713,63 @@ export default {
      * 同じ静的配信）をそのまま返す——resolveShareLandingDestination()の差し込み点や
      * ResultShareLandingScreen.tsx自体は一切変更しない。
      */
+    /**
+     * 次フェーズ（ゲーム機能クローズラウンド、item 90-91）: /s/:resultId/image.png——
+     * その結果専用に動的生成されるog:image本体（PNG）。クローラーかどうかは問わず常に
+     * 画像を返す（Xの画像取得インフラのUAはリンクプレビュー取得時のUAとは別物であり得る
+     * ため、ここではUA判定を一切行わない）。壊れた/デコードできないresultIdには架空の
+     * 画像を作らず404を返す。
+     */
+    const resultImageMatch = /^\/s\/([^/]+)\/image\.png$/.exec(url.pathname)
+    if (resultImageMatch) {
+      const payload = decodeResultSharePayload(decodeURIComponent(resultImageMatch[1]))
+      if (!payload) return new Response('not found', { status: 404 })
+      return renderOgImagePng(buildResultImageHtml(payload))
+    }
+
     const resultShareMatch = /^\/s\/([^/]+)\/?$/.exec(url.pathname)
     if (resultShareMatch) {
       if (isCrawlerUserAgent(request.headers.get('User-Agent'))) {
         const html = buildResultOgpHtml(url.origin, decodeURIComponent(resultShareMatch[1]))
         if (html) return new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } })
+      }
+      if (env.ASSETS) return env.ASSETS.fetch(request)
+    }
+
+    /**
+     * 次フェーズ（item 92）: /challenge/:id・/challenge/:id/image.png——既存のChallenge
+     * ゲームロジック（作成/参加/勝敗/履歴/URL構造）には一切触れず、OGP（クローラー向け
+     * メタタグ＋動的画像）だけを追加する。/s/:idと同じ構造（クローラーにはOGP、それ以外は
+     * env.ASSETS.fetchで従来通りのSPA＝ChallengeReceiveScreen.tsxへフォールスルー）。
+     * ChallengeはresultIdのような自己記述ペイロードではなくD1の行そのものなので、
+     * CHALLENGE_DBから実際のレコードを読んでから組み立てる（架空のChallengeを作らない）。
+     */
+    const challengeImageMatch = /^\/challenge\/([^/]+)\/image\.png$/.exec(url.pathname)
+    if (challengeImageMatch) {
+      if (!env.CHALLENGE_DB) return new Response('not found', { status: 404 })
+      const challengeId = decodeURIComponent(challengeImageMatch[1])
+      if (!isValidChallengeId(challengeId)) return new Response('not found', { status: 404 })
+      const challenge = await createD1ChallengeRepository(env.CHALLENGE_DB).getById(challengeId)
+      if (!challenge) return new Response('not found', { status: 404 })
+      const endlessDifficulty = challenge.mode === 'endless' ? challenge.conditions.endlessDifficulty : undefined
+      return renderOgImagePng(buildChallengeImageHtml(challenge.creatorNickname, challenge.mode, challenge.creatorScore, endlessDifficulty))
+    }
+
+    const challengeShareMatch = /^\/challenge\/([^/]+)\/?$/.exec(url.pathname)
+    if (challengeShareMatch) {
+      if (isCrawlerUserAgent(request.headers.get('User-Agent')) && env.CHALLENGE_DB) {
+        const challengeId = decodeURIComponent(challengeShareMatch[1])
+        const challenge = isValidChallengeId(challengeId) ? await createD1ChallengeRepository(env.CHALLENGE_DB).getById(challengeId) : null
+        if (challenge) {
+          const endlessDifficulty = challenge.mode === 'endless' ? challenge.conditions.endlessDifficulty : undefined
+          const html = buildChallengeOgpHtml(url.origin, challengeId, {
+            creatorNickname: challenge.creatorNickname,
+            mode: challenge.mode,
+            creatorScore: challenge.creatorScore,
+            endlessDifficulty,
+          })
+          return new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } })
+        }
       }
       if (env.ASSETS) return env.ASSETS.fetch(request)
     }

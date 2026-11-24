@@ -20,7 +20,12 @@ binding = "ASSETS"
 # 実際の人間のブラウザは、Worker内でクローラー判定に外れた場合にenv.ASSETS.fetch(request)へ
 # フォールスルーすることで、従来と全く同じ完全なSPA体験（ResultShareLandingScreen.tsx・
 # resolveShareLandingDestination()の差し込み点つき）を引き続き受け取る——挙動は変えない。
-run_worker_first = ["/api/*", "/s/*"]
+#
+# 次フェーズ（item 90-92）: /challenge/*も同じ理由で追加した。/challenge/:id（挑戦状の
+# OGPカード・動的画像）・/s/:id/image.png・/challenge/:id/image.png（いずれも動的og:image
+# PNG）をWorker側で返すため。ChallengeReceiveScreen.tsx（既存のSPA本体・Challenge機能
+# そのもの）は一切変更していない——クローラー以外は従来通りenv.ASSETS.fetchへフォールスルー。
+run_worker_first = ["/api/*", "/s/*", "/challenge/*"]
 
 [previews]
 
