@@ -18,6 +18,12 @@ declare global {
     PRIVATE_ROOM?: DurableObjectNamespace
     /** 次フェーズ（FRIENDS/ナビ刷新ラウンド、item 28）: プレゼンス（ONLINE/PLAYING）を管理する単一グローバルDurable Object。 */
     PRESENCE_HUB?: DurableObjectNamespace
+    /**
+     * 次フェーズ（ゲーム機能クローズラウンド、item 82）: 静的アセット（dist/、SPA本体）への
+     * 明示的なfetch用バインディング。/s/:idをrun_worker_firstへ加えた分、Workerが自分で
+     * 「クローラーでなければ普段通りSPAを返す」判断をしなければならなくなったため必要。
+     */
+    ASSETS?: Fetcher
   }
 }
 

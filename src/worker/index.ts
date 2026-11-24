@@ -11,6 +11,7 @@ import { PrivateRoom } from './durableObjects/privateRoom'
 import { PresenceHub } from './durableObjects/presenceHub'
 import { createD1PrivateRoomRepository } from './privateRoomRepository'
 import { buildFriendSummaries, createD1FriendsRepository } from './friendsRepository'
+import { buildResultOgpHtml, isCrawlerUserAgent } from './ogpCard'
 import type { BattleOpponentProfile, CreateRoomResponse, RoomStatusResponse } from '../battle/types'
 import type { CreatePrivateRoomResponse, PrivateRoomStatusResponse } from '../battle/privateRoomTypes'
 import type { FriendSummary, PublicProfileSnapshot } from '../friends/types'
@@ -700,6 +701,23 @@ async function handleRemoveFriend(request: Request, env: Env): Promise<Response>
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
+
+    /**
+     * 次フェーズ（ゲーム機能クローズラウンド、item 82）: /s/:id（X結果シェアURL）だけ、
+     * wrangler.tomlのrun_worker_firstへ追加した分だけWorkerを必ず経由する。
+     * クローラー（X等のリンクプレビュー）にはOGPカードを、それ以外の実際のユーザーには
+     * 従来通りの完全なSPA（env.ASSETS.fetch経由、/api/*以外の全パスが元々受けていたのと
+     * 同じ静的配信）をそのまま返す——resolveShareLandingDestination()の差し込み点や
+     * ResultShareLandingScreen.tsx自体は一切変更しない。
+     */
+    const resultShareMatch = /^\/s\/([^/]+)\/?$/.exec(url.pathname)
+    if (resultShareMatch) {
+      if (isCrawlerUserAgent(request.headers.get('User-Agent'))) {
+        const html = buildResultOgpHtml(url.origin, decodeURIComponent(resultShareMatch[1]))
+        if (html) return new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } })
+      }
+      if (env.ASSETS) return env.ASSETS.fetch(request)
+    }
 
     if (!url.pathname.startsWith('/api/')) {
       return json({ ok: false, error: 'not_found', message: 'unknown endpoint' } satisfies ChallengeApiResult<never>, 404)

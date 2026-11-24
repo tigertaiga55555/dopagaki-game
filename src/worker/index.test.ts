@@ -3,6 +3,7 @@ import worker from './index'
 import { createFakeD1Database } from './testFakeD1'
 import { createFriendsFakeD1Database } from './friendsTestFakeD1'
 import { createD1PrivateRoomRepository } from './privateRoomRepository'
+import { buildRushSharePayload, encodeResultSharePayload } from '../share/resultSharePayload'
 import type { ChallengeApiResult, ChallengeAttemptListResult, ChallengeAttemptRecord, ChallengePerformance, ChallengeRecord } from '../challenge/types'
 
 function samplePerformance(overrides: Partial<ChallengePerformance> = {}): ChallengePerformance {
@@ -1365,5 +1366,71 @@ describe('worker fetch handler: GET /api/rooms/private/invites/incoming (item 75
     const env = { CHALLENGE_DB: db as never }
     const res = await worker.fetch(new Request('https://example.com/api/rooms/private/invites/incoming?playerId=nobody'), env)
     expect(await res.json()).toEqual({ ok: true, value: [] })
+  })
+})
+
+/**
+ * 次フェーズ（ゲーム機能クローズラウンド、item 82）: /s/:id（X結果シェアURL）のルーティング
+ * テスト。クローラーUAにはOGPカードを、それ以外（実際のユーザー）にはenv.ASSETS.fetch経由の
+ * 通常のSPAをそのまま返す——resolveShareLandingDestination()・ResultShareLandingScreen.tsx
+ * 自体は一切変更していないことも、ASSETSへフォールスルーする経路で間接的に裏付ける。
+ */
+function fakeAssetsFetcher() {
+  const calls: Request[] = []
+  return {
+    calls,
+    fetch: async (request: Request) => {
+      calls.push(request)
+      return new Response('<!doctype html><html><body>SPA</body></html>', { status: 200, headers: { 'content-type': 'text/html' } })
+    },
+  }
+}
+
+describe('worker fetch handler: GET /s/:id（item 82: OGP/X Card）', () => {
+  it('Xクローラー（Twitterbot UA）には、実際の数値入りOGPカードHTMLを返す（ASSETSへは渡さない）', async () => {
+    const resultId = encodeResultSharePayload(buildRushSharePayload(428, 'nonce-route-1'))
+    const assets = fakeAssetsFetcher()
+    const res = await worker.fetch(
+      new Request(`https://example.workers.dev/s/${resultId}`, { headers: { 'User-Agent': 'Twitterbot/1.0' } }),
+      { ASSETS: assets as never } as never,
+    )
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/html')
+    const html = await res.text()
+    expect(html).toContain('og:title')
+    expect(html).toContain('428')
+    expect(assets.calls).toHaveLength(0)
+  })
+
+  it('通常のブラウザUAには、env.ASSETS.fetch経由でいつも通りのSPAをそのまま返す', async () => {
+    const resultId = encodeResultSharePayload(buildRushSharePayload(428, 'nonce-route-2'))
+    const assets = fakeAssetsFetcher()
+    const res = await worker.fetch(
+      new Request(`https://example.workers.dev/s/${resultId}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)' },
+      }),
+      { ASSETS: assets as never } as never,
+    )
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toBe('<!doctype html><html><body>SPA</body></html>')
+    expect(assets.calls).toHaveLength(1)
+  })
+
+  it('クローラーUAでも、resultIdが壊れている場合はASSETSへフォールスルーする（架空の結果をでっち上げない）', async () => {
+    const assets = fakeAssetsFetcher()
+    const res = await worker.fetch(
+      new Request('https://example.workers.dev/s/not-a-valid-payload', { headers: { 'User-Agent': 'Twitterbot/1.0' } }),
+      { ASSETS: assets as never } as never,
+    )
+    expect(assets.calls).toHaveLength(1)
+    const html = await res.text()
+    expect(html).not.toContain('og:title')
+  })
+
+  it('ASSETSバインディングが無い環境では、404 JSONへ安全にフォールバックする', async () => {
+    const resultId = encodeResultSharePayload(buildRushSharePayload(428, 'nonce-route-3'))
+    const res = await worker.fetch(new Request(`https://example.workers.dev/s/${resultId}`), {} as never)
+    expect(res.status).toBe(404)
   })
 })

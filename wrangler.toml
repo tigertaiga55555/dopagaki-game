@@ -5,9 +5,22 @@ main = "src/worker/index.ts"
 [assets]
 directory = "./dist"
 not_found_handling = "single-page-application"
+# ASSETSバインディング（次フェーズ、item 82）: Workerのfetchハンドラから、静的アセット
+# （SPA本体）への配信を明示的に呼び出せるようにする。/s/:idをrun_worker_firstへ追加した
+# ことで、Workerが自分で「クローラーでなければ普段通りSPAを返す」判断をしなければ
+# ならなくなったため必要（env.ASSETS.fetch(request)、worker/index.ts参照）。
+binding = "ASSETS"
 # Ver.6 Phase 5.1（Challengeバックエンド基盤）: /api/* だけをWorkerスクリプトへ渡す。
 # これ以外の全パス（既存のSPA本体）は従来どおり静的アセット優先のまま、一切挙動を変えない。
-run_worker_first = ["/api/*"]
+#
+# 次フェーズ（ゲーム機能クローズラウンド、item 82）: /s/*（X結果シェアURL）もここへ追加した。
+# X等のリンクプレビュー用クローラーにだけ、OGPカード（og:title/description/image、
+# 実際のDOPA%/STREAK入り）をWorker側で返すため——/api/*以外は元々Workerを一切経由せず
+# 静的配信だけで完結していたため、この1行を追加しない限りクローラーへ出し分ける方法が無かった。
+# 実際の人間のブラウザは、Worker内でクローラー判定に外れた場合にenv.ASSETS.fetch(request)へ
+# フォールスルーすることで、従来と全く同じ完全なSPA体験（ResultShareLandingScreen.tsx・
+# resolveShareLandingDestination()の差し込み点つき）を引き続き受け取る——挙動は変えない。
+run_worker_first = ["/api/*", "/s/*"]
 
 [previews]
 
