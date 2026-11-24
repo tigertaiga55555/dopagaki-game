@@ -87,6 +87,111 @@ describe('ACHIEVEMENT_DEFS (Ver.6 Phase 10: 68個への拡張 → item 104-109�
       ['dopa500', 'worldBattleWin100', 'worldBattleWin250', 'worldBattleStreak20', 'grindPlay1000', 'battleMirrorMatch', 'battleComeback'].sort(),
     )
   })
+
+  /**
+   * 次フェーズ（item 120-122、126: リリース前最終デザインラウンド）: 並び順の検証。
+   * 最優先順位「①カテゴリ→②ゲーム内進行→③条件数値の昇順→④rarity」のうち、
+   * ③（条件数値の昇順）をここで直接確認する。rarityだけで機械的に並べていないこと、
+   * 「既存12個→追加8個」という実装順表示になっていないことも併せて保証する。
+   */
+  describe('item 120-122: 並び順の整理', () => {
+    it('DOPA RUSH（dopaカテゴリ）: 解除条件のDOPA%で完全昇順（既存マイルストーンとDOPA TYPEが自然に混ざっている）', () => {
+      const dopaIds = ACHIEVEMENT_DEFS.filter((d) => d.category === 'dopa').map((d) => d.id)
+      expect(dopaIds).toEqual([
+        'dopaTypeReason',
+        'dopaTypeImpatient',
+        'dopa50',
+        'dopaTypeReflex',
+        'dopaTypeWild',
+        'dopa100',
+        'dopaTypeAwakened',
+        'dopa120',
+        'dopa150',
+        'dopa200',
+        'dopaTypeAce',
+        'dopa250',
+        'dopa300',
+        'dopaTypeLegend',
+        'dopa350',
+        'dopa400',
+        'dopaTypeKing',
+        'dopa450',
+        'dopa490',
+        'dopa500',
+      ])
+    })
+
+    it('ENDLESS: 初級→中級→上級の順、各難易度内では必要STREAKの完全昇順', () => {
+      const endlessDefs = ACHIEVEMENT_DEFS.filter((d) => d.category === 'endless')
+      const difficulties = endlessDefs.map((d) => d.endlessDifficulty)
+      const firstIntermediateIndex = difficulties.indexOf('intermediate')
+      const firstAdvancedIndex = difficulties.indexOf('advanced')
+      expect(difficulties.slice(0, firstIntermediateIndex).every((d) => d === 'beginner')).toBe(true)
+      expect(difficulties.slice(firstIntermediateIndex, firstAdvancedIndex).every((d) => d === 'intermediate')).toBe(true)
+      expect(difficulties.slice(firstAdvancedIndex).every((d) => d === 'advanced')).toBe(true)
+
+      for (const difficulty of ['beginner', 'intermediate', 'advanced'] as const) {
+        const thresholds = endlessDefs
+          .filter((d) => d.endlessDifficulty === difficulty)
+          .map((d) => (d.unlockCondition.type === 'endlessStreak' ? d.unlockCondition.threshold : -1))
+        const sorted = [...thresholds].sort((a, b) => a - b)
+        expect(thresholds).toEqual(sorted)
+      }
+    })
+
+    it('Challenge: 初挑戦系→勝利系→防衛系→回数系→高難度/特殊の順。NORMALとENDLESS Challengeが混ざっていない', () => {
+      const challengeIds = ACHIEVEMENT_DEFS.filter((d) => d.category === 'challenge').map((d) => d.id)
+      expect(challengeIds).toEqual([
+        'challengeCreatedFirst',
+        'challengeParticipatedFirst',
+        'challengeWin1',
+        'challengeWin5',
+        'challengeWin20',
+        'challengeWin50',
+        'challengeDefense1',
+        'challengeDefense10',
+        'challengeDefense25',
+        'challengeWanted10',
+        'endlessChallengeFirstWin',
+        'endlessChallengeFirstDefense',
+      ])
+    })
+
+    it('World Battle: 初勝利→累計勝利数（1/10/50/100/250の昇順）→連勝→特殊の順', () => {
+      const worldBattleIds = ACHIEVEMENT_DEFS.filter((d) => d.category === 'worldBattle').map((d) => d.id)
+      expect(worldBattleIds).toEqual([
+        'worldBattleFirstPlay',
+        'worldBattleWin1',
+        'worldBattleWin10',
+        'worldBattleWin25',
+        'worldBattleWin50',
+        'worldBattleWin100',
+        'worldBattleWin250',
+        'worldBattleStreak3',
+        'worldBattleStreak5',
+        'worldBattleStreak10',
+        'worldBattleStreak20',
+        'worldBattleFirstDraw',
+      ])
+    })
+
+    it('Friend: 初回→回数・継続の昇順', () => {
+      const friendIds = ACHIEVEMENT_DEFS.filter((d) => d.category === 'friendBattle').map((d) => d.id)
+      expect(friendIds).toEqual(['friendBattleFirstPlay', 'friendBattlePlay10', 'friendBattlePlay50', 'friendBattlePlay100'])
+    })
+
+    it('Grind: 数値条件の完全昇順（10/50/100/500/1000）', () => {
+      const grindIds = ACHIEVEMENT_DEFS.filter((d) => d.category === 'grind').map((d) => d.id)
+      expect(grindIds).toEqual(['grindPlay10', 'grindPlay50', 'grindPlay100', 'grindPlay500', 'grindPlay1000'])
+    })
+
+    it('Special: SECRET（鏡写し・大逆転）が最後にまとまっている（SECRETの存在を隠す仕様と矛盾しない）', () => {
+      const specialDefs = ACHIEVEMENT_DEFS.filter((d) => d.category === 'special')
+      const secretIndices = specialDefs.map((d, i) => (d.secret ? i : -1)).filter((i) => i >= 0)
+      const lastNonSecretIndex = Math.max(...specialDefs.map((d, i) => (!d.secret ? i : -1)))
+      expect(Math.min(...secretIndices)).toBeGreaterThan(lastNonSecretIndex)
+    })
+  })
 })
 
 describe('TITLE_DEFS (Ver.6 Phase 10: Achievementと1対1の68個 → item 104-109で76個)', () => {

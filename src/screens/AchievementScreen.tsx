@@ -5,7 +5,10 @@ import { TitleSlotPickerModal } from '../components/TitleSlotPickerModal'
 import { ACHIEVEMENT_DEFS } from '../config/achievements'
 import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
 import { ENDLESS_THEME } from '../config/endlessTheme'
+import { getSecretTheme, getTitleRarityTheme } from '../config/titleRarityTheme'
 import { TITLE_DEFS_BY_ID } from '../config/titles'
+import { AchievementQaPanel } from '../dev/AchievementQaPanel'
+import { isAchievementQaPanelRequested } from '../dev/overdrivePreview'
 import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import { getUnlockedAchievements, getUnseenUnlockedAchievementIds, markAllUnlockedAchievementsSeen } from '../utils/achievementStorage'
 import { trackTitleEquipped } from '../utils/analytics'
@@ -167,6 +170,44 @@ export function AchievementScreen({ onBack, onHome }: Props) {
             const hidden = def.secret && !unlocked
             const isNew = unlocked && newIds.has(def.id)
 
+            /**
+             * 次フェーズ（item 117-119、リリース前最終デザインラウンド）: SECRET
+             * （鏡写し・大逆転等）は通常rarity体系（COMMON〜MYTHIC）とは完全に別物として
+             * 扱う——MYTHICの上ではなく、完全に別の専用テーマ（indigo/紫、MYTHICの暖色の
+             * 虹とは被らない）。それ以外はTitleDef.rarity（5段階）をロック中/解放後で
+             * 出し分ける。ロック中でも「これはどのrarityっぽいか」が分かる程度に暗い枠色・
+             * 背景色だけを見せ、発光・pulseは解放後にだけ出す。
+             */
+            const isSecret = def.secret === true
+            const secretTheme = isSecret ? getSecretTheme() : null
+            const rarityTheme = !isSecret && title ? getTitleRarityTheme(title.rarity) : null
+            const rarityLabel = isSecret ? 'SECRET' : rarityTheme?.label
+
+            let cardBorderClass: string
+            let cardBackgroundClass: string
+            let cardGlowClass = ''
+            let cardPulseClass = ''
+            if (isSecret) {
+              cardBorderClass = unlocked ? secretTheme!.unlockedBorderClass : secretTheme!.lockedBorderClass
+              cardBackgroundClass = unlocked ? secretTheme!.unlockedBackgroundClass : secretTheme!.lockedBackgroundClass
+              if (unlocked) {
+                cardGlowClass = secretTheme!.unlockedGlowClass
+                cardPulseClass = secretTheme!.unlockedPulseClass
+              }
+            } else if (rarityTheme) {
+              cardBorderClass = unlocked ? rarityTheme.badgeBorderClass : rarityTheme.lockedBorderClass
+              // MYTHICのbadgeBorderClassはそれ自体に虹グラデーション背景を含む（TitleBadge.tsxと
+              // 同じ定義の再利用）ため、badgeBackgroundClassを重ねて競合させない。
+              cardBackgroundClass = unlocked ? (title!.rarity === 'mythic' ? '' : rarityTheme.badgeBackgroundClass) : rarityTheme.lockedBackgroundClass
+              if (unlocked) {
+                cardGlowClass = rarityTheme.badgeGlowClass
+                cardPulseClass = rarityTheme.badgePulseClass
+              }
+            } else {
+              cardBorderClass = unlocked ? 'border-white/20' : 'border-white/10'
+              cardBackgroundClass = unlocked ? 'bg-white/10' : 'bg-white/[0.03]'
+            }
+
             return (
               <div
                 key={def.id}
@@ -176,13 +217,7 @@ export function AchievementScreen({ onBack, onHome }: Props) {
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') setDetailId(def.id)
                 }}
-                className={`relative flex flex-col gap-1 rounded-2xl px-3 py-2.5 text-left active:scale-[0.98] ${
-                  unlocked
-                    ? def.rarity === 'rare'
-                      ? 'border border-amber-300/50 bg-gradient-to-b from-amber-400/15 to-fuchsia-500/10'
-                      : 'border border-amber-300/30 bg-amber-400/10'
-                    : 'border border-white/10 bg-white/[0.03]'
-                }`}
+                className={`relative flex flex-col gap-1 rounded-2xl border px-3 py-2.5 text-left active:scale-[0.98] ${cardBorderClass} ${cardBackgroundClass} ${cardGlowClass} ${cardPulseClass}`}
               >
                 {isNew && (
                   <span className="absolute -right-1.5 -top-1.5 rounded-full bg-rose-500 px-1.5 py-0.5 text-[8px] font-black text-white shadow">
@@ -190,19 +225,52 @@ export function AchievementScreen({ onBack, onHome }: Props) {
                   </span>
                 )}
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-sm" aria-hidden="true">
-                    {unlocked ? (def.rarity === 'rare' ? '✨' : '🏆') : '🔒'}
-                  </span>
-                  {difficultyTheme && (
-                    <span className={`shrink-0 rounded-full bg-white/5 px-1.5 py-0.5 text-[9px] font-black ${difficultyTheme.textClass}`}>
-                      {ENDLESS_DIFFICULTY_LABEL[difficultyTheme.id]}
+                  <span className="flex min-w-0 items-center gap-1">
+                    <span className="shrink-0 text-sm" aria-hidden="true">
+                      {unlocked ? (isSecret ? '✨' : title?.rarity === 'mythic' || title?.rarity === 'legendary' ? '👑' : '🏆') : '🔒'}
                     </span>
-                  )}
-                  {battleModeLabel && (
-                    <span className="shrink-0 rounded-full bg-white/5 px-1.5 py-0.5 text-[9px] font-black text-white/50">{battleModeLabel}</span>
-                  )}
+                    {rarityLabel && (
+                      <span
+                        className={`shrink-0 truncate rounded-full px-1.5 py-0.5 text-[8px] font-black tracking-widest ${
+                          isSecret
+                            ? unlocked
+                              ? 'bg-indigo-500/20 text-indigo-200'
+                              : 'bg-black/40 text-indigo-300/40'
+                            : unlocked
+                              ? `bg-black/20 ${rarityTheme!.badgeTextClass}`
+                              : `bg-black/20 ${rarityTheme!.lockedTextClass}`
+                        }`}
+                      >
+                        {rarityLabel}
+                      </span>
+                    )}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1">
+                    {difficultyTheme && (
+                      <span className={`shrink-0 rounded-full bg-white/5 px-1.5 py-0.5 text-[9px] font-black ${difficultyTheme.textClass}`}>
+                        {ENDLESS_DIFFICULTY_LABEL[difficultyTheme.id]}
+                      </span>
+                    )}
+                    {battleModeLabel && (
+                      <span className="shrink-0 rounded-full bg-white/5 px-1.5 py-0.5 text-[9px] font-black text-white/50">{battleModeLabel}</span>
+                    )}
+                  </span>
                 </div>
-                <p className={`text-xs font-black leading-tight ${unlocked ? 'text-amber-200' : 'text-white/50'}`}>
+                <p
+                  className={`text-xs font-black leading-tight ${
+                    isSecret
+                      ? unlocked
+                        ? secretTheme!.unlockedTextClass
+                        : secretTheme!.lockedTextClass
+                      : unlocked
+                        ? rarityTheme
+                          ? rarityTheme.badgeTextClass
+                          : 'text-amber-200'
+                        : rarityTheme
+                          ? rarityTheme.lockedTextClass
+                          : 'text-white/50'
+                  }`}
+                >
                   {hidden ? '？？？' : def.name}
                 </p>
                 <p className="text-[10px] leading-snug text-white/40">{hidden ? '？？？' : def.description}</p>
@@ -236,6 +304,7 @@ export function AchievementScreen({ onBack, onHome }: Props) {
           onClose={() => setPickerTitleId(null)}
         />
       )}
+      {isAchievementQaPanelRequested() && <AchievementQaPanel onChange={() => setRevision((r) => r + 1)} />}
     </div>
   )
 }

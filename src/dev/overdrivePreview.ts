@@ -83,3 +83,14 @@ export function isHeartQaPanelRequested(): boolean {
 export function isPassQaPanelRequested(): boolean {
   return previewParam() === 'pass'
 }
+
+/**
+ * 次フェーズ（ゲーム機能クローズラウンド、item 116: リリース前最終デザインラウンド）:
+ * ?preview=achievement — Achievement/Title画面に、全解除/全ロック/SECRET解除/
+ * SECRETロック/rarity別解除/DOPA PASS切り替えができる統合QAパネルを重ねて表示する。
+ * 他のQAパネルと同じ仕組み（previewParam経由、__DOPAGAKI_PREVIEW_ENABLED__がfalseな
+ * Productionビルドでは常にfalseを返す）で、Productionに露出することはない。
+ */
+export function isAchievementQaPanelRequested(): boolean {
+  return previewParam() === 'achievement'
+}

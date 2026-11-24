@@ -159,9 +159,42 @@ const GRIND_ACHIEVEMENTS: AchievementDef[] = [
   { id: 'grindPlay1000', name: 'ドパガキ住民', description: '公式プレイを通算1000回行う', unlockCondition: { type: 'officialPlayCount', threshold: 1000 }, category: 'grind', rarity: 'rare' },
 ]
 
+/**
+ * 次フェーズ（item 120-122、リリース前最終デザインラウンド）: 'dopa'カテゴリの表示順を
+ * 「解除条件のDOPA%で完全昇順」へ整理する。NORMAL_ACHIEVEMENTS（既存12個）と
+ * DOPA_TYPE_ACHIEVEMENTS（新規8個）を実装順（既存→追加）のまま連結するのは禁止
+ * （ユーザー指示）——同じ%帯の既存マイルストーンとDOPA TYPEを自然に混ぜた1本の
+ * 昇順リストに並べ替える。各defの中身（id/name/description/unlockCondition/rarity）は
+ * 一切変更せず、ここでは並び順だけを変える。
+ */
+const NORMAL_BY_ID = Object.fromEntries(NORMAL_ACHIEVEMENTS.map((d) => [d.id, d])) as Record<string, AchievementDef>
+const DOPA_TYPE_BY_ID = Object.fromEntries(DOPA_TYPE_ACHIEVEMENTS.map((d) => [d.id, d])) as Record<string, AchievementDef>
+
+const DOPA_CATEGORY_ORDERED: AchievementDef[] = [
+  DOPA_TYPE_BY_ID.dopaTypeReason, // 0-24%
+  DOPA_TYPE_BY_ID.dopaTypeImpatient, // 25-49%
+  NORMAL_BY_ID.dopa50, // 50%
+  DOPA_TYPE_BY_ID.dopaTypeReflex, // 50-79%
+  DOPA_TYPE_BY_ID.dopaTypeWild, // 80-99%
+  NORMAL_BY_ID.dopa100, // 100%
+  DOPA_TYPE_BY_ID.dopaTypeAwakened, // 100-199%
+  NORMAL_BY_ID.dopa120, // 120%
+  NORMAL_BY_ID.dopa150, // 150%
+  NORMAL_BY_ID.dopa200, // 200%
+  DOPA_TYPE_BY_ID.dopaTypeAce, // 200-299%
+  NORMAL_BY_ID.dopa250, // 250%
+  NORMAL_BY_ID.dopa300, // 300%
+  DOPA_TYPE_BY_ID.dopaTypeLegend, // 300-399%
+  NORMAL_BY_ID.dopa350, // 350%
+  NORMAL_BY_ID.dopa400, // 400%
+  DOPA_TYPE_BY_ID.dopaTypeKing, // 400-499%
+  NORMAL_BY_ID.dopa450, // 450%
+  NORMAL_BY_ID.dopa490, // 490%（FINAL QUESTION）
+  NORMAL_BY_ID.dopa500, // 500%
+]
+
 export const ACHIEVEMENT_DEFS: AchievementDef[] = [
-  ...NORMAL_ACHIEVEMENTS,
-  ...DOPA_TYPE_ACHIEVEMENTS,
+  ...DOPA_CATEGORY_ORDERED,
   ...ENDLESS_ACHIEVEMENTS,
   ...CHALLENGE_ACHIEVEMENTS,
   ...WORLD_BATTLE_ACHIEVEMENTS,

@@ -870,6 +870,30 @@ body {
 }
 
 /**
+ * 次フェーズ（item 117-119、リリース前最終デザインラウンド）: SECRET専用の異質な明滅。
+ * MYTHIC（anim-rarity-rainbow-slow、暖色の虹が流れる）とは別系統——色は変えず
+ * （config/titleRarityTheme.tsのSECRET配色をそのまま使う）、やや不規則に感じる
+ * 明滅速度の緩急だけで「普通のrarityではない」異質さを出す。常時ギラギラはしない
+ * （周期4.4秒、ゆっくり）。
+ */
+@keyframes rarity-secret-slow {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  38% {
+    opacity: 0.65;
+  }
+  62% {
+    opacity: 0.85;
+  }
+}
+
+.anim-rarity-secret-slow {
+  animation: rarity-secret-slow 4.4s ease-in-out infinite;
+}
+
+/**
  * Ver.6 Phase 1（再設計版）: prefers-reduced-motionへの最低限の配慮。
  * すべてのCSSアニメーション/トランジションをほぼ即時完了させる（視覚的な動きだけを
  * 止める）。ゲームの状態遷移タイミングはJS側のsetTimeout（CHECKPOINT_300_MS等）で
