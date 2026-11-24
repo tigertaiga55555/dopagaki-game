@@ -4,6 +4,7 @@ import { HeartDisplay } from '../components/HeartDisplay'
 import { AD_START_SCREEN, ADS_ENABLED_V6 } from '../config/ads'
 import { HOME_MODES, type HomeModeId } from '../config/homeConfig'
 import { TITLE_TEXT } from '../config/messagesV4'
+import { AchievementQaPanel } from '../dev/AchievementQaPanel'
 import { HeartQaPanel } from '../dev/HeartQaPanel'
 import { PassQaPanel } from '../dev/PassQaPanel'
 import { isHeartQaPanelRequested, isPassQaPanelRequested } from '../dev/overdrivePreview'
@@ -148,6 +149,18 @@ export function TitleScreen({
       <div aria-hidden="true" className="flex-[1]" />
       {isHeartQaPanelRequested() && <HeartQaPanel onSet={(count) => qaSetHeartCount(count)} />}
       {isPassQaPanelRequested() && <PassQaPanel onChange={() => setPassRevision((r) => r + 1)} />}
+      {/* 次フェーズ（item 127）: 前ラウンドで実装したAchievement/Title QAパネル
+          （AchievementQaPanel.tsx）は?preview=achievementというURLクエリ経由でしか
+          開けず、実機Preview上に発見可能な入口が無かった。ここではHeartQaPanel/
+          PassQaPanelと同じ__DOPAGAKI_PREVIEW_ENABLED__ガード（Productionビルドでは
+          常にfalseになる定数）を直接使い、クエリパラメータなしでHome画面に小さな
+          「🔧 QA」入口を常設する。新しいガードロジックは作らず、既存の
+          __DOPAGAKI_PREVIEW_ENABLED__と既存のAchievementQaPanel/achievementQaRepository
+          をそのまま再利用しているため、Productionでの構造的無効化（ボタン非表示＋
+          QA関数自体がno-op）は従来どおり保たれる。 */}
+      {__DOPAGAKI_PREVIEW_ENABLED__ && (
+        <AchievementQaPanel label="🔧 QA" positionClassName="bottom-16 right-3" onChange={() => setPassRevision((r) => r + 1)} />
+      )}
     </div>
   )
 }

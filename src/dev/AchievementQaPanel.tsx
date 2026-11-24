@@ -12,6 +12,18 @@ import type { TitleRarity } from '../types'
 interface Props {
   /** 状態を変更した直後に呼ぶ。呼び出し元（AchievementScreen.tsx）がrevisionを更新して、画面を再評価させる。 */
   onChange: () => void
+  /**
+   * 次フェーズ（item 127: Home画面への入口追加）: 閉じている時のトグルボタンの表示文言。
+   * 省略時は従来どおり'🔧 Title'（AchievementScreen.tsx用）。Home画面（TitleScreen.tsx）
+   * からは'🔧 QA'として、より一般的な入口であることが分かるようにする。
+   */
+  label?: string
+  /**
+   * 次フェーズ（item 127）: パネル自体の固定位置クラス。省略時は従来どおり'bottom-3 right-3'。
+   * Home画面ではHeartQaPanel（?preview=heart、同じbottom-3 right-3）と同時に開かれた場合の
+   * 重なりを避けるため、呼び出し元から別の位置を指定できるようにする。
+   */
+  positionClassName?: string
 }
 
 const RARITY_BUTTONS: { rarity: TitleRarity; label: string }[] = [
@@ -32,7 +44,7 @@ const RARITY_BUTTONS: { rarity: TitleRarity; label: string }[] = [
  * __DOPAGAKI_PREVIEW_ENABLED__がfalseなら即returnする二重の安全策にしている
  * （UIを隠すだけでなく、機能自体がProductionビルドで構造的に無効）。
  */
-export function AchievementQaPanel({ onChange }: Props) {
+export function AchievementQaPanel({ onChange, label = '🔧 Title', positionClassName = 'bottom-3 right-3' }: Props) {
   const [open, setOpen] = useState(false)
   const hasPass = qaLocalEntitlementRepository.getPassState().owned
 
@@ -42,7 +54,7 @@ export function AchievementQaPanel({ onChange }: Props) {
   }
 
   return (
-    <div className="fixed bottom-3 right-3 z-[80] flex flex-col items-end gap-2">
+    <div className={`fixed ${positionClassName} z-[80] flex flex-col items-end gap-2`}>
       {open && (
         <div className="anim-pop w-60 rounded-xl border border-fuchsia-400/40 bg-black/90 p-3 shadow-xl">
           <p className="mb-2 text-[10px] font-black tracking-widest text-fuchsia-300">QA: Achievement / Title</p>
@@ -119,7 +131,7 @@ export function AchievementQaPanel({ onChange }: Props) {
         onClick={() => setOpen((v) => !v)}
         className="rounded-full bg-fuchsia-600/90 px-3 py-1.5 text-[11px] font-black text-white shadow-lg active:scale-90"
       >
-        {open ? 'QA ×' : '🔧 Title'}
+        {open ? 'QA ×' : label}
       </button>
     </div>
   )
