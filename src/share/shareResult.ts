@@ -1,4 +1,5 @@
 import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
+import { getDopaTypeName } from '../config/dopaType'
 import { SHARE_HASHTAG } from '../config/messagesV4'
 import type { EndlessDifficulty } from '../types'
 
@@ -11,10 +12,13 @@ export type ShareResultInput =
  * config/messagesV4.ts buildShareTextと同じ「ドパガキ度○○％」トーン・SHARE_HASHTAGを
  * 1個だけ付与する規約）に揃えつつ、X専用の短い文面にする（既存のbuildShareTextは
  * 画像付き共有／Web Share API経路専用の、もっと長い文面のため使い回さない）。
+ *
+ * 次フェーズ（item 107、110）: DOPA RUSH（rush）はDOPA TYPE名（config/dopaType.tsの
+ * 単一定義）を必ず含める。「お前」表現は削除し、自然な「あなたは」に変更した。
  */
 export function buildXShareText(input: ShareResultInput): string {
   if (input.mode === 'rush') {
-    return `ドパガキ度${input.percent}％まで到達。お前は何％までいける？\n${SHARE_HASHTAG}`
+    return `ドパガキ度${input.percent}％まで到達。${getDopaTypeName(input.percent)}。あなたは何％までいける？\n${SHARE_HASHTAG}`
   }
   return `ENDLESS ${ENDLESS_DIFFICULTY_LABEL[input.difficulty]} ${input.streak} STREAK。どこまで耐えられる？\n${SHARE_HASHTAG}`
 }

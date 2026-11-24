@@ -1,5 +1,6 @@
 import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
 import { ENDLESS_THEME } from '../config/endlessTheme'
+import { getDopaTypeName } from '../config/dopaType'
 import { escapeHtml } from './ogpCard'
 import type { ChallengeMode } from '../challenge/types'
 import type { EndlessDifficulty } from '../types'
@@ -48,12 +49,19 @@ const RUSH_BORDER = 'linear-gradient(90deg, #d946ef, #9333ea)'
 const CHALLENGE_BG = 'linear-gradient(135deg, #330a0a 0%, #050208 75%)'
 const CHALLENGE_BORDER = 'linear-gradient(90deg, #ef4444, #f59e0b)'
 
-/** DOPA RUSH（通常結果シェア）。パーセントの数値を最も目立たせる。 */
+/**
+ * DOPA RUSH（通常結果シェア）。パーセントの数値を最も目立たせる。
+ * 次フェーズ（item 104-108、111）: DOPA%のすぐ下にDOPA TYPE名（config/dopaType.tsの
+ * 単一定義）を表示する——従来の固定文言「ドパガキ度 到達」をTYPE名で置き換える形にし、
+ * 「一目で分かる位置」に収めつつ行を増やさない。巨大なパーセント数値（260px）の直後に
+ * 補足文言を置くと詰まって見えることを#102で確認済みのため、ここでもmargin-topで
+ * 明示的な余白を確保する（配色・バッジ・フォント・紫黒金デザインは変更していない）。
+ */
 export function buildRushResultImageHtml(percent: number): string {
   const body = `<div style="display:flex;flex-direction:column;align-items:center;gap:22px;">
 ${pillBadge('DOPA RUSH', RUSH_BORDER)}
 <div style="display:flex;font-size:260px;font-weight:900;color:#fbbf24;line-height:1;">${percent}%</div>
-<div style="display:flex;font-size:40px;font-weight:900;color:#ffffff;">ドパガキ度 到達</div>
+<div style="display:flex;font-size:40px;font-weight:900;color:#ffffff;margin-top:10px;">${escapeHtml(getDopaTypeName(percent))}</div>
 <div style="display:flex;font-size:26px;font-weight:700;color:rgba(255,255,255,0.55);">ドパガキゲーム — 60秒の超高速ミニゲーム</div>
 </div>`
   return frame(RUSH_BORDER, RUSH_BG, body)

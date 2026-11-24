@@ -87,6 +87,17 @@ export function checkDopaPercentAchievements(newPercent: number): AchievementId[
   return unlockMatching((c) => c.type === 'dopaPercent' && newPercent >= c.threshold)
 }
 
+/**
+ * 次フェーズ（item 104-109）: DOPA TYPE（config/dopaType.tsの単一定義）の帯に実際に
+ * その結果が収まった場合だけ解除する——checkDopaPercentAchievements（以上なら全部解除の
+ * 累積判定）とは異なり、高いDOPA%を出したからといって下位TYPEを一括解除しない。
+ * 呼び出し元（resultEngineV4.ts）はcheckDopaPercentAchievementsと同じ3箇所から
+ * 同じfinalPercentで呼ぶ。
+ */
+export function checkDopaTypeBandAchievements(newPercent: number): AchievementId[] {
+  return unlockMatching((c) => c.type === 'dopaPercentBand' && newPercent >= c.min && newPercent <= c.max)
+}
+
 /** 到達したEndless連続正解数（newStreak）に基づき、指定difficultyの実績をすべて解除する。 */
 export function checkEndlessAchievements(difficulty: EndlessDifficulty, newStreak: number): AchievementId[] {
   return unlockMatching((c) => c.type === 'endlessStreak' && c.difficulty === difficulty && newStreak >= c.threshold)

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { shareResultViaWebShare } from './shareResult'
+import { buildXShareText, shareResultViaWebShare } from './shareResult'
 
 /**
  * 次フェーズ（ゲーム機能クローズラウンド、item 97-99）: 「結果を共有」
@@ -59,5 +59,30 @@ describe('shareResultViaWebShare（item 97-99: OSの共有シートへ結果テ�
     const outcome = await shareResultViaWebShare({ mode: 'rush', percent: 10, resultId: 'rid-5', shareUrl: 'https://example.com/s/rid-5' })
 
     expect(outcome).toBe('failed')
+  })
+})
+
+describe('buildXShareText（item 107, 110: DOPA TYPE名を必ず含める／「お前」表現を削除）', () => {
+  it('DOPA RUSH: DOPA TYPE名（80-99%帯=野生型ドパガキ）を含み、「お前」は含まない', () => {
+    const text = buildXShareText({ mode: 'rush', percent: 92, resultId: 'rid', shareUrl: 'https://example.com/s/rid' })
+    expect(text).toContain('92％')
+    expect(text).toContain('野生型ドパガキ')
+    expect(text).not.toContain('お前')
+    expect(text).toContain('あなたは')
+  })
+
+  it.each([
+    [10, '理性残存型ドパガキ'],
+    [300, '伝説のドパガキ'],
+    [500, 'ドパガキの神'],
+  ])('percent=%i → %sを含む', (percent, typeName) => {
+    const text = buildXShareText({ mode: 'rush', percent, resultId: 'rid', shareUrl: 'https://example.com/s/rid' })
+    expect(text).toContain(typeName)
+  })
+
+  it('ENDLESS: 「お前」を含まない（DOPA TYPEは追加しない、item 114で現状維持）', () => {
+    const text = buildXShareText({ mode: 'endless', difficulty: 'beginner', streak: 5, resultId: 'rid', shareUrl: 'https://example.com/s/rid' })
+    expect(text).not.toContain('お前')
+    expect(text).not.toContain('型ドパガキ')
   })
 })

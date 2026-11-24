@@ -30,6 +30,13 @@ describe('buildResultOgpCopy（item 82: 実際の数値入りタイトル/説明
     expect(copy.description).toContain('428')
   })
 
+  it('item 107-108, 110: DOPA RUSHの説明文にDOPA TYPE名を含み、「お前」は含まない', () => {
+    const copy = buildResultOgpCopy(buildRushSharePayload(92, 'nonce'))
+    expect(copy.description).toContain('野生型ドパガキ')
+    expect(copy.description).not.toContain('お前')
+    expect(copy.title).not.toContain('お前')
+  })
+
   it.each(['beginner', 'intermediate', 'advanced'] as const)('ENDLESS %s: 難易度ラベル・STREAKを含むタイトル・説明文を生成する', (difficulty) => {
     const copy = buildResultOgpCopy(buildEndlessSharePayload(difficulty, 23, 'nonce'))
     expect(copy.title).toContain('23')

@@ -1,4 +1,5 @@
-import type { TitleDef } from '../types'
+import { NEW_DOPA_TYPE_TIERS } from './dopaType'
+import type { AchievementId, TitleDef, TitleRarity } from '../types'
 
 /**
  * Ver.6 Phase 10（実績拡張ラウンド）: Title（称号）の定義。計68個、各Achievementと1対1
@@ -36,7 +37,36 @@ export const TITLE_DEFS: TitleDef[] = [
   { id: 'dopa400', name: '危険区域の住人', description: 'DOPA度400%に到達した証', unlockedByAchievementId: 'dopa400', rarity: 'epic' },
   { id: 'dopa450', name: 'あと50が遠い', description: 'DOPA度450%に到達した証', unlockedByAchievementId: 'dopa450', rarity: 'legendary' },
   { id: 'dopa490', name: '最後の一問', description: '500%チャレンジのFINAL QUESTION（490%）に到達した証', unlockedByAchievementId: 'dopa490', rarity: 'legendary' },
-  { id: 'dopa500', name: '真・ドパガキ', description: 'DOPA度500%に到達した証', unlockedByAchievementId: 'dopa500', rarity: 'mythic' },
+  // 次フェーズ（item 104-105）: DOPA TYPE正式名称の単一定義（config/dopaType.ts）に合わせ、
+  // 「真・ドパガキ」から「ドパガキの神」へ改名した（id/unlockedByAchievementId/rarityは
+  // 一切変更していない）。
+  { id: 'dopa500', name: 'ドパガキの神', description: 'DOPA度500%に到達した証', unlockedByAchievementId: 'dopa500', rarity: 'mythic' },
+
+  /**
+   * 次フェーズ（item 104-109）: DOPA TYPE（config/dopaType.tsの単一定義）の8帯に対応する
+   * 新規Title。レアリティは近い旧DOPA%閾値Title（上記dopa50〜dopa500）の並びに揃えた
+   * （0〜199%帯はdopa50/100/120/150と同じcommon、200〜299はdopa200/250と同じrare、
+   * 300〜399はdopa300/350と同じepic、400〜499はdopa400/450の中間としてlegendary）。
+   */
+  ...NEW_DOPA_TYPE_TIERS.map((tier): TitleDef => {
+    const rarityById: Record<string, TitleRarity> = {
+      dopaTypeReason: 'common',
+      dopaTypeImpatient: 'common',
+      dopaTypeReflex: 'common',
+      dopaTypeWild: 'common',
+      dopaTypeAwakened: 'common',
+      dopaTypeAce: 'rare',
+      dopaTypeLegend: 'epic',
+      dopaTypeKing: 'legendary',
+    }
+    return {
+      id: tier.id,
+      name: tier.name,
+      description: `公式DOPA RUSHでDOPA度${tier.min}〜${tier.max}%の結果を出した証`,
+      unlockedByAchievementId: tier.id as AchievementId,
+      rarity: rarityById[tier.id],
+    }
+  }),
 
   // ENDLESS
   { id: 'endlessBeginner10', name: '助走完了', description: 'ENDLESS初級で10連続正解した証', unlockedByAchievementId: 'endlessBeginner10', rarity: 'common' },

@@ -19,6 +19,15 @@ describe('buildRushResultImageHtml（item 90: DOPA RUSH動的結果画像）', (
     const html = buildRushResultImageHtml(100)
     expect(html).toContain('display:flex')
   })
+
+  it.each([
+    [10, '理性残存型ドパガキ'],
+    [92, '野生型ドパガキ'],
+    [300, '伝説のドパガキ'],
+  ])('item 104-108, 111: DOPA%のすぐ下にDOPA TYPE名（percent=%i→%s）を含む', (percent, typeName) => {
+    const html = buildRushResultImageHtml(percent)
+    expect(html).toContain(typeName)
+  })
 })
 
 describe('buildEndlessResultImageHtml（item 91: ENDLESS動的結果画像）', () => {

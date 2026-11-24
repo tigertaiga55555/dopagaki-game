@@ -479,6 +479,21 @@ export type AchievementId =
   | 'dopa450'
   | 'dopa490'
   | 'dopa500'
+  /**
+   * 次フェーズ（ゲーム機能クローズラウンド、item 104-109）: DOPA TYPE（config/dopaType.ts
+   * の単一定義）の帯のうち、500%未満の8帯に対応する新規実績。500%自体はdopa500
+   * （「真・ドパガキ」→「ドパガキの神」へ改名）で対応するため、新規idはここには含めない。
+   * 実際にその帯の結果を出した時だけ解除する（高いDOPA%を出したからといって
+   * 下位TYPEを一括解除しない——achievementStorage.tsのcheckDopaTypeBandAchievements参照）。
+   */
+  | 'dopaTypeReason'
+  | 'dopaTypeImpatient'
+  | 'dopaTypeReflex'
+  | 'dopaTypeWild'
+  | 'dopaTypeAwakened'
+  | 'dopaTypeAce'
+  | 'dopaTypeLegend'
+  | 'dopaTypeKing'
   | 'endlessBeginner10'
   | 'endlessBeginner25'
   | 'endlessBeginner50'
@@ -582,6 +597,12 @@ export type AchievementId =
  */
 export type AchievementUnlockCondition =
   | { type: 'dopaPercent'; threshold: number }
+  /**
+   * 次フェーズ（item 104-109）: DOPA TYPE（config/dopaType.tsの単一定義）の帯に
+   * 実際にその結果が収まった場合だけ解除する（min以上かつmax以下。dopaPercentの
+   * ような「以上なら全部解除」の累積判定とは異なる——下位TYPEを一括解除しない）。
+   */
+  | { type: 'dopaPercentBand'; min: number; max: number }
   | { type: 'endlessStreak'; difficulty: EndlessDifficulty; threshold: number }
   | { type: 'challenge500FinalQuestion' }
   /** Ver.6 Phase 8（ENDLESS Challenge）: 挑戦者として初めてENDLESS ChallengeにWINした。 */

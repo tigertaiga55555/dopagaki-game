@@ -9,6 +9,7 @@ import {
   checkChallengeWantedAchievement,
   checkChallengeWinAchievements,
   checkDopaPercentAchievements,
+  checkDopaTypeBandAchievements,
   checkEndlessAchievements,
   checkEndlessChallengeDefenseAchievement,
   checkEndlessChallengeWinAchievement,
@@ -420,5 +421,71 @@ describe('NEW状態の管理 (Ver.6 Phase 10: Achievement画面のNEWバッジ)'
     markAllUnlockedAchievementsSeen()
     checkDopaPercentAchievements(120)
     expect(getUnseenUnlockedAchievementIds()).toEqual(['dopa120'])
+  })
+})
+
+/**
+ * 次フェーズ（ゲーム機能クローズラウンド、item 104-109）: DOPA TYPE（帯）実績。
+ * checkDopaPercentAchievements（以上なら全部解除の累積判定）とは異なり、実際にその帯の
+ * 結果を出した時だけ解除され、高いDOPA%を出したからといって下位TYPEを一括解除しない
+ * ——ユーザー指示どおりの判定方式であることをここで直接確認する。
+ */
+describe('checkDopaTypeBandAchievements（item 104-109: DOPA TYPEは帯だけで判定し、累積解除しない）', () => {
+  beforeEach(() => {
+    installFakeLocalStorage()
+  })
+
+  it('80-99%帯の結果（92%）を出すと、野生型（dopaTypeWild）だけが解除される——下位帯は解除されない', () => {
+    const unlocked = checkDopaTypeBandAchievements(92)
+    expect(unlocked).toEqual(['dopaTypeWild'])
+    expect(isAchievementUnlocked('dopaTypeWild')).toBe(true)
+    expect(isAchievementUnlocked('dopaTypeReason')).toBe(false)
+    expect(isAchievementUnlocked('dopaTypeImpatient')).toBe(false)
+    expect(isAchievementUnlocked('dopaTypeReflex')).toBe(false)
+  })
+
+  it('高いDOPA%（300%）を出しても、下位TYPE（理性残存型等）は一切解除されない', () => {
+    checkDopaTypeBandAchievements(300)
+    expect(isAchievementUnlocked('dopaTypeLegend')).toBe(true)
+    expect(isAchievementUnlocked('dopaTypeReason')).toBe(false)
+    expect(isAchievementUnlocked('dopaTypeImpatient')).toBe(false)
+    expect(isAchievementUnlocked('dopaTypeReflex')).toBe(false)
+    expect(isAchievementUnlocked('dopaTypeWild')).toBe(false)
+    expect(isAchievementUnlocked('dopaTypeAwakened')).toBe(false)
+    expect(isAchievementUnlocked('dopaTypeAce')).toBe(false)
+    expect(isAchievementUnlocked('dopaTypeKing')).toBe(false)
+  })
+
+  it('同じ帯に複数回到達しても、2回目以降は新規解除として返らない（重複解除防止）', () => {
+    checkDopaTypeBandAchievements(10)
+    const second = checkDopaTypeBandAchievements(15)
+    expect(second).toEqual([])
+  })
+
+  it('500%は既存のdopa500（checkDopaPercentAchievements経由、ドパガキの神に改名済み）で解除され、dopaPercentBand側には500%用の新規実績は存在しない', () => {
+    const unlocked = checkDopaTypeBandAchievements(500)
+    expect(unlocked).toEqual([])
+  })
+
+  it.each([
+    [0, 'dopaTypeReason'],
+    [24, 'dopaTypeReason'],
+    [25, 'dopaTypeImpatient'],
+    [49, 'dopaTypeImpatient'],
+    [50, 'dopaTypeReflex'],
+    [79, 'dopaTypeReflex'],
+    [80, 'dopaTypeWild'],
+    [99, 'dopaTypeWild'],
+    [100, 'dopaTypeAwakened'],
+    [199, 'dopaTypeAwakened'],
+    [200, 'dopaTypeAce'],
+    [299, 'dopaTypeAce'],
+    [300, 'dopaTypeLegend'],
+    [399, 'dopaTypeLegend'],
+    [400, 'dopaTypeKing'],
+    [499, 'dopaTypeKing'],
+  ])('percent=%i → %sだけが解除される', (percent, expectedId) => {
+    const unlocked = checkDopaTypeBandAchievements(percent)
+    expect(unlocked).toEqual([expectedId])
   })
 })

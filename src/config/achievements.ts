@@ -1,3 +1,4 @@
+import { NEW_DOPA_TYPE_TIERS } from './dopaType'
 import type { AchievementDef, AchievementId } from '../types'
 
 /**
@@ -35,8 +36,28 @@ const NORMAL_ACHIEVEMENTS: AchievementDef[] = [
     unlockCondition: { type: 'challenge500FinalQuestion' },
     category: 'dopa',
   },
-  { id: 'dopa500', name: '真・ドパガキ', description: '公式DOPA RUSHでDOPA度500%に到達する', unlockCondition: { type: 'dopaPercent', threshold: 500 }, category: 'dopa', rarity: 'rare' },
+  // 次フェーズ（item 104-105）: DOPA TYPE正式名称の単一定義（config/dopaType.ts）に合わせ、
+  // 「真・ドパガキ」から「ドパガキの神」へ改名した（新規Achievement重複作成はしない。
+  // id/unlockCondition/rarityは一切変更していないため、既存ユーザーの解除済み状態への影響は無い）。
+  { id: 'dopa500', name: 'ドパガキの神', description: '公式DOPA RUSHでDOPA度500%に到達する', unlockCondition: { type: 'dopaPercent', threshold: 500 }, category: 'dopa', rarity: 'rare' },
 ]
+
+/**
+ * 次フェーズ（item 104-109）: DOPA TYPE（config/dopaType.tsの単一定義）の8帯に対応する
+ * 新規実績。各TYPEの該当DOPA%帯に実際にその結果が収まった場合だけ解除する
+ * （dopaPercentBand、achievementStorage.tsのcheckDopaTypeBandAchievements参照——
+ * 既存のdopaPercent系「以上なら全部解除」の累積判定とは異なり、高いDOPA%を出した
+ * からといって下位TYPEを一括解除しない）。500%用は追加しない（既存dopa500の改名で対応済み）。
+ */
+const DOPA_TYPE_ACHIEVEMENTS: AchievementDef[] = NEW_DOPA_TYPE_TIERS.map(
+  (tier): AchievementDef => ({
+    id: tier.id as AchievementId,
+    name: tier.name,
+    description: `公式DOPA RUSHでDOPA度${tier.min}〜${tier.max}%の結果を出す`,
+    unlockCondition: { type: 'dopaPercentBand', min: tier.min, max: tier.max },
+    category: 'dopa',
+  }),
+)
 
 const ENDLESS_ACHIEVEMENTS: AchievementDef[] = [
   { id: 'endlessBeginner10', name: '助走完了', description: 'ENDLESS初級で10連続正解する', unlockCondition: { type: 'endlessStreak', difficulty: 'beginner', threshold: 10 }, category: 'endless', endlessDifficulty: 'beginner' },
@@ -140,6 +161,7 @@ const GRIND_ACHIEVEMENTS: AchievementDef[] = [
 
 export const ACHIEVEMENT_DEFS: AchievementDef[] = [
   ...NORMAL_ACHIEVEMENTS,
+  ...DOPA_TYPE_ACHIEVEMENTS,
   ...ENDLESS_ACHIEVEMENTS,
   ...CHALLENGE_ACHIEVEMENTS,
   ...WORLD_BATTLE_ACHIEVEMENTS,

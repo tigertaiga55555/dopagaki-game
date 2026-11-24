@@ -1,7 +1,13 @@
 import { getNearMissComment } from '../config/messagesV4'
 import { NORMAL_TYPES, TYPE_THRESHOLDS, getOverdriveTitle } from '../config/resultTypesV4'
 import { OVERDRIVE_CONFIG } from '../config/overdriveConfig'
-import { checkDopaPercentAchievements, checkFinalQuestionAchievement, checkGrindAchievements, checkNoMissAchievements } from '../utils/achievementStorage'
+import {
+  checkDopaPercentAchievements,
+  checkDopaTypeBandAchievements,
+  checkFinalQuestionAchievement,
+  checkGrindAchievements,
+  checkNoMissAchievements,
+} from '../utils/achievementStorage'
 import { getBestPercent, getOfficialPlayCount, getPlayCount, incrementOfficialPlayCount, incrementPlayCount, updateBestPercent } from '../utils/storage'
 import { computeMedian } from '../challenge/performance'
 import type { Challenge500PerformanceStats } from './useChallenge500'
@@ -262,6 +268,7 @@ export function computeFinalResult(
   const newlyUnlockedAchievements = official
     ? [
         ...checkDopaPercentAchievements(finalPercent),
+        ...checkDopaTypeBandAchievements(finalPercent),
         ...checkNoMissAchievements(finalPercent, accuracy),
         ...checkGrindAchievements(getOfficialPlayCount()),
       ]
@@ -321,6 +328,7 @@ export function computeFinalTrialResult(
   const newlyUnlockedAchievements = official
     ? [
         ...checkDopaPercentAchievements(finalPercent),
+        ...checkDopaTypeBandAchievements(finalPercent),
         ...checkNoMissAchievements(finalPercent, accuracy),
         ...checkGrindAchievements(getOfficialPlayCount()),
       ]
@@ -385,7 +393,9 @@ export function computeChallenge500Result(
   // 同様に一切解除しない。baseResult（200%到達時点、120/200%の実績解除を含みうる）の
   // newlyUnlockedAchievementsに追記する形でまとめる——結果画面は最終的なFinalResultV4
   // 1つだけを見れば、このプレイで新しく解除された実績が全て分かる。
-  const challenge500NewUnlocks = persist ? checkDopaPercentAchievements(finalPercent) : []
+  const challenge500NewUnlocks = persist
+    ? [...checkDopaPercentAchievements(finalPercent), ...checkDopaTypeBandAchievements(finalPercent)]
+    : []
   // Ver.6 Phase 5.1: DOPA 490（FINAL QUESTION到達）実績。bestPercentの閾値では表現できない
   // ため、state.reached490を直接の判定材料にする専用関数を使う（engine/challenge500Engine.ts参照）。
   const finalQuestionNewUnlocks = persist ? checkFinalQuestionAchievement(state.reached490) : []

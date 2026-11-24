@@ -1,5 +1,6 @@
 import type { FinalResultV4 } from '../types'
 import { CHALLENGE500_CONFIG } from '../config/challenge500Config'
+import { getDopaTypeName } from '../config/dopaType'
 import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
 
 interface Props {
@@ -157,8 +158,15 @@ export function ResultCard({ result }: Props) {
         <span className="text-3xl">％</span>
       </p>
 
+      {/*
+        次フェーズ（ゲーム機能クローズラウンド、item 104-106）: DOPA TYPE名称の単一定義
+        （config/dopaType.ts）をDOPA%のすぐ下に表示する——結果画面／Xシェア本文／OGP画像／
+        Achievement／Titleすべてがこの1つの定義だけを参照する。旧来のプレイスタイル判定
+        （result.type.name、engine/resultEngineV4.ts determineType/getOverdriveTitle）は
+        エンジン内部では変更していないが、表示にはもう使わない。
+      */}
       <p className={`relative mt-3 text-center text-lg font-black ${isOverdrive ? 'text-amber-200' : 'text-fuchsia-300'}`}>
-        {result.type.name}
+        {getDopaTypeName(result.percent)}
       </p>
 
       {result.finalTrial && (

@@ -1,4 +1,5 @@
 import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
+import { getDopaTypeName } from '../config/dopaType'
 import { decodeResultSharePayload, type ResultSharePayload } from '../share/resultSharePayload'
 import type { ChallengeMode } from '../challenge/types'
 import type { EndlessDifficulty } from '../types'
@@ -28,12 +29,16 @@ export function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 
-/** payloadから、その結果専用のOGPタイトル・説明文を組み立てる（DOPA%／難易度+STREAKを実際に含める）。 */
+/**
+ * payloadから、その結果専用のOGPタイトル・説明文を組み立てる（DOPA%／難易度+STREAKを実際に含める）。
+ * 次フェーズ（item 104-108、110）: DOPA RUSHはDOPA TYPE名（config/dopaType.tsの単一定義）を
+ * 必ず含め、「お前」表現は使わない。
+ */
 export function buildResultOgpCopy(payload: ResultSharePayload): { title: string; description: string } {
   if (payload.mode === 'rush') {
     return {
       title: `ドパガキ度${payload.percent}％まで到達！ドパガキゲーム`,
-      description: `60秒の超高速ミニゲームで${payload.percent}％に到達。お前は何％までいける？`,
+      description: `60秒の超高速ミニゲームで${payload.percent}％に到達。${getDopaTypeName(payload.percent)}。あなたは何％までいける？`,
     }
   }
   const difficultyLabel = ENDLESS_DIFFICULTY_LABEL[payload.difficulty]

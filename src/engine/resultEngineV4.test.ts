@@ -210,7 +210,9 @@ describe('official フラグ（Ver.6 Phase 10実績拡張ラウンド）: Challe
     expect(getPlayCount()).toBe(1)
     expect(getBestPercent()).toBe(100)
     expect(getOfficialPlayCount()).toBe(1)
-    expect(result.newlyUnlockedAchievements).toEqual(['dopa50', 'dopa100'])
+    // 次フェーズ（item 104-109）: 100%はDOPA TYPE「覚醒型ドパガキ」の帯（100-199%）にも
+    // 収まるため、dopaTypeAwakenedも同時に新規解除される。
+    expect(result.newlyUnlockedAchievements).toEqual(['dopa50', 'dopa100', 'dopaTypeAwakened'])
     expect(isAchievementUnlocked('dopa100')).toBe(true)
   })
 
@@ -219,7 +221,7 @@ describe('official フラグ（Ver.6 Phase 10実績拡張ラウンド）: Challe
     stats.totalAnswered = 20
     stats.correctCount = 20
     const result = computeFinalResult({ rawPercent: 100, finalPercent: 100, overdriveActive: false, stats })
-    expect(result.newlyUnlockedAchievements).toEqual(['dopa50', 'dopa100', 'noMiss100'])
+    expect(result.newlyUnlockedAchievements).toEqual(['dopa50', 'dopa100', 'dopaTypeAwakened', 'noMiss100'])
     expect(isAchievementUnlocked('noMiss100')).toBe(true)
     expect(isAchievementUnlocked('noMiss200')).toBe(false)
   })

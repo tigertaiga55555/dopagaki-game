@@ -9,12 +9,12 @@ import type { AchievementCategory } from '../types'
  * ここではあくまで「68個ちょうど」「カテゴリ別件数」「ID重複なし」「Achievement/Title
  * が1対1」だけを保証する。
  */
-describe('ACHIEVEMENT_DEFS (Ver.6 Phase 10: 68個への拡張)', () => {
-  it('合計68個である', () => {
-    expect(ACHIEVEMENT_DEFS).toHaveLength(68)
+describe('ACHIEVEMENT_DEFS (Ver.6 Phase 10: 68個への拡張 → item 104-109でDOPA TYPE8個追加の76個)', () => {
+  it('合計76個である', () => {
+    expect(ACHIEVEMENT_DEFS).toHaveLength(76)
   })
 
-  it('カテゴリ別の件数が仕様どおり（Normal/LIMIT BREAK 12・ENDLESS 15・Challenge 12・World Battle 12・Friend Battle 4・Special 8・Grind 5）', () => {
+  it('カテゴリ別の件数が仕様どおり（Normal/LIMIT BREAK 20・ENDLESS 15・Challenge 12・World Battle 12・Friend Battle 4・Special 8・Grind 5）', () => {
     const counts = ACHIEVEMENT_DEFS.reduce<Record<AchievementCategory, number>>(
       (acc, def) => {
         acc[def.category] = (acc[def.category] ?? 0) + 1
@@ -23,7 +23,7 @@ describe('ACHIEVEMENT_DEFS (Ver.6 Phase 10: 68個への拡張)', () => {
       { dopa: 0, endless: 0, challenge: 0, worldBattle: 0, friendBattle: 0, special: 0, grind: 0 },
     )
     expect(counts).toEqual({
-      dopa: 12,
+      dopa: 20,
       endless: 15,
       challenge: 12,
       worldBattle: 12,
@@ -31,6 +31,32 @@ describe('ACHIEVEMENT_DEFS (Ver.6 Phase 10: 68個への拡張)', () => {
       special: 8,
       grind: 5,
     })
+  })
+
+  it('item 104-109: DOPA TYPEの8帯が新規実績として存在し、dopaPercentBand（帯のみ・累積しない）で判定される', () => {
+    const dopaTypeIds = [
+      'dopaTypeReason',
+      'dopaTypeImpatient',
+      'dopaTypeReflex',
+      'dopaTypeWild',
+      'dopaTypeAwakened',
+      'dopaTypeAce',
+      'dopaTypeLegend',
+      'dopaTypeKing',
+    ]
+    for (const id of dopaTypeIds) {
+      const def = ACHIEVEMENT_DEFS.find((d) => d.id === id)
+      expect(def).toBeDefined()
+      expect(def?.unlockCondition.type).toBe('dopaPercentBand')
+      expect(def?.category).toBe('dopa')
+    }
+  })
+
+  it('item 104-105: dopa500（既存Title/Achievement）が「ドパガキの神」へ改名されている（新規重複作成はしていない）', () => {
+    const def = ACHIEVEMENT_DEFS.find((d) => d.id === 'dopa500')
+    expect(def?.name).toBe('ドパガキの神')
+    expect(def?.unlockCondition).toEqual({ type: 'dopaPercent', threshold: 500 })
+    expect(def?.rarity).toBe('rare')
   })
 
   it('Achievement IDに重複がない', () => {
@@ -63,9 +89,9 @@ describe('ACHIEVEMENT_DEFS (Ver.6 Phase 10: 68個への拡張)', () => {
   })
 })
 
-describe('TITLE_DEFS (Ver.6 Phase 10: Achievementと1対1の68個)', () => {
-  it('合計68個である', () => {
-    expect(TITLE_DEFS).toHaveLength(68)
+describe('TITLE_DEFS (Ver.6 Phase 10: Achievementと1対1の68個 → item 104-109で76個)', () => {
+  it('合計76個である', () => {
+    expect(TITLE_DEFS).toHaveLength(76)
   })
 
   it('Title IDに重複がない', () => {
@@ -96,12 +122,12 @@ describe('TITLE_DEFS (Ver.6 Phase 10: Achievementと1対1の68個)', () => {
     }
   })
 
-  it('rarityの内訳が設計どおり（COMMON19・RARE23・EPIC14・LEGENDARY7・MYTHIC5＝全68）', () => {
+  it('rarityの内訳が設計どおり（item 104-109で+5 common, +1 rare, +1 epic, +1 legendaryを追加: COMMON24・RARE24・EPIC15・LEGENDARY8・MYTHIC5＝全76）', () => {
     const counts = TITLE_DEFS.reduce<Record<string, number>>((acc, t) => {
       acc[t.rarity] = (acc[t.rarity] ?? 0) + 1
       return acc
     }, {})
-    expect(counts).toEqual({ common: 19, rare: 23, epic: 14, legendary: 7, mythic: 5 })
+    expect(counts).toEqual({ common: 24, rare: 24, epic: 15, legendary: 8, mythic: 5 })
   })
 
   it('MYTHICは真・ドパガキ/250勝/1000プレイ/鏡写し/大逆転の5個のみ（全てが同じtierに潰れていない）', () => {
