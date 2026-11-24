@@ -96,4 +96,31 @@ describe('buildChallengeImageHtml（item 92: 挑戦状専用の画像、通常�
     const html = buildChallengeImageHtml('<script>alert(1)</script>', 'normal', 10)
     expect(html).not.toContain('<script>')
   })
+
+  /**
+   * 次フェーズ（item 133-135、追加最終調整ラウンド）: Xでのレイアウトズレ修正の回帰テスト。
+   * ENDLESSモードのstatLineで「巨大な数字とSTREAKラベルをalign-items:baselineで横並び」
+   * にしていた構成（間隔が不自然に見える原因だったsatoriの制約）を廃止し、
+   * buildEndlessResultImageHtmlと同じ縦積み構成へ統一したことを確認する。
+   */
+  it('item 133-135: ENDLESSモードのstatLineはbaseline横並びを使わず、縦積み構成になっている', () => {
+    const html = buildChallengeImageHtml('ドパ太郎', 'endless', 37, 'intermediate')
+    expect(html).not.toContain('align-items:baseline')
+    expect(html).toContain('37')
+    expect(html).toContain('STREAK')
+  })
+
+  it('item 133-135: 1200x630の原画像に対し、上下左右に十分なsafe marginを確保している（上40px・左右68px・下48px、重要テキストが端ギリギリにならない）', () => {
+    const html = buildChallengeImageHtml('ドパ太郎', 'normal', 50)
+    expect(html).toContain('padding:40px 68px 48px')
+  })
+
+  it('item 133-135: 配色（赤/オレンジ系）・バッジ・文言は変更していない', () => {
+    const html = buildChallengeImageHtml('ドパ太郎', 'normal', 50)
+    expect(html).toContain('#ef4444')
+    expect(html).toContain('#f59e0b')
+    expect(html).toContain('挑戦状')
+    expect(html).toContain('50%に挑戦')
+    expect(html).toContain('ドパガキゲーム')
+  })
 })
