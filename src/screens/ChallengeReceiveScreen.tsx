@@ -84,10 +84,25 @@ export function ChallengeReceiveScreen({ challengeId, onAccept, onHome, onViewHi
   const endlessDifficulty = challenge.conditions.endlessDifficulty as EndlessDifficulty | undefined
   const endlessTheme = endlessDifficulty ? ENDLESS_THEME[endlessDifficulty] : null
 
+  /**
+   * 次フェーズ（ゲーム機能クローズラウンド、item 101）: 「対象記録を大きく表示」。
+   * nickname取得できる場合だけ主語にする（ChallengeRecord.creatorNicknameは必須項目
+   * だが、念のため空文字のような実質未取得ケースでは無理に「のXXを超えろ」という
+   * 不自然な文にせず、記録そのものだけを見せる）。
+   */
+  const targetLine =
+    isEndless && endlessDifficulty
+      ? challenge.creatorNickname
+        ? `${challenge.creatorNickname}の ENDLESS ${ENDLESS_DIFFICULTY_LABEL[endlessDifficulty]} ${challenge.creatorScore} STREAKを超えろ`
+        : `ENDLESS ${ENDLESS_DIFFICULTY_LABEL[endlessDifficulty]} ${challenge.creatorScore} STREAKを超えろ`
+      : challenge.creatorNickname
+        ? `${challenge.creatorNickname}の${challenge.creatorScore}%を超えろ`
+        : `${challenge.creatorScore}%を超えろ`
+
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 py-10 text-center">
-      <p className="text-xs font-black tracking-[0.3em] text-fuchsia-300/90">挑戦状</p>
-      <p className="text-xl font-black text-white">{challenge.creatorNickname}からの挑戦状</p>
+      <p className="text-xl font-black text-white">挑戦状が届きました</p>
+      <p className="-mt-4 text-xs font-bold text-white/50">この記録に挑戦するためのモードです。</p>
 
       <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-3xl border border-fuchsia-400/25 bg-gradient-to-b from-white/[0.06] to-white/[0.02] px-6 py-6">
         <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-fuchsia-400/50 bg-fuchsia-500/10 text-4xl shadow-[0_0_20px_rgba(217,70,239,0.3)]">
@@ -113,21 +128,21 @@ export function ChallengeReceiveScreen({ challengeId, onAccept, onHome, onViewHi
         )}
       </div>
 
-      {isEndless ? (
-        <>
-          <p className="text-lg font-black tracking-widest text-amber-300">この連続正解数を超えろ</p>
-          <p className="w-full max-w-xs text-[11px] font-bold leading-relaxed text-white/50">
-            {challenge.creatorScore + 1}連続正解でWIN　{challenge.creatorScore}連続ならDRAW
-          </p>
-        </>
-      ) : (
-        <p className="text-lg font-black tracking-widest text-amber-300">この記録を超えろ</p>
-      )}
+      <p className="w-full max-w-xs text-xl font-black leading-snug tracking-wide text-amber-300">{targetLine}</p>
+      <p className="w-full max-w-xs text-[11px] font-bold leading-relaxed text-white/50">
+        同じ条件でプレイし、相手の記録を超えれば勝利です。
+      </p>
 
-      {!isEndless && challenge.performance && (
+      {isEndless ? (
         <p className="w-full max-w-xs text-[10px] font-bold leading-relaxed text-white/40">
-          最終DOPA%が同じ場合、通常獲得DOPA%→正答率→最大COMBOの順で判定します（完全同値はDRAW）
+          {challenge.creatorScore + 1}連続正解でWIN　{challenge.creatorScore}連続ならDRAW
         </p>
+      ) : (
+        challenge.performance && (
+          <p className="w-full max-w-xs text-[10px] font-bold leading-relaxed text-white/40">
+            最終DOPA%が同じ場合、通常獲得DOPA%→正答率→最大COMBOの順で判定します（完全同値はDRAW）
+          </p>
+        )
       )}
 
       <div className="flex w-full max-w-xs flex-col gap-3">

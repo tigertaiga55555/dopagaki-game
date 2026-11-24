@@ -24,11 +24,15 @@ import type { ResultSharePayload } from '../share/resultSharePayload'
 const IMAGE_WIDTH = 1200
 const IMAGE_HEIGHT = 630
 
-/** 3種類のOGP画像すべてに共通する外枠（1200x630、背景グラデーション、縦積みcolumn）。 */
-function frame(accentBorderColor: string, backgroundGradient: string, body: string): string {
+/**
+ * 3種類のOGP画像すべてに共通する外枠（1200x630、背景グラデーション、縦積みcolumn）。
+ * `padding`は省略時（RUSH/ENDLESS通常結果シェア、従来どおり）"40px 60px"のまま——
+ * 次フェーズ（item 102）でChallenge専用カードだけに非対称パディングを渡せるようにした。
+ */
+function frame(accentBorderColor: string, backgroundGradient: string, body: string, padding = '40px 60px'): string {
   return `<div style="display:flex;flex-direction:column;width:${IMAGE_WIDTH}px;height:${IMAGE_HEIGHT}px;background:${backgroundGradient};position:relative;">
 <div style="display:flex;width:${IMAGE_WIDTH}px;height:14px;background:${accentBorderColor};"></div>
-<div style="display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:40px 60px;">
+<div style="display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:${padding};">
 ${body}
 </div>
 <div style="display:flex;width:${IMAGE_WIDTH}px;height:14px;background:${accentBorderColor};"></div>
@@ -93,18 +97,26 @@ export function buildChallengeImageHtml(
   const isEndless = mode === 'endless' && endlessDifficulty !== undefined
   const statLine = isEndless
     ? `<div style="display:flex;align-items:baseline;gap:16px;"><div style="display:flex;font-size:150px;font-weight:900;color:#fbbf24;line-height:1;">${creatorScore}</div><div style="display:flex;font-size:48px;font-weight:900;color:#ffffff;">STREAK</div></div>`
-    : `<div style="display:flex;font-size:180px;font-weight:900;color:#fbbf24;line-height:1;">${creatorScore}%</div>`
+    : `<div style="display:flex;font-size:150px;font-weight:900;color:#fbbf24;line-height:1;">${creatorScore}%</div>`
   const subLabel = isEndless
     ? `ENDLESS ${escapeHtml(ENDLESS_DIFFICULTY_LABEL[endlessDifficulty!])} ${creatorScore} STREAKに挑戦`
     : `${creatorScore}%に挑戦`
+  /**
+   * 次フェーズ（item 102）: Xタイムラインでの見え方を実機（wrangler dev）で確認した結果、
+   * ①巨大な数字のすぐ下のサブ文言（◯◯%に挑戦 等）が詰まって見える、②コンテンツ全体が
+   * カード上部へ寄って見える（巨大な数字フォントの内部行間により、幾何学的な中央と
+   * 視覚的な中央がズレるため）の2点を確認したため、本文内のgapを広げ、外枠の上下
+   * パディングを非対称（下を厚く）にして視覚的な中央揃えに近づけた。デザイン（配色・
+   * バッジ・文言・レイアウト構成）自体は変更していない。
+   */
   const body = `<div style="display:flex;flex-direction:column;align-items:center;gap:20px;">
 ${pillBadge('挑戦状', CHALLENGE_BORDER)}
 <div style="display:flex;font-size:34px;font-weight:900;color:#ffffff;">${escapeHtml(creatorNickname)}の記録、超えられる？</div>
-${statLine}
+<div style="display:flex;margin-bottom:14px;">${statLine}</div>
 <div style="display:flex;font-size:32px;font-weight:900;color:#fca5a5;">${subLabel}</div>
-<div style="display:flex;font-size:26px;font-weight:700;color:rgba(255,255,255,0.55);margin-top:4px;">ドパガキゲーム</div>
+<div style="display:flex;font-size:26px;font-weight:700;color:rgba(255,255,255,0.55);">ドパガキゲーム</div>
 </div>`
-  return frame(CHALLENGE_BORDER, CHALLENGE_BG, body)
+  return frame(CHALLENGE_BORDER, CHALLENGE_BG, body, '32px 60px 44px')
 }
 
 export const OG_IMAGE_WIDTH = IMAGE_WIDTH
