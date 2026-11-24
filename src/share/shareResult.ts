@@ -37,3 +37,36 @@ export function shareResult(input: ShareResultInput): void {
   const intentUrl = buildXIntentUrl(text, input.shareUrl)
   window.open(intentUrl, '_blank', 'noopener,noreferrer')
 }
+
+export type WebShareOutcome = 'shared' | 'cancelled' | 'copied' | 'failed'
+
+/**
+ * 次フェーズ（ゲーム機能クローズラウンド、item 97-99）: 「結果を共有」。OSの共有シート
+ * （navigator.share、LINE/メッセージ/AirDrop/メール等）へ、結果テキスト（buildXShareText、
+ * 「𝕏 結果をシェア」と同じmode別の文面を再利用——文面を2重実装しない）＋既存の
+ * /s/:id共有URLを渡すだけの、shareResult()とは完全に独立した別経路。
+ *
+ * Share reward（Heart付与）・X Web Intent・動的OGPのいずれにも一切関与しない
+ * ——「𝕏 結果をシェア」側（shareResult/grantShareRewardIfEligible）は無変更のまま。
+ * navigator.shareが無い環境（主にデスクトップブラウザ）では、詰まらせないために
+ * テキスト＋URLをクリップボードへコピーするフォールバックへ進む。
+ */
+export async function shareResultViaWebShare(input: ShareResultInput): Promise<WebShareOutcome> {
+  const text = buildXShareText(input)
+  const nav = typeof navigator !== 'undefined' ? navigator : undefined
+  if (typeof nav?.share === 'function') {
+    try {
+      await nav.share({ text, url: input.shareUrl })
+      return 'shared'
+    } catch (e) {
+      if ((e as Error)?.name === 'AbortError') return 'cancelled'
+      // navigator.share自体が例外で失敗した場合も、下のクリップボードへのフォールバックへ進む。
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(`${text}\n${input.shareUrl}`)
+    return 'copied'
+  } catch {
+    return 'failed'
+  }
+}

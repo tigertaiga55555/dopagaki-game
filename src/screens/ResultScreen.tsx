@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
 import { AdSlot } from '../components/AdSlot'
+import { ChallengeInfoModal } from '../components/ChallengeInfoModal'
 import { ResultCard } from '../components/ResultCard'
 import { AD_RESULT_SCREEN, ADS_ENABLED_V6 } from '../config/ads'
 import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
@@ -10,10 +11,8 @@ import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSourc
 import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import { buildResultShareUrl } from '../share/resultShareUrl'
 import { grantShareRewardIfEligible, localShareRewardRepository, SHARE_REWARD_DAILY_CAP } from '../share/shareRewardRepository'
-import { shareResult } from '../share/shareResult'
+import { shareResult, shareResultViaWebShare } from '../share/shareResult'
 import { trackChallengeCreated, trackResultView, trackShareClick, trackXShareClick, trackXShareRewardGranted } from '../utils/analytics'
-import { captureResultCardPng, downloadPngBlob } from '../utils/shareImage'
-import { copyShareText, shareResultWithImage } from '../utils/share'
 import { sfx } from '../utils/sound'
 import type { ChallengeRecord } from '../challenge/types'
 import type { FinalResultV4 } from '../types'
@@ -37,10 +36,8 @@ interface Props {
 const TOAST_MS = 3200
 
 export function ResultScreen({ result, resultId, onRetry, onHome, onChallengeSent }: Props) {
-  const [copied, setCopied] = useState(false)
-  const [imageBusy, setImageBusy] = useState(false)
-  const [saveBusy, setSaveBusy] = useState(false)
   const [challengeBusy, setChallengeBusy] = useState(false)
+  const [showChallengeInfo, setShowChallengeInfo] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const newlyUnlocked = result.newlyUnlockedAchievements ?? []
@@ -81,50 +78,18 @@ export function ResultScreen({ result, resultId, onRetry, onHome, onChallengeSen
   }
 
   /**
-   * Ver.5.0追加: 「画像付きでシェア」。resultデータからCanvas 2Dで共有PNGを直接描画し
-   * （shareImage.ts→shareCanvas.ts、DOMキャプチャは経由しない）、Web Share API
-   * （ファイル共有対応環境）→テキスト＋URLのみの通常共有→クリップボードコピー＋
-   * 画像ダウンロードの順でフォールバックする（share.tsのshareResultWithImage()に集約）。
-   * ユーザー自身が共有シートをキャンセルした場合（AbortError）はトーストを出さない。
+   * 次フェーズ（ゲーム機能クローズラウンド、item 97-99）: 「結果を共有」。OSの共有シート
+   * （navigator.share）でLINE/メッセージ/AirDrop/メール等へ、結果テキスト＋/s/:id共有URLを
+   * 渡す——「𝕏 結果をシェア」（Share reward・X Web Intent）とは完全に独立しており、
+   * ここではShare rewardに一切関与しない。ユーザー自身が共有シートをキャンセルした場合は
+   * トーストを出さない。
    */
-  async function handleShareImage() {
-    if (imageBusy) return
+  async function handleShareResult() {
     trackShareClick()
-    setImageBusy(true)
-    try {
-      const blob = await captureResultCardPng(result)
-      const outcome = await shareResultWithImage(blob, result.percent, result.type.name, result.finalTrial, result.challenge500)
-      if (outcome === 'shared-with-image-ios') {
-        showToast('投稿文をコピーしました。必要ならXで貼り付けてください')
-      } else if (outcome === 'ios-share-failed-fallback') {
-        showToast('直接共有できなかったため、画像を保存して投稿文をコピーしました。')
-      } else if (outcome === 'fallback-copied') {
-        showToast('画像付き共有に非対応の環境のため、画像を保存し共有文をコピーしました')
-      } else if (outcome === 'shared-text-only') {
-        showToast('この環境では画像を共有できないため、文章のみ共有しました（画像は「画像を保存」からどうぞ）')
-      }
-    } catch (e) {
-      if ((e as Error)?.name !== 'AbortError') {
-        showToast('共有に失敗しました。もう一度お試しください。')
-      }
-    } finally {
-      setImageBusy(false)
-    }
-  }
-
-  /** Ver.5.0追加: 「画像を保存」。共有せず、結果カードのPNGだけを端末へ保存する。 */
-  async function handleSaveImage() {
-    if (saveBusy) return
-    setSaveBusy(true)
-    try {
-      const blob = await captureResultCardPng(result)
-      downloadPngBlob(blob)
-      showToast('画像を保存しました')
-    } catch {
-      showToast('画像の保存に失敗しました。もう一度お試しください。')
-    } finally {
-      setSaveBusy(false)
-    }
+    const shareUrl = buildResultShareUrl(resultId)
+    const outcome = await shareResultViaWebShare({ mode: 'rush', percent: result.percent, resultId, shareUrl })
+    if (outcome === 'copied') showToast('共有に非対応の環境のため、テキストとURLをコピーしました')
+    else if (outcome === 'failed') showToast('共有に失敗しました。もう一度お試しください。')
   }
 
   /**
@@ -143,13 +108,6 @@ export function ResultScreen({ result, resultId, onRetry, onHome, onChallengeSen
     const outcome = grantShareRewardIfEligible(hasPass, resultId)
     if (outcome.granted) trackXShareRewardGranted('rush')
     setShareRewardRevision((r) => r + 1)
-  }
-
-  /** 「結果をコピー」は従来通り画像を含めず、共有文＋URLのテキストのみコピーする。 */
-  const handleCopy = async () => {
-    const ok = await copyShareText(result.percent, result.type.name, result.finalTrial, result.challenge500)
-    setCopied(ok)
-    if (ok) setTimeout(() => setCopied(false), 2000)
   }
 
   /**
@@ -201,19 +159,32 @@ export function ResultScreen({ result, resultId, onRetry, onHome, onChallengeSen
         </div>
       )}
 
+      {/*
+        次フェーズ（ゲーム機能クローズラウンド、item 97-99）: 共有エリアを
+        ①挑戦状を送る→②𝕏 結果をシェア→③結果を共有、の順に統一した。
+        「𝕏 結果をシェア」（Share reward/Heart付与・/s/:id・動的OGP）は完全に現状維持
+        ——以下は文言・ロジックとも一切変更していない。
+      */}
       {challengeInput && onChallengeSent && (
-        <button
-          onClick={handleSendChallenge}
-          disabled={challengeBusy}
-          className="w-full max-w-xs rounded-2xl bg-gradient-to-b from-amber-400 to-orange-500 py-3.5 text-sm font-black text-[#2a1200] shadow-[0_5px_0_0_rgba(154,52,18,0.8)] transition-transform active:translate-y-1 active:shadow-[0_1px_0_0_rgba(154,52,18,0.8)] disabled:opacity-60"
-        >
-          {challengeBusy ? '挑戦状を作成中…' : '⚔️ 挑戦状を送る'}
-        </button>
+        <div className="relative w-full max-w-xs">
+          <button
+            onClick={handleSendChallenge}
+            disabled={challengeBusy}
+            className="w-full rounded-2xl bg-gradient-to-b from-amber-400 to-orange-500 py-3.5 text-sm font-black text-[#2a1200] shadow-[0_5px_0_0_rgba(154,52,18,0.8)] transition-transform active:translate-y-1 active:shadow-[0_1px_0_0_rgba(154,52,18,0.8)] disabled:opacity-60"
+          >
+            {challengeBusy ? '挑戦状を作成中…' : '⚔️ 挑戦状を送る'}
+          </button>
+          {/* item 100: ボタン本体の押下範囲と干渉しない位置（右上の外側）に、ごく小さな？アイコン。 */}
+          <button
+            onClick={() => setShowChallengeInfo(true)}
+            aria-label="挑戦状とは？"
+            className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-[#1a0e2e] text-[11px] font-black text-white/70 active:scale-90"
+          >
+            ？
+          </button>
+        </div>
       )}
 
-      {/* 次フェーズ（item 61-66）: 「挑戦状を作る」（amber、対戦の誘い）とは意図的に別の
-          見た目（黒地＝Xのブランドカラー）にして混同を避ける。ボタン自体は常に活性のまま
-          （日次上限到達後も「受取済み」の文言に変わるだけ、無効化はしない）。 */}
       <button
         onClick={handleShareToX}
         className="w-full max-w-xs rounded-2xl bg-black py-3.5 text-sm font-black text-white transition-transform active:scale-[0.98]"
@@ -226,26 +197,13 @@ export function ResultScreen({ result, resultId, onRetry, onHome, onChallengeSen
         </p>
       )}
 
-      <div className="w-full max-w-xs space-y-2">
-        <button
-          onClick={handleShareImage}
-          disabled={imageBusy}
-          className="w-full rounded-2xl bg-white py-3.5 text-sm font-black text-[#1c1033] transition-transform active:scale-[0.98] disabled:opacity-60"
-        >
-          {imageBusy ? '画像を生成中…' : '🖼️ 画像付きでシェア'}
-        </button>
-        <button
-          onClick={handleSaveImage}
-          disabled={saveBusy}
-          className="w-full rounded-2xl bg-white/10 py-3 text-sm font-bold text-white transition-transform active:scale-[0.98] disabled:opacity-60"
-        >
-          {saveBusy ? '画像を生成中…' : '画像を保存'}
-        </button>
-        <button onClick={handleCopy} className="w-full rounded-2xl bg-white/5 py-2.5 text-xs font-bold text-white/60">
-          {copied ? 'コピーしました！' : '結果をコピー'}
-        </button>
-        {toast && <p className="anim-pop text-center text-xs font-bold text-amber-200/90">{toast}</p>}
-      </div>
+      <button
+        onClick={handleShareResult}
+        className="w-full max-w-xs rounded-2xl bg-white/10 py-3 text-sm font-bold text-white transition-transform active:scale-[0.98]"
+      >
+        結果を共有
+      </button>
+      {toast && <p className="anim-pop text-center text-xs font-bold text-amber-200/90">{toast}</p>}
 
       <button
         onClick={onRetry}
@@ -264,6 +222,8 @@ export function ResultScreen({ result, resultId, onRetry, onHome, onChallengeSen
       {ADS_ENABLED_V6 && (
         <AdSlot adTag={AD_RESULT_SCREEN.tag} width={AD_RESULT_SCREEN.width} height={AD_RESULT_SCREEN.height} label={AD_RESULT_SCREEN.slotName} />
       )}
+
+      {showChallengeInfo && <ChallengeInfoModal onClose={() => setShowChallengeInfo(false)} />}
     </div>
   )
 }
