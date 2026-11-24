@@ -206,3 +206,15 @@ export const ACHIEVEMENT_DEFS: AchievementDef[] = [
 export const ACHIEVEMENT_DEFS_BY_ID: Record<AchievementId, AchievementDef> = Object.fromEntries(
   ACHIEVEMENT_DEFS.map((def) => [def.id, def]),
 ) as Record<AchievementId, AchievementDef>
+
+/**
+ * 次フェーズ（item 117-119, 123-124）: TitleId（types.tsでstringのプレーンエイリアス）
+ * 経由で、同じ文字列値のAchievementIdのdefを引く箇所（TitleBadge.tsx・ProfileScreen.tsx、
+ * 装備中Titleがsecretかどうかの判定）向けの緩いlookup。ACHIEVEMENT_DEFS_BY_IDを
+ * `string`でインデックスすることはTypeScriptの型システム上安全に書けない
+ * （約76個のリテラルユニオンをキーに持つRecordへ、プレーンstringでのインデックス
+ * アクセスは拒否される）ため、ここに1箇所だけ変換をまとめる。
+ */
+export function getAchievementDefById(id: string): AchievementDef | undefined {
+  return (ACHIEVEMENT_DEFS_BY_ID as Record<string, AchievementDef | undefined>)[id]
+}

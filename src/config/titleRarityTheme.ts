@@ -150,6 +150,8 @@ export interface SecretTheme {
   unlockedTextClass: string
   unlockedGlowClass: string
   unlockedPulseClass: string
+  /** item 123-124: Profileカード/アバターリングへの装飾（MYTHICの虹リングとは別の藍リング）。 */
+  profileRingClass: string
 }
 
 export function getSecretTheme(): SecretTheme {
@@ -166,5 +168,6 @@ export function getSecretTheme(): SecretTheme {
     unlockedTextClass: 'text-indigo-200',
     unlockedGlowClass: 'shadow-[0_0_20px_rgba(99,102,241,0.45)]',
     unlockedPulseClass: 'anim-rarity-secret-slow',
+    profileRingClass: 'ring-2 ring-indigo-400/70 anim-rarity-secret-slow shadow-[0_0_20px_rgba(99,102,241,0.4)]',
   }
 }

@@ -5,11 +5,11 @@ import { PassTitleBadge } from '../components/PassTitleBadge'
 import { PassTitleDetailModal } from '../components/PassTitleDetailModal'
 import { TitleBadge } from '../components/TitleBadge'
 import { TitleDetailModal } from '../components/TitleDetailModal'
-import { ACHIEVEMENT_DEFS } from '../config/achievements'
+import { ACHIEVEMENT_DEFS, getAchievementDefById } from '../config/achievements'
 import { PASS_TITLE_DEFS_BY_ID } from '../config/passTitles'
 import { resolveAvatarEmoji } from '../config/profileConfig'
 import { TITLE_DEFS_BY_ID } from '../config/titles'
-import { getTitleRarityTheme } from '../config/titleRarityTheme'
+import { getSecretTheme, getTitleRarityTheme } from '../config/titleRarityTheme'
 import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import { getOwnedPassTitleIds, isPassTitleOwned } from '../payment/passTitleGrants'
 import { trackProfileView } from '../utils/analytics'
@@ -74,10 +74,15 @@ export function ProfileScreen({
   // 次フェーズ（item 12）: LEGENDARY/MYTHICを装備している間だけ、アバターリング/
   // プレイヤーカードへ軽くレアリティのテーマ色を広げる（COMMON/RARE/EPICは従来の見た目の
   // ままにし、全体を過剰に色付けしない——ユーザー指示）。PASS限定Title装備時はamber系で統一。
+  // 次フェーズ（item 123-124）: SECRET装備時はMYTHICの虹リングではなく、専用の藍リング
+  // （getSecretTheme().profileRingClass）にする——「SECRETはMYTHICと別演出」というユーザー指示。
+  const equippedIsSecret = equippedRegularTitle ? getAchievementDefById(equippedRegularTitle.id)?.secret === true : false
   const titleFlourishClass = equippedPassTitle
     ? 'border-amber-400/60 shadow-[0_0_24px_rgba(251,191,36,0.3)]'
     : equippedRegularTitle
-      ? getTitleRarityTheme(equippedRegularTitle.rarity).profileRingClass
+      ? equippedIsSecret
+        ? getSecretTheme().profileRingClass
+        : getTitleRarityTheme(equippedRegularTitle.rarity).profileRingClass
       : ''
 
   /**
@@ -154,7 +159,11 @@ export function ProfileScreen({
               {profile.subTitleIds.map((id, index) => {
                 const def = id ? TITLE_DEFS_BY_ID[id] : null
                 const passDef = id ? PASS_TITLE_DEFS_BY_ID[id] : null
-                const theme = def ? getTitleRarityTheme(def.rarity) : null
+                // 次フェーズ（item 123-124）: サブ枠もSECRETはMYTHICと別演出にする
+                // （色・枠だけの控えめな反映で十分——メインほどの主張はしない）。
+                const isSubSecret = def ? getAchievementDefById(def.id)?.secret === true : false
+                const secretTheme = isSubSecret ? getSecretTheme() : null
+                const theme = def && !isSubSecret ? getTitleRarityTheme(def.rarity) : null
                 const filled = def || passDef
                 return (
                   <button
@@ -163,7 +172,9 @@ export function ProfileScreen({
                     disabled={!filled}
                     className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-bold active:scale-95 disabled:active:scale-100 ${
                       filled
-                        ? `${theme ? theme.badgeBorderClass : 'border-amber-400/50'} ${theme ? theme.badgeBackgroundClass : 'bg-amber-500/10'} ${theme ? theme.badgeTextClass : 'text-amber-200'}`
+                        ? isSubSecret
+                          ? `${secretTheme!.unlockedBorderClass} ${secretTheme!.unlockedBackgroundClass} ${secretTheme!.unlockedTextClass}`
+                          : `${theme ? theme.badgeBorderClass : 'border-amber-400/50'} ${theme ? theme.badgeBackgroundClass : 'bg-amber-500/10'} ${theme ? theme.badgeTextClass : 'text-amber-200'}`
                         : 'border-white/10 bg-white/5 text-white/25'
                     }`}
                   >
