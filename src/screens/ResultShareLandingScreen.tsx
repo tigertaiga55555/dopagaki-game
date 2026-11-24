@@ -61,7 +61,8 @@ export function ResultShareLandingScreen({ resultId, onHome, onStart }: Props) {
         )}
       </div>
 
-      <p className="text-sm font-bold text-white/70">お前は何％までいける？</p>
+      {/* 次フェーズ（item 110）: 「お前」表現を削除し、自然な表現へ変更した。 */}
+      <p className="text-sm font-bold text-white/70">{payload.mode === 'rush' ? 'あなたは何％までいける？' : 'あなたはどこまで続けられる？'}</p>
 
       <button
         onClick={onStart}

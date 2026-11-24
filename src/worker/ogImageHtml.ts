@@ -58,10 +58,18 @@ const CHALLENGE_BORDER = 'linear-gradient(90deg, #ef4444, #f59e0b)'
  * 明示的な余白を確保する（配色・バッジ・フォント・紫黒金デザインは変更していない）。
  */
 export function buildRushResultImageHtml(percent: number): string {
+  /**
+   * 次フェーズ（item 108, 111、実機で発見）: satori（resvg-wasm経由でのラスタライズ）は、
+   * 巨大なfont-sizeを持つ「テキストだけを直接含むdisplay:flexの葉要素」について、
+   * 親のflex gap・その要素自身のmarginのいずれも次の兄弟要素との間へ正しく反映しない
+   * （実機のPNGで確認：gap/marginの値を変えても次の要素と視覚的に詰まる/重なる）。
+   * 各テキスト行を「余白だけを持つ外側div」と「文字だけを持つ内側div」の2重構造にする
+   * ことで、gapが正しく空くことを実機で確認済み（デザイン・配色・文言は変更していない）。
+   */
   const body = `<div style="display:flex;flex-direction:column;align-items:center;gap:22px;">
 ${pillBadge('DOPA RUSH', RUSH_BORDER)}
-<div style="display:flex;font-size:260px;font-weight:900;color:#fbbf24;line-height:1;">${percent}%</div>
-<div style="display:flex;font-size:40px;font-weight:900;color:#ffffff;margin-top:10px;">${escapeHtml(getDopaTypeName(percent))}</div>
+<div style="display:flex;"><div style="display:flex;font-size:220px;font-weight:900;color:#fbbf24;line-height:1;">${percent}%</div></div>
+<div style="display:flex;"><div style="display:flex;font-size:40px;font-weight:900;color:#ffffff;">${escapeHtml(getDopaTypeName(percent))}</div></div>
 <div style="display:flex;font-size:26px;font-weight:700;color:rgba(255,255,255,0.55);">ドパガキゲーム — 60秒の超高速ミニゲーム</div>
 </div>`
   return frame(RUSH_BORDER, RUSH_BG, body)
