@@ -5,6 +5,7 @@ import { BASE_DOPA_PERCENT_NOTE, formatAccuracyPercent } from '../challenge/form
 import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
 import { ENDLESS_THEME } from '../config/endlessTheme'
 import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
+import { NavBar } from '../components/NavBar'
 import { checkChallengeCreatedAchievement } from '../utils/achievementStorage'
 import type { ChallengeRecord } from '../challenge/types'
 import type { EndlessDifficulty } from '../types'
@@ -12,6 +13,14 @@ import type { EndlessDifficulty } from '../types'
 interface Props {
   challenge: ChallengeRecord
   onDone: () => void
+  /**
+   * 次フェーズ（ゲーム機能クローズラウンド、item 113）: 「← 戻る」。結果画面→挑戦状を
+   * 送る→この完成画面、まで進むと元の結果画面（DOPA RUSH/ENDLESS）へ戻れなかった
+   * 問題を修正——App.tsx側でこの画面をpushScreen（replaceScreenではなく）するように
+   * 変更したため、常にスタックを1つ戻るだけのNavBar.onBack（popScreen）で、Challenge
+   * 自体を削除・再生成することなく、直前の結果画面へ戻れる。
+   */
+  onBack: () => void
 }
 
 const MODE_LABEL: Record<ChallengeRecord['mode'], string> = {
@@ -27,7 +36,7 @@ const MODE_LABEL: Record<ChallengeRecord['mode'], string> = {
  * フォールバック）の両方を用意する。見た目は既存の結果画面・Profile系画面と同じ
  * ダーク＋フクシアのトーンに揃え、ここだけ派手にしすぎない。
  */
-export function ChallengeSentScreen({ challenge, onDone }: Props) {
+export function ChallengeSentScreen({ challenge, onDone, onBack }: Props) {
   const [copied, setCopied] = useState(false)
   const url = buildChallengeUrl(challenge.id)
   // Ver.6 Phase 10（実績拡張ラウンド）: このRPC画面に到達した時点で、サーバーへの
@@ -67,9 +76,11 @@ export function ChallengeSentScreen({ challenge, onDone }: Props) {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 py-10 text-center">
-      <AchievementUnlockBanner newlyUnlocked={newlyUnlocked} />
-      <p className="anim-pop text-2xl font-black tracking-widest text-amber-300">⚔️ 挑戦状が完成！</p>
+    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
+      <NavBar onBack={onBack} />
+      <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-10 text-center">
+        <AchievementUnlockBanner newlyUnlocked={newlyUnlocked} />
+        <p className="anim-pop text-2xl font-black tracking-widest text-amber-300">⚔️ 挑戦状が完成！</p>
 
       <div className="flex w-full max-w-xs flex-col items-center gap-2 rounded-3xl border border-amber-300/25 bg-amber-400/10 px-6 py-6">
         <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-amber-300/50 bg-amber-500/10 text-3xl">
@@ -119,6 +130,7 @@ export function ChallengeSentScreen({ challenge, onDone }: Props) {
         <button onClick={onDone} className="w-full rounded-2xl bg-transparent py-2 text-sm font-bold text-white/50 active:scale-95">
           ホームへ戻る
         </button>
+      </div>
       </div>
     </div>
   )

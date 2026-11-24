@@ -396,9 +396,13 @@ export default function App() {
       // Ver.6 Phase 5.3（送った挑戦状一覧）: Challenge情報本体は保存せず、IDだけを記録する。
       addCreatedChallengeId(challenge.id)
       setActiveChallenge(challenge)
-      replaceScreen('challengeSent')
+      // 次フェーズ（item 113）: 以前はreplaceScreenで直前の結果画面（result/endlessResult）を
+      // スタックから消してしまい、挑戦状完成画面から元の結果画面へ戻る手段が無かった。
+      // pushScreenへ変更し、結果画面をスタックに残したまま積む——ChallengeSentScreen.tsxの
+      // 「← 戻る」（popScreen）で、Challenge自体を削除・再生成せずに戻れるようにする。
+      pushScreen('challengeSent')
     },
-    [replaceScreen],
+    [pushScreen],
   )
 
   const handleChallengeAccept = useCallback(
@@ -753,7 +757,9 @@ export default function App() {
               onViewHistory={openChallengeHistory}
             />
           )}
-          {screen === 'challengeSent' && activeChallenge && <ChallengeSentScreen challenge={activeChallenge} onDone={quitToHome} />}
+          {screen === 'challengeSent' && activeChallenge && (
+            <ChallengeSentScreen challenge={activeChallenge} onDone={quitToHome} onBack={popScreen} />
+          )}
           {screen === 'challengePlaying' && activeChallenge && (
             <ChallengePlayScreen
               key={challengePlayKey}
