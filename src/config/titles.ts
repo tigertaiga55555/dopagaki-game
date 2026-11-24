@@ -17,12 +17,12 @@ import type { AchievementId, TitleDef, TitleRarity } from '../types'
  * 必要プレイ回数・secret実績かどうか等）を見て個別に判断している。内訳（合計68）：
  * COMMON19・RARE23・EPIC14・LEGENDARY7・MYTHIC5。
  *
- * MYTHIC（5個、ユーザー指示の具体例と一致）: dopa500（"真・ドパガキ"——通常progression
- * ラインの最終到達点であり、単なる閾値達成ではなく物語上の到達点として別格に扱う）、
- * worldBattleWin250、grindPlay1000、battleMirrorMatch（secret）、battleComeback（secret）。
- * LEGENDARY（7個、ユーザー例示の500%系はdopa500をMYTHICへ繰り上げた分、450/490で代替）:
- * dopa450・dopa490・endlessAdvanced30・endlessAdvanced50・challengeWin50・
- * worldBattleWin100・worldBattleStreak20。
+ * MYTHIC: dopa500（"真・ドパガキ"——通常progressionラインの最終到達点であり、単なる閾値
+ * 達成ではなく物語上の到達点として別格に扱う）、worldBattleWin250、grindPlay1000、
+ * battleMirrorMatch（secret）、battleComeback（secret）。
+ * 次フェーズ（item 128・129、追加最終調整ラウンド）: endlessAdvanced50（ENDLESS上級ラダー
+ * の到達点）をLEGENDARYからMYTHICへ繰り上げ、grindPlay500をEPICからLEGENDARYへ繰り上げた
+ * （解除条件自体は無変更）。最新のLEGENDARY/MYTHICの内訳はachievements.test.tsを参照。
  */
 const DOPA_MILESTONE_TITLES: TitleDef[] = [
   { id: 'dopa50', name: 'ドパの芽', description: 'DOPA度50%に到達した証', unlockedByAchievementId: 'dopa50', rarity: 'common' },
@@ -120,7 +120,10 @@ export const TITLE_DEFS: TitleDef[] = [
   { id: 'endlessAdvanced10', name: '逆転脳', description: 'ENDLESS上級で10連続正解した証', unlockedByAchievementId: 'endlessAdvanced10', rarity: 'epic' },
   { id: 'endlessAdvanced20', name: '赤信号無視', description: 'ENDLESS上級で20連続正解した証', unlockedByAchievementId: 'endlessAdvanced20', rarity: 'epic' },
   { id: 'endlessAdvanced30', name: 'DANGER SURVIVOR', description: 'ENDLESS上級で30連続正解した証', unlockedByAchievementId: 'endlessAdvanced30', rarity: 'legendary' },
-  { id: 'endlessAdvanced50', name: '狂気の上級者', description: 'ENDLESS上級で50連続正解した証', unlockedByAchievementId: 'endlessAdvanced50', rarity: 'legendary' },
+  // 次フェーズ（item 128、追加最終調整ラウンド）: ENDLESS上級ラダーの最後（最高STREAK）を
+  // MYTHICへ繰り上げた（解除条件自体は無変更。ENDLESS上級の並びの中で最後に来る＝
+  // 上級ラダーの到達点としてふさわしい別格感を持たせるため）。
+  { id: 'endlessAdvanced50', name: '人間卒業', description: 'ENDLESS上級で50連続正解した証', unlockedByAchievementId: 'endlessAdvanced50', rarity: 'mythic' },
 
   // Challenge
   { id: 'challengeCreatedFirst', name: '挑戦状、投函', description: 'Challengeを初めて作成した証', unlockedByAchievementId: 'challengeCreatedFirst', rarity: 'common' },
@@ -166,12 +169,13 @@ export const TITLE_DEFS: TitleDef[] = [
   { id: 'battleMirrorMatch', name: '鏡写し', description: '世界対戦で5項目が完全一致しDRAWになった証', unlockedByAchievementId: 'battleMirrorMatch', rarity: 'mythic' },
   { id: 'battleComeback', name: '大逆転', description: '世界対戦で大きく離されてから逆転勝利した証', unlockedByAchievementId: 'battleComeback', rarity: 'mythic' },
 
-  // Grind
+  // Grind（item 129: 10/50/100/300/500/1000の6段階。300新設・500/1000は改名+rarity変更）
   { id: 'grindPlay10', name: '常連', description: '公式プレイを通算10回行った証', unlockedByAchievementId: 'grindPlay10', rarity: 'common' },
   { id: 'grindPlay50', name: '沼の入口', description: '公式プレイを通算50回行った証', unlockedByAchievementId: 'grindPlay50', rarity: 'common' },
   { id: 'grindPlay100', name: 'ドパ中毒', description: '公式プレイを通算100回行った証', unlockedByAchievementId: 'grindPlay100', rarity: 'rare' },
-  { id: 'grindPlay500', name: '抜け出せない', description: '公式プレイを通算500回行った証', unlockedByAchievementId: 'grindPlay500', rarity: 'epic' },
-  { id: 'grindPlay1000', name: 'ドパガキ住民', description: '公式プレイを通算1000回行った証', unlockedByAchievementId: 'grindPlay1000', rarity: 'mythic' },
+  { id: 'grindPlay300', name: 'ドパ漬け', description: '公式プレイを通算300回行った証', unlockedByAchievementId: 'grindPlay300', rarity: 'epic' },
+  { id: 'grindPlay500', name: '廃ドパ民', description: '公式プレイを通算500回行った証', unlockedByAchievementId: 'grindPlay500', rarity: 'legendary' },
+  { id: 'grindPlay1000', name: 'THE ドパガキ', description: '公式プレイを通算1000回行った証', unlockedByAchievementId: 'grindPlay1000', rarity: 'mythic' },
 ]
 
 export const TITLE_DEFS_BY_ID: Record<string, TitleDef> = Object.fromEntries(TITLE_DEFS.map((def) => [def.id, def]))

@@ -561,10 +561,11 @@ export type AchievementId =
   | 'battleWinByReaction'
   | 'battleMirrorMatch'
   | 'battleComeback'
-  /** Grind 5個（新規カテゴリ）。 */
+  /** Grind 6個（新規カテゴリ、item 129で300回を追加し6段階に再構成）。 */
   | 'grindPlay10'
   | 'grindPlay50'
   | 'grindPlay100'
+  | 'grindPlay300'
   | 'grindPlay500'
   | 'grindPlay1000'
 
@@ -650,6 +651,12 @@ export interface AchievementDef {
   endlessDifficulty?: EndlessDifficulty
   rarity?: 'rare'
   secret?: boolean
+  /**
+   * 次フェーズ（item 130、追加最終調整ラウンド）: secret指定の実績限定。未解放中でも
+   * 見られる、答えそのものではない方向性だけのヒント文（TitleDetailModal.tsxの
+   * 「？ HINT」ボタンから表示）。通常の（secretでない）実績では設定しない。
+   */
+  hint?: string
 }
 
 /**

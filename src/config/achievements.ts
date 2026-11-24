@@ -76,7 +76,7 @@ const ENDLESS_ACHIEVEMENTS: AchievementDef[] = [
   { id: 'endlessAdvanced10', name: '逆転脳', description: 'ENDLESS上級で10連続正解する', unlockCondition: { type: 'endlessStreak', difficulty: 'advanced', threshold: 10 }, category: 'endless', endlessDifficulty: 'advanced' },
   { id: 'endlessAdvanced20', name: '赤信号無視', description: 'ENDLESS上級で20連続正解する', unlockCondition: { type: 'endlessStreak', difficulty: 'advanced', threshold: 20 }, category: 'endless', endlessDifficulty: 'advanced' },
   { id: 'endlessAdvanced30', name: 'DANGER SURVIVOR', description: 'ENDLESS上級で30連続正解する', unlockCondition: { type: 'endlessStreak', difficulty: 'advanced', threshold: 30 }, category: 'endless', endlessDifficulty: 'advanced' },
-  { id: 'endlessAdvanced50', name: '狂気の上級者', description: 'ENDLESS上級で50連続正解する', unlockCondition: { type: 'endlessStreak', difficulty: 'advanced', threshold: 50 }, category: 'endless', endlessDifficulty: 'advanced' },
+  { id: 'endlessAdvanced50', name: '人間卒業', description: 'ENDLESS上級で50連続正解する', unlockCondition: { type: 'endlessStreak', difficulty: 'advanced', threshold: 50 }, category: 'endless', endlessDifficulty: 'advanced' },
 ]
 
 /**
@@ -147,16 +147,51 @@ const SPECIAL_ACHIEVEMENTS: AchievementDef[] = [
   { id: 'battleWinByAccuracy', name: '正確無比', description: '世界対戦で、正答率の比較で勝敗が決まり勝利する', unlockCondition: { type: 'battleDecidingStat', stat: 'accuracy' }, category: 'special' },
   { id: 'battleWinByMaxCombo', name: '連鎖の鬼', description: '世界対戦で、最大COMBOの比較で勝敗が決まり勝利する', unlockCondition: { type: 'battleDecidingStat', stat: 'maxCombo' }, category: 'special' },
   { id: 'battleWinByReaction', name: '反射神経バケモノ', description: '世界対戦で、正解時反応速度中央値の比較で勝敗が決まり勝利する', unlockCondition: { type: 'battleDecidingStat', stat: 'medianCorrectReactionMs' }, category: 'special' },
-  { id: 'battleMirrorMatch', name: '鏡写し', description: '？？？', unlockCondition: { type: 'battleMirror' }, category: 'special', secret: true, rarity: 'rare' },
-  { id: 'battleComeback', name: '大逆転', description: '？？？', unlockCondition: { type: 'battleComeback' }, category: 'special', secret: true, rarity: 'rare' },
+  /**
+   * 次フェーズ（item 130、追加最終調整ラウンド）: descriptionが文字通り'？？？'固定だった
+   * 問題を修正——未解放中は従来どおりAchievementScreen/TitleDetailModal側の
+   * hidden判定（secret && !unlocked）でこのdescription自体を画面に出さず「？？？」表示へ
+   * 差し替えているため、ここに実際の条件文を書いても未解放中に漏れることはない。
+   * 解放後は、この本物の条件文がそのまま表示される（TitleDefの既存description
+   * 「世界対戦で5項目が完全一致しDRAWになった証」「世界対戦で大きく離されてから逆転勝利した証」
+   * と内容を揃えた）。hintは未解放中でも見られる、答えを割らない方向性だけのヒント文
+   * （TitleDetailModal.tsxの「？ HINT」ボタンから表示する。新設フィールド、通常実績は未設定）。
+   */
+  {
+    id: 'battleMirrorMatch',
+    name: '鏡写し',
+    description: '世界対戦で、自分と相手の判定5項目が完全に一致しDRAWになる',
+    hint: '勝ちでも負けでもない結末がある。相手と自分が、まるで鏡に映したようにそっくりだったとしたら——？',
+    unlockCondition: { type: 'battleMirror' },
+    category: 'special',
+    secret: true,
+    rarity: 'rare',
+  },
+  {
+    id: 'battleComeback',
+    name: '大逆転',
+    description: '世界対戦で、大きくリードされた状態から最終的に逆転勝利する',
+    hint: 'どれだけ差をつけられても、試合終了のその瞬間まで諦めなければ見える景色がある。',
+    unlockCondition: { type: 'battleComeback' },
+    category: 'special',
+    secret: true,
+    rarity: 'rare',
+  },
 ]
 
+/**
+ * 次フェーズ（item 129、追加最終調整ラウンド）: 6段階へ再構成（10/50/100/300/500/1000の
+ * 完全昇順）。10/50/100の3つは据え置き（既に適切と確認済み）。新規にgrindPlay300を追加し、
+ * 500/1000は改名のみ（idとunlockCondition自体は変更していないため、既存ユーザーの解除済み
+ * 状態への影響はない）。
+ */
 const GRIND_ACHIEVEMENTS: AchievementDef[] = [
   { id: 'grindPlay10', name: '常連', description: '公式プレイ（DOPA RUSH・ENDLESS・世界対戦・フレンド対戦）を通算10回行う', unlockCondition: { type: 'officialPlayCount', threshold: 10 }, category: 'grind' },
   { id: 'grindPlay50', name: '沼の入口', description: '公式プレイを通算50回行う', unlockCondition: { type: 'officialPlayCount', threshold: 50 }, category: 'grind' },
   { id: 'grindPlay100', name: 'ドパ中毒', description: '公式プレイを通算100回行う', unlockCondition: { type: 'officialPlayCount', threshold: 100 }, category: 'grind' },
-  { id: 'grindPlay500', name: '抜け出せない', description: '公式プレイを通算500回行う', unlockCondition: { type: 'officialPlayCount', threshold: 500 }, category: 'grind' },
-  { id: 'grindPlay1000', name: 'ドパガキ住民', description: '公式プレイを通算1000回行う', unlockCondition: { type: 'officialPlayCount', threshold: 1000 }, category: 'grind', rarity: 'rare' },
+  { id: 'grindPlay300', name: 'ドパ漬け', description: '公式プレイを通算300回行う', unlockCondition: { type: 'officialPlayCount', threshold: 300 }, category: 'grind' },
+  { id: 'grindPlay500', name: '廃ドパ民', description: '公式プレイを通算500回行う', unlockCondition: { type: 'officialPlayCount', threshold: 500 }, category: 'grind' },
+  { id: 'grindPlay1000', name: 'THE ドパガキ', description: '公式プレイを通算1000回行う', unlockCondition: { type: 'officialPlayCount', threshold: 1000 }, category: 'grind', rarity: 'rare' },
 ]
 
 /**

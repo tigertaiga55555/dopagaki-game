@@ -870,22 +870,27 @@ body {
 }
 
 /**
- * 次フェーズ（item 117-119、リリース前最終デザインラウンド）: SECRET専用の異質な明滅。
- * MYTHIC（anim-rarity-rainbow-slow、暖色の虹が流れる）とは別系統——色は変えず
- * （config/titleRarityTheme.tsのSECRET配色をそのまま使う）、やや不規則に感じる
- * 明滅速度の緩急だけで「普通のrarityではない」異質さを出す。常時ギラギラはしない
- * （周期4.4秒、ゆっくり）。
+ * 次フェーズ（item 117-119、リリース前最終デザインラウンド→item 131で追加調整）:
+ * SECRET専用の異質な明滅。MYTHIC（anim-rarity-rainbow-slow、暖色の虹が流れる）とは
+ * 別系統——色そのものは変えず（config/titleRarityTheme.tsのSECRET配色をそのまま使う）、
+ * やや不規則に感じる明滅速度の緩急に加え、ごくわずかなhue-rotateを足して「呼吸するたびに
+ * 色相がわずかにぶれる」質感にした——「微かな虹彩/ノイズ」「普通の発光ではない」という
+ * item 131のユーザー指示に対応する。常時ギラギラはしない（周期4.4秒、ゆっくり、
+ * hue-rotateの振れ幅も最大18度までに抑える）。
  */
 @keyframes rarity-secret-slow {
   0%,
   100% {
     opacity: 1;
+    filter: hue-rotate(0deg);
   }
   38% {
     opacity: 0.65;
+    filter: hue-rotate(16deg);
   }
   62% {
     opacity: 0.85;
+    filter: hue-rotate(-10deg);
   }
 }
 

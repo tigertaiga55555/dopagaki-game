@@ -54,6 +54,13 @@ export interface TitleRarityTheme {
   lockedTextClass: string
 }
 
+/**
+ * 次フェーズ（item 132、追加最終調整ラウンド）: ロック中カードが暗すぎ・寄りすぎという
+ * ユーザー指摘により、lockedXxxの枠色・背景色・文字色の不透明度/色相をはっきり見える
+ * 水準まで底上げした（特にLEGENDARY/MYTHICは「この先ヤバそう」と伝わる程度に）。
+ * ただし解放後との差（鮮やか・発光・粒子・強い背景 vs 暗い・低彩度・発光弱い）は維持する
+ * ——発光（badgeGlowClass）・pulse（badgePulseClass）は引き続きlocked側には一切付けない。
+ */
 const THEMES: Record<TitleRarity, TitleRarityTheme> = {
   common: {
     rarity: 'common',
@@ -64,9 +71,9 @@ const THEMES: Record<TitleRarity, TitleRarityTheme> = {
     badgeGlowClass: '',
     badgePulseClass: '',
     profileRingClass: '',
-    lockedBorderClass: 'border-white/10',
-    lockedBackgroundClass: 'bg-white/[0.03]',
-    lockedTextClass: 'text-white/30',
+    lockedBorderClass: 'border-white/20',
+    lockedBackgroundClass: 'bg-white/[0.06]',
+    lockedTextClass: 'text-white/40',
   },
   rare: {
     rarity: 'rare',
@@ -77,9 +84,9 @@ const THEMES: Record<TitleRarity, TitleRarityTheme> = {
     badgeGlowClass: 'shadow-[0_0_10px_rgba(103,232,249,0.3)]',
     badgePulseClass: '',
     profileRingClass: '',
-    lockedBorderClass: 'border-cyan-900/40',
-    lockedBackgroundClass: 'bg-cyan-950/20',
-    lockedTextClass: 'text-cyan-200/25',
+    lockedBorderClass: 'border-cyan-600/55',
+    lockedBackgroundClass: 'bg-cyan-900/25',
+    lockedTextClass: 'text-cyan-200/40',
   },
   epic: {
     rarity: 'epic',
@@ -93,9 +100,9 @@ const THEMES: Record<TitleRarity, TitleRarityTheme> = {
       'shadow-[0_0_16px_rgba(217,70,239,0.4),2px_-6px_0_-3px_rgba(232,121,249,0.5),-3px_5px_0_-3px_rgba(232,121,249,0.4)]',
     badgePulseClass: '',
     profileRingClass: '',
-    lockedBorderClass: 'border-fuchsia-950/50',
-    lockedBackgroundClass: 'bg-fuchsia-950/20',
-    lockedTextClass: 'text-fuchsia-200/25',
+    lockedBorderClass: 'border-fuchsia-600/55',
+    lockedBackgroundClass: 'bg-fuchsia-900/25',
+    lockedTextClass: 'text-fuchsia-200/40',
   },
   legendary: {
     rarity: 'legendary',
@@ -106,9 +113,9 @@ const THEMES: Record<TitleRarity, TitleRarityTheme> = {
     badgeGlowClass: 'shadow-[0_0_22px_rgba(250,204,21,0.5)]',
     badgePulseClass: 'anim-rarity-pulse-slow',
     profileRingClass: 'ring-2 ring-amber-300/70 shadow-[0_0_20px_rgba(250,204,21,0.4)]',
-    lockedBorderClass: 'border-amber-900/50',
-    lockedBackgroundClass: 'bg-amber-950/20',
-    lockedTextClass: 'text-amber-200/25',
+    lockedBorderClass: 'border-amber-500/60',
+    lockedBackgroundClass: 'bg-amber-900/30',
+    lockedTextClass: 'text-amber-200/45',
   },
   mythic: {
     rarity: 'mythic',
@@ -119,11 +126,12 @@ const THEMES: Record<TitleRarity, TitleRarityTheme> = {
     badgeGlowClass: 'shadow-[0_0_26px_rgba(199,92,255,0.5)]',
     badgePulseClass: 'anim-rarity-rainbow-slow',
     profileRingClass: 'ring-2 ring-fuchsia-300/70 anim-rarity-rainbow-slow shadow-[0_0_24px_rgba(199,92,255,0.45)]',
-    // MYTHICロック中は虹グラデーションを使わない（解放後だけの特別感を守るため）——
-    // 暗い紫系の枠だけに留め、RARE/EPIC等と見分けがつく程度の最低限のヒントにする。
-    lockedBorderClass: 'border-purple-900/60',
-    lockedBackgroundClass: 'bg-purple-950/25',
-    lockedTextClass: 'text-purple-200/25',
+    // MYTHICロック中は虹グラデーション・発光は使わない（解放後だけの特別感を守るため）が、
+    // item 132でEPIC（fuchsia）・LEGENDARY（amber）とはっきり見分けがつく、やや赤みがかった
+    // 紫（violet〜pink寄り）まで明るくして「この先ヤバそう」感を強めた。
+    lockedBorderClass: 'border-purple-500/60',
+    lockedBackgroundClass: 'bg-gradient-to-r from-purple-900/35 via-fuchsia-900/30 to-purple-900/35',
+    lockedTextClass: 'text-purple-200/45',
   },
 }
 
@@ -132,13 +140,23 @@ export function getTitleRarityTheme(rarity: TitleRarity): TitleRarityTheme {
 }
 
 /**
- * 次フェーズ（item 117-119）: SECRET専用テーマ。通常rarity体系（common〜mythic）には
- * 属さない——「MYTHICより上」ではなく「完全に別物」という扱いのため、TitleRarityを
- * 拡張せず独立した型・関数にする。
+ * 次フェーズ（item 117-119→item 131で追加調整）: SECRET専用テーマ。通常rarity体系
+ * （common〜mythic）には属さない——「MYTHICより上」ではなく「完全に別物」という扱いのため、
+ * TitleRarityを拡張せず独立した型・関数にする。
  *
- * 色はMYTHIC（暖色系の虹グラデーション：赤/オレンジ/ティール/青/紫）とは重ならない、
- * 藍〜深い青紫だけの単色相グラデーション（「異質・不穏」寄りのトーン）にし、
- * 解放後も同じ色相のまま（MYTHICの色と被らない）を維持する。
+ * 色はMYTHIC（暖色系の虹グラデーション：赤/オレンジ/ティール/青/紫、金ピカ寄りの輝き）とは
+ * 重ならない、藍〜深い青紫だけの単色相グラデーション（「異質・不穏・禁断」寄りのトーン）に
+ * し、解放後も同じ色相のまま（MYTHICの色と被らない）を維持する。
+ *
+ * item 131: item 132でCOMMON〜MYTHICのロック中カードが軒並み明るく・色が見えるように
+ * なったため、SECRETが「ランク外の隠し称号」に見え続けるよう、通常rarityの誰とも混同され
+ * ない方向へさらに寄せた——①解放後の背景を単純な2色グラデーションから、黒に極めて近い
+ * 深い藍〜紫＋微かなマゼンタのきらめきを混ぜた不均一なグラデーションへ、②glowに
+ * インディゴ本体の発光＋ごく薄いマゼンタの滲み（「微かな虹彩/ノイズ」）を追加、③pulse
+ * アニメーション（index.cssのrarity-secret-slow）にごくわずかなhue-rotateを足して、
+ * 呼吸するたびに色相が微妙にぶれる「普通の発光ではない」質感を加えた。金・オレンジ系の
+ * 色は一切使わない。ロック中は従来どおり黒に近いまま（他のロック中rarityカードが
+ * 明るくなった分、SECRETだけが変わらず沈んでいることが「別物」の合図になる）。
  */
 export interface SecretTheme {
   label: 'SECRET'
@@ -157,17 +175,24 @@ export interface SecretTheme {
 export function getSecretTheme(): SecretTheme {
   return {
     label: 'SECRET',
-    // 未解放: 通常の「暗いrarity色」のどれとも違う、黒に近い藍色＋微かな異質な発光。
+    // 未解放: 通常の「暗いrarity色」のどれとも違う、黒に近い藍色＋ごく微かな異質な発光
+    // （item 131: ロック中のCOMMON〜MYTHICが軒並み明るくなった後も、SECRETだけはここを
+    // 変えず沈んだままにすることで「別物」感を保つ）。
     lockedBorderClass: 'border-indigo-950',
     lockedBackgroundClass: 'bg-[#05030f]',
     lockedTextClass: 'text-indigo-300/30',
     // 解放後: 本物の名称・条件を見せつつ、SECRET専用の藍〜紫トーンを維持する
-    // （MYTHICの暖色系虹とは別系統）。
+    // （MYTHICの暖色系虹・金ピカとは別系統）。item 131: 単純な2色グラデーションから、
+    // 黒に近い深い藍〜紫に、ごく微かなマゼンタのきらめきを一点だけ混ぜた不均一な
+    // グラデーションへ——「暗いのにギラつく」質感と「微かな虹彩/ノイズ」を狙う。
     unlockedBorderClass: 'border-indigo-400/50',
-    unlockedBackgroundClass: 'bg-[linear-gradient(135deg,#0b0620_0%,#1a0a3a_50%,#0b0620_100%)]',
+    unlockedBackgroundClass:
+      'bg-[linear-gradient(135deg,#030108_0%,#180a38_30%,#2a0f52_52%,#140830_72%,#050212_100%)]',
     unlockedTextClass: 'text-indigo-200',
-    unlockedGlowClass: 'shadow-[0_0_20px_rgba(99,102,241,0.45)]',
+    // glow本体はインディゴ、ごく薄いマゼンタの滲みを外側にもう一層重ねて「普通の発光では
+    // ない」不穏さを足す（金・オレンジ系は一切使わない）。
+    unlockedGlowClass: 'shadow-[0_0_20px_rgba(99,102,241,0.45),0_0_38px_rgba(192,92,255,0.12)]',
     unlockedPulseClass: 'anim-rarity-secret-slow',
-    profileRingClass: 'ring-2 ring-indigo-400/70 anim-rarity-secret-slow shadow-[0_0_20px_rgba(99,102,241,0.4)]',
+    profileRingClass: 'ring-2 ring-indigo-400/70 anim-rarity-secret-slow shadow-[0_0_20px_rgba(99,102,241,0.4),0_0_38px_rgba(192,92,255,0.12)]',
   }
 }

@@ -9,12 +9,12 @@ import type { AchievementCategory } from '../types'
  * ここではあくまで「68個ちょうど」「カテゴリ別件数」「ID重複なし」「Achievement/Title
  * が1対1」だけを保証する。
  */
-describe('ACHIEVEMENT_DEFS (Ver.6 Phase 10: 68個への拡張 → item 104-109でDOPA TYPE8個追加の76個)', () => {
-  it('合計76個である', () => {
-    expect(ACHIEVEMENT_DEFS).toHaveLength(76)
+describe('ACHIEVEMENT_DEFS (Ver.6 Phase 10: 68個への拡張 → item 104-109でDOPA TYPE8個追加の76個 → item 129でGrindに300回を追加した77個)', () => {
+  it('合計77個である', () => {
+    expect(ACHIEVEMENT_DEFS).toHaveLength(77)
   })
 
-  it('カテゴリ別の件数が仕様どおり（Normal/LIMIT BREAK 20・ENDLESS 15・Challenge 12・World Battle 12・Friend Battle 4・Special 8・Grind 5）', () => {
+  it('カテゴリ別の件数が仕様どおり（Normal/LIMIT BREAK 20・ENDLESS 15・Challenge 12・World Battle 12・Friend Battle 4・Special 8・Grind 6）', () => {
     const counts = ACHIEVEMENT_DEFS.reduce<Record<AchievementCategory, number>>(
       (acc, def) => {
         acc[def.category] = (acc[def.category] ?? 0) + 1
@@ -29,7 +29,7 @@ describe('ACHIEVEMENT_DEFS (Ver.6 Phase 10: 68個への拡張 → item 104-109�
       worldBattle: 12,
       friendBattle: 4,
       special: 8,
-      grind: 5,
+      grind: 6,
     })
   })
 
@@ -180,9 +180,9 @@ describe('ACHIEVEMENT_DEFS (Ver.6 Phase 10: 68個への拡張 → item 104-109�
       expect(friendIds).toEqual(['friendBattleFirstPlay', 'friendBattlePlay10', 'friendBattlePlay50', 'friendBattlePlay100'])
     })
 
-    it('Grind: 数値条件の完全昇順（10/50/100/500/1000）', () => {
+    it('Grind: 数値条件の完全昇順（10/50/100/300/500/1000、item 129で300を追加）', () => {
       const grindIds = ACHIEVEMENT_DEFS.filter((d) => d.category === 'grind').map((d) => d.id)
-      expect(grindIds).toEqual(['grindPlay10', 'grindPlay50', 'grindPlay100', 'grindPlay500', 'grindPlay1000'])
+      expect(grindIds).toEqual(['grindPlay10', 'grindPlay50', 'grindPlay100', 'grindPlay300', 'grindPlay500', 'grindPlay1000'])
     })
 
     it('Special: SECRET（鏡写し・大逆転）が最後にまとまっている（SECRETの存在を隠す仕様と矛盾しない）', () => {
@@ -194,9 +194,9 @@ describe('ACHIEVEMENT_DEFS (Ver.6 Phase 10: 68個への拡張 → item 104-109�
   })
 })
 
-describe('TITLE_DEFS (Ver.6 Phase 10: Achievementと1対1の68個 → item 104-109で76個)', () => {
-  it('合計76個である', () => {
-    expect(TITLE_DEFS).toHaveLength(76)
+describe('TITLE_DEFS (Ver.6 Phase 10: Achievementと1対1の68個 → item 104-109で76個 → item 129で77個)', () => {
+  it('合計77個である', () => {
+    expect(TITLE_DEFS).toHaveLength(77)
   })
 
   it('Title IDに重複がない', () => {
@@ -227,18 +227,103 @@ describe('TITLE_DEFS (Ver.6 Phase 10: Achievementと1対1の68個 → item 104-1
     }
   })
 
-  it('rarityの内訳が設計どおり（item 104-109で+5 common, +1 rare, +1 epic, +1 legendaryを追加: COMMON24・RARE24・EPIC15・LEGENDARY8・MYTHIC5＝全76）', () => {
+  it('rarityの内訳が設計どおり（item 128でendlessAdvanced50をLEGENDARY→MYTHICへ、item 129でgrindPlay500をEPIC→LEGENDARYへ繰り上げ、grindPlay300をEPICとして新設: COMMON24・RARE24・EPIC15・LEGENDARY8・MYTHIC6＝全77）', () => {
     const counts = TITLE_DEFS.reduce<Record<string, number>>((acc, t) => {
       acc[t.rarity] = (acc[t.rarity] ?? 0) + 1
       return acc
     }, {})
-    expect(counts).toEqual({ common: 24, rare: 24, epic: 15, legendary: 8, mythic: 5 })
+    expect(counts).toEqual({ common: 24, rare: 24, epic: 15, legendary: 8, mythic: 6 })
   })
 
-  it('MYTHICは真・ドパガキ/250勝/1000プレイ/鏡写し/大逆転の5個のみ（全てが同じtierに潰れていない）', () => {
+  it('MYTHICはドパガキの神/250勝/1000プレイ/鏡写し/大逆転/人間卒業の6個のみ（全てが同じtierに潰れていない）', () => {
     const mythicIds = TITLE_DEFS.filter((t) => t.rarity === 'mythic')
       .map((t) => t.id)
       .sort()
-    expect(mythicIds).toEqual(['battleComeback', 'battleMirrorMatch', 'dopa500', 'grindPlay1000', 'worldBattleWin250'].sort())
+    expect(mythicIds).toEqual(
+      ['battleComeback', 'battleMirrorMatch', 'dopa500', 'grindPlay1000', 'worldBattleWin250', 'endlessAdvanced50'].sort(),
+    )
+  })
+})
+
+/**
+ * 次フェーズ（item 128-130、追加最終調整ラウンド）: 今回の個別変更点の専用テスト。
+ */
+describe('item 128: ENDLESS上級50「人間卒業」MYTHIC化', () => {
+  it('Achievement側の名称が変更され、解除条件（advanced streak 50）は無変更', () => {
+    const def = ACHIEVEMENT_DEFS.find((d) => d.id === 'endlessAdvanced50')
+    expect(def?.name).toBe('人間卒業')
+    expect(def?.unlockCondition).toEqual({ type: 'endlessStreak', difficulty: 'advanced', threshold: 50 })
+    expect(def?.category).toBe('endless')
+    expect(def?.endlessDifficulty).toBe('advanced')
+  })
+
+  it('Title側がMYTHICへ繰り上がっている', () => {
+    const title = TITLE_DEFS.find((t) => t.id === 'endlessAdvanced50')
+    expect(title?.name).toBe('人間卒業')
+    expect(title?.rarity).toBe('mythic')
+  })
+
+  it('ENDLESS上級ラダーの最後（最もSTREAKが高い）に位置している', () => {
+    const advancedIds = ACHIEVEMENT_DEFS.filter((d) => d.endlessDifficulty === 'advanced').map((d) => d.id)
+    expect(advancedIds[advancedIds.length - 1]).toBe('endlessAdvanced50')
+  })
+})
+
+describe('item 129: GRIND 6段階再構成', () => {
+  it('10/50/100の3つは据え置き（名称・rarity不変）', () => {
+    expect(ACHIEVEMENT_DEFS.find((d) => d.id === 'grindPlay10')?.name).toBe('常連')
+    expect(ACHIEVEMENT_DEFS.find((d) => d.id === 'grindPlay50')?.name).toBe('沼の入口')
+    expect(ACHIEVEMENT_DEFS.find((d) => d.id === 'grindPlay100')?.name).toBe('ドパ中毒')
+    expect(TITLE_DEFS.find((t) => t.id === 'grindPlay10')?.rarity).toBe('common')
+    expect(TITLE_DEFS.find((t) => t.id === 'grindPlay50')?.rarity).toBe('common')
+    expect(TITLE_DEFS.find((t) => t.id === 'grindPlay100')?.rarity).toBe('rare')
+  })
+
+  it('grindPlay300が新設されている（閾値300、EPIC）', () => {
+    const def = ACHIEVEMENT_DEFS.find((d) => d.id === 'grindPlay300')
+    expect(def?.name).toBe('ドパ漬け')
+    expect(def?.unlockCondition).toEqual({ type: 'officialPlayCount', threshold: 300 })
+    const title = TITLE_DEFS.find((t) => t.id === 'grindPlay300')
+    expect(title?.rarity).toBe('epic')
+  })
+
+  it('grindPlay500は改名+LEGENDARYへ、grindPlay1000は改名（rarityはMYTHICのまま）、閾値はどちらも無変更', () => {
+    const def500 = ACHIEVEMENT_DEFS.find((d) => d.id === 'grindPlay500')
+    expect(def500?.name).toBe('廃ドパ民')
+    expect(def500?.unlockCondition).toEqual({ type: 'officialPlayCount', threshold: 500 })
+    expect(TITLE_DEFS.find((t) => t.id === 'grindPlay500')?.rarity).toBe('legendary')
+
+    const def1000 = ACHIEVEMENT_DEFS.find((d) => d.id === 'grindPlay1000')
+    expect(def1000?.name).toBe('THE ドパガキ')
+    expect(def1000?.unlockCondition).toEqual({ type: 'officialPlayCount', threshold: 1000 })
+    expect(TITLE_DEFS.find((t) => t.id === 'grindPlay1000')?.rarity).toBe('mythic')
+  })
+})
+
+describe('item 130: SECRET未解放/解放の表示切り替え', () => {
+  it('鏡写し・大逆転のdescriptionはもう固定文字列「？？？」ではなく、実際の条件文が入っている', () => {
+    const mirror = ACHIEVEMENT_DEFS.find((d) => d.id === 'battleMirrorMatch')
+    const comeback = ACHIEVEMENT_DEFS.find((d) => d.id === 'battleComeback')
+    expect(mirror?.description).not.toBe('？？？')
+    expect(comeback?.description).not.toBe('？？？')
+    expect(mirror?.description.length).toBeGreaterThan(0)
+    expect(comeback?.description.length).toBeGreaterThan(0)
+  })
+
+  it('鏡写し・大逆転には答えを明かさない方向性だけのhintが設定されている', () => {
+    const mirror = ACHIEVEMENT_DEFS.find((d) => d.id === 'battleMirrorMatch')
+    const comeback = ACHIEVEMENT_DEFS.find((d) => d.id === 'battleComeback')
+    expect(mirror?.hint).toBeTruthy()
+    expect(comeback?.hint).toBeTruthy()
+    // hintが実際の判定条件の核心（5項目/完全一致/DOPA%差等の具体的な仕組み）をそのまま書いていない
+    // ことの最低限の確認（答えそのものの専門語を含まない）。
+    expect(mirror?.hint).not.toMatch(/5項目|完全一致/)
+    expect(comeback?.hint).not.toMatch(/DOPA%|ビハインド/)
+  })
+
+  it('secretでない通常実績にはhintが設定されていない', () => {
+    const normal = ACHIEVEMENT_DEFS.find((d) => d.id === 'noMiss100')
+    expect(normal?.secret).toBeFalsy()
+    expect(normal?.hint).toBeUndefined()
   })
 })

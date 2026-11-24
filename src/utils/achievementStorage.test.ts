@@ -389,11 +389,12 @@ describe('Grind実績 (Ver.6 Phase 10)', () => {
     installFakeLocalStorage()
   })
 
-  it('10/50/100/500/1000回の境界', () => {
+  it('10/50/100/300/500/1000回の境界（item 129でGrindを6段階へ再構成）', () => {
     expect(checkGrindAchievements(9)).toEqual([])
     expect(checkGrindAchievements(10)).toEqual(['grindPlay10'])
     expect(checkGrindAchievements(50)).toEqual(['grindPlay50'])
     expect(checkGrindAchievements(100)).toEqual(['grindPlay100'])
+    expect(checkGrindAchievements(300)).toEqual(['grindPlay300'])
     expect(checkGrindAchievements(500)).toEqual(['grindPlay500'])
     expect(checkGrindAchievements(1000)).toEqual(['grindPlay1000'])
   })

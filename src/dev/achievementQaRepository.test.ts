@@ -73,8 +73,11 @@ describe('achievementQaRepository（item 116）', () => {
   it('Preview有効時: qaUnlockAchievementsByRarityは指定したTitleレアリティのAchievementだけを解除する', () => {
     qaUnlockAchievementsByRarity('mythic')
     const unlocked = Object.keys(getUnlockedAchievements())
-    // MYTHIC Titleは dopa500 / worldBattleWin250 / grindPlay1000 / battleMirrorMatch / battleComeback の5個のみ。
-    expect(unlocked.sort()).toEqual(['battleComeback', 'battleMirrorMatch', 'dopa500', 'grindPlay1000', 'worldBattleWin250'].sort())
+    // MYTHIC Titleは dopa500 / worldBattleWin250 / grindPlay1000 / battleMirrorMatch / battleComeback /
+    // endlessAdvanced50（item 128で追加）の6個。
+    expect(unlocked.sort()).toEqual(
+      ['battleComeback', 'battleMirrorMatch', 'dopa500', 'grindPlay1000', 'worldBattleWin250', 'endlessAdvanced50'].sort(),
+    )
   })
 
   it('Production相当（__DOPAGAKI_PREVIEW_ENABLED__=false）: qaUnlockAllAchievementsは何もしない（構造的に無効化されている）', () => {

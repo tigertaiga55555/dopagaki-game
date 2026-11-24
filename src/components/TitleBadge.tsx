@@ -22,6 +22,18 @@ interface Props {
  * MYTHICとは別のSECRET専用テーマ（config/titleRarityTheme.tsのgetSecretTheme）を使う
  * ——「SECRETはMYTHICより上ではなく完全に別物」というユーザー指示をProfile装備表示にも
  * 一貫させるため。
+ *
+ * 次フェーズ（item 136、追加最終調整ラウンド）: 以前はMYTHICだけ「外側＝虹グラデーション
+ * のリング、内側＝黒に近い専用背景（#1a0e2e）」という2重divの特殊構造にしていたが、
+ * 「メインバッジだけサブ1/サブ2と違う黒背景の特殊スタイルになっている。背景を黒くする
+ * 必要はなく、メインとサブの差は大きさだけで十分」というユーザー指示により、この特殊
+ * 構造を廃止した。全rarity共通の1重pill（border+background+text、ProfileScreen.tsxの
+ * サブ1/サブ2バッジと全く同じクラス構成）に統一する——MYTHICのbadgeBorderClassは
+ * 元々transparentな枠色＋虹グラデーションのbackground-imageを兼ねており、
+ * badgeBackgroundClass（background-color）より前面に描画される（CSSのbackground-image
+ * がbackground-colorの上に重なる仕様）ため、1重pillにしても虹グラデーションはそのまま
+ * 正しく見える。メイン/サブの差は見た目の構造ではなく大きさ（px-4 py-1.5・text-smの
+ * メインに対し、サブはpx-2 py-0.5・text-[9px]）だけになった。
  */
 export function TitleBadge({ title, onClick }: Props) {
   const isSecret = getAchievementDefById(title.id)?.secret === true
@@ -40,20 +52,6 @@ export function TitleBadge({ title, onClick }: Props) {
   }
 
   const theme = getTitleRarityTheme(title.rarity)
-
-  if (title.rarity === 'mythic') {
-    return (
-      <button
-        onClick={onClick}
-        className={`rounded-full p-[1.5px] active:scale-95 ${theme.badgeBorderClass} ${theme.badgePulseClass} ${theme.badgeGlowClass}`}
-      >
-        <span className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 ${theme.badgeBackgroundClass}`}>
-          <span className="text-[9px] font-black tracking-widest text-white/50">{theme.label}</span>
-          <span className={`text-sm font-black ${theme.badgeTextClass}`}>{title.name}</span>
-        </span>
-      </button>
-    )
-  }
 
   return (
     <button
