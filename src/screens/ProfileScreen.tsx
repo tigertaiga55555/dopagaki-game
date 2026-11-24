@@ -5,7 +5,6 @@ import { PassTitleBadge } from '../components/PassTitleBadge'
 import { PassTitleDetailModal } from '../components/PassTitleDetailModal'
 import { TitleBadge } from '../components/TitleBadge'
 import { TitleDetailModal } from '../components/TitleDetailModal'
-import { TitleSlotPickerModal } from '../components/TitleSlotPickerModal'
 import { ACHIEVEMENT_DEFS } from '../config/achievements'
 import { PASS_TITLE_DEFS_BY_ID } from '../config/passTitles'
 import { resolveAvatarEmoji } from '../config/profileConfig'
@@ -15,8 +14,8 @@ import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import { getOwnedPassTitleIds, isPassTitleOwned } from '../payment/passTitleGrants'
 import { trackProfileView } from '../utils/analytics'
 import { localPlayerStatsRepository } from '../utils/playerStatsRepository'
-import { equipTitle, getProfile, unequipTitleFromSlot } from '../utils/profileStorage'
-import type { TitleSlot } from '../utils/profileStorage'
+import { equipTitle, getProfile } from '../utils/profileStorage'
+import type { TitleId } from '../types'
 
 interface Props {
   onBack: () => void
@@ -61,9 +60,16 @@ export function ProfileScreen({
 
   const equippedPassTitle = profile.equippedTitleId ? PASS_TITLE_DEFS_BY_ID[profile.equippedTitleId] : null
   const equippedRegularTitle = !equippedPassTitle && profile.equippedTitleId ? TITLE_DEFS_BY_ID[profile.equippedTitleId] : null
-  const [showTitleDetail, setShowTitleDetail] = useState(false)
-  /** 次フェーズ（item 72-74）: サブ枠バッジタップ→管理のみモード（pendingTitleId無し）でモーダルを開く。 */
-  const [slotPickerOpen, setSlotPickerOpen] = useState(false)
+  /**
+   * 次フェーズ（ゲーム機能クローズラウンド、item 89）: Profile画面ではTitle（メイン/
+   * サブ1/サブ2のどれでも）は「見るだけ」。タップすると常にこの詳細モーダル（説明・
+   * 獲得条件）だけを開き、装備/取り外し/枠変更は一切できない——それらはAchievement
+   * 画面（TitleSlotPickerModal）だけの役割にする、というユーザー指示どおり。
+   * ここで保持するのは「今詳細を見ているTitleId」だけで、どの枠から開いたかは問わない。
+   */
+  const [detailTitleId, setDetailTitleId] = useState<TitleId | null>(null)
+  const detailPassTitle = detailTitleId ? PASS_TITLE_DEFS_BY_ID[detailTitleId] : null
+  const detailRegularTitle = detailTitleId && !detailPassTitle ? TITLE_DEFS_BY_ID[detailTitleId] : null
 
   // 次フェーズ（item 12）: LEGENDARY/MYTHICを装備している間だけ、アバターリング/
   // プレイヤーカードへ軽くレアリティのテーマ色を広げる（COMMON/RARE/EPICは従来の見た目の
@@ -126,11 +132,47 @@ export function ProfileScreen({
           <p className="text-xl font-black text-white">{profile.nickname}</p>
 
           {equippedPassTitle ? (
-            <PassTitleBadge title={equippedPassTitle} onClick={() => setShowTitleDetail(true)} />
+            <PassTitleBadge title={equippedPassTitle} onClick={() => setDetailTitleId(profile.equippedTitleId)} />
           ) : equippedRegularTitle ? (
-            <TitleBadge title={equippedRegularTitle} onClick={() => setShowTitleDetail(true)} />
+            <TitleBadge title={equippedRegularTitle} onClick={() => setDetailTitleId(profile.equippedTitleId)} />
           ) : (
             <p className="text-xs font-bold tracking-widest text-white/40">称号未装備</p>
+          )}
+
+          {/*
+            次フェーズ（item 88）: サブ1・サブ2を、カードの外側ではなくこのプレイヤーカード
+            内部（メイン称号バッジのすぐ下）へ移動した——メイン/サブ1/サブ2の3つ全てを
+            同じカード内に収め、メインが主役・サブ2つは明確に小さく補助的という見た目に
+            する（ユーザー指示）。PASSの金枠・上端バッジ・LEGENDARY/MYTHICの装飾
+            （titleFlourishClass、カード全体への適用）とは重ならない配置・サイズ感。
+            PASS非所有者はサブ枠が常に使えないため、この行自体を出さない。
+            次フェーズ（item 89）: タップしても装備管理UIは一切開かない——見るだけ
+            （説明・獲得条件の詳細モーダル）。空き枠はタップしても何も起きない。
+          */}
+          {hasPass && (
+            <div className="flex w-full items-center justify-center gap-2">
+              {profile.subTitleIds.map((id, index) => {
+                const def = id ? TITLE_DEFS_BY_ID[id] : null
+                const passDef = id ? PASS_TITLE_DEFS_BY_ID[id] : null
+                const theme = def ? getTitleRarityTheme(def.rarity) : null
+                const filled = def || passDef
+                return (
+                  <button
+                    key={index}
+                    onClick={filled ? () => setDetailTitleId(id) : undefined}
+                    disabled={!filled}
+                    className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-bold active:scale-95 disabled:active:scale-100 ${
+                      filled
+                        ? `${theme ? theme.badgeBorderClass : 'border-amber-400/50'} ${theme ? theme.badgeBackgroundClass : 'bg-amber-500/10'} ${theme ? theme.badgeTextClass : 'text-amber-200'}`
+                        : 'border-white/10 bg-white/5 text-white/25'
+                    }`}
+                  >
+                    <span className="text-[7px] font-black tracking-widest opacity-60">{index === 0 ? 'サブ1' : 'サブ2'}</span>
+                    <span>{def?.name ?? passDef?.name ?? '未装備'}</span>
+                  </button>
+                )
+              })}
+            </div>
           )}
 
           {ownedPassTitleIds.length > 0 && profile.equippedTitleId !== ownedPassTitleIds[0] && (
@@ -149,38 +191,6 @@ export function ProfileScreen({
             プロフィールを編集
           </button>
         </div>
-
-        {/*
-          次フェーズ（ゲーム機能クローズラウンド、item 72-74）: 旧お気に入りTitle行を、
-          実際に装備されているサブ枠（sub1/sub2）の表示へ置き換えた。メインの称号バッジ
-          （上のカード内、プレイヤー名直下）より明確に控えめ・小さいピルで表示し、
-          390px幅でもカードレイアウトを崩さない。PASS非所有者はサブ枠が常に使えないため
-          この行自体を出さない（空の枠を見せてタップできない、という中途半端なUIにしない）。
-        */}
-        {hasPass && (
-          <div className="flex w-full max-w-xs items-center justify-center gap-2">
-            {profile.subTitleIds.map((id, index) => {
-              const slot: TitleSlot = index === 0 ? 'sub1' : 'sub2'
-              const def = id ? TITLE_DEFS_BY_ID[id] : null
-              const passDef = id ? PASS_TITLE_DEFS_BY_ID[id] : null
-              const theme = def ? getTitleRarityTheme(def.rarity) : null
-              return (
-                <button
-                  key={slot}
-                  onClick={() => setSlotPickerOpen(true)}
-                  className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-bold active:scale-95 ${
-                    def || passDef
-                      ? `${theme ? theme.badgeBorderClass : 'border-amber-400/50'} ${theme ? theme.badgeBackgroundClass : 'bg-amber-500/10'} ${theme ? theme.badgeTextClass : 'text-amber-200'}`
-                      : 'border-white/10 bg-white/5 text-white/30'
-                  }`}
-                >
-                  <span className="text-[8px] font-black tracking-widest opacity-60">{index === 0 ? 'サブ1' : 'サブ2'}</span>
-                  <span>{def?.name ?? passDef?.name ?? '未装備'}</span>
-                </button>
-              )
-            })}
-          </div>
-        )}
 
         {/* プレイヤー記録 */}
         <div className="w-full max-w-xs space-y-2 rounded-2xl bg-white/5 px-4 py-4">
@@ -237,19 +247,9 @@ export function ProfileScreen({
         </div>
       </div>
 
-      {showTitleDetail && equippedPassTitle && <PassTitleDetailModal title={equippedPassTitle} onClose={() => setShowTitleDetail(false)} />}
-      {showTitleDetail && equippedRegularTitle && (
-        <TitleDetailModal achievementId={equippedRegularTitle.unlockedByAchievementId} unlocked onClose={() => setShowTitleDetail(false)} />
-      )}
-      {slotPickerOpen && (
-        <TitleSlotPickerModal
-          profile={profile}
-          hasPass={hasPass}
-          onUnequip={(slot) => {
-            setProfile(unequipTitleFromSlot(slot))
-          }}
-          onClose={() => setSlotPickerOpen(false)}
-        />
+      {detailPassTitle && <PassTitleDetailModal title={detailPassTitle} onClose={() => setDetailTitleId(null)} />}
+      {detailRegularTitle && (
+        <TitleDetailModal achievementId={detailRegularTitle.unlockedByAchievementId} unlocked onClose={() => setDetailTitleId(null)} />
       )}
     </div>
   )
