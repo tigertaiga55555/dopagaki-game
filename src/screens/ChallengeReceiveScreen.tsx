@@ -5,6 +5,7 @@ import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSourc
 import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
 import { ENDLESS_THEME } from '../config/endlessTheme'
 import { trackChallengeOpened } from '../utils/analytics'
+import { sfx } from '../utils/sound'
 import type { ChallengeApiError, ChallengeRecord } from '../challenge/types'
 import type { EndlessDifficulty } from '../types'
 
@@ -69,7 +70,10 @@ export function ChallengeReceiveScreen({ challengeId, onAccept, onHome, onViewHi
       <div className="flex min-h-dvh flex-col items-center justify-center gap-5 px-6 text-center">
         <p className="text-sm font-bold text-white/70">{message}</p>
         <button
-          onClick={onHome}
+          onClick={() => {
+            sfx.navHome()
+            onHome()
+          }}
           className="rounded-2xl bg-white/10 px-6 py-3 text-sm font-bold text-white active:scale-95"
         >
           ホームへ戻る
@@ -147,15 +151,30 @@ export function ChallengeReceiveScreen({ challengeId, onAccept, onHome, onViewHi
 
       <div className="flex w-full max-w-xs flex-col gap-3">
         <button
-          onClick={() => onAccept(challenge)}
+          onClick={() => {
+            sfx.uiTap()
+            onAccept(challenge)
+          }}
           className="w-full rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-5 text-lg font-black tracking-widest text-white shadow-[0_8px_0_0_rgba(126,34,206,0.8)] transition-transform active:translate-y-1 active:shadow-[0_2px_0_0_rgba(126,34,206,0.8)]"
         >
           挑戦する
         </button>
-        <button onClick={() => onViewHistory(challenge)} className="w-full rounded-2xl bg-white/10 py-3 text-sm font-bold text-white active:scale-95">
+        <button
+          onClick={() => {
+            sfx.uiTap()
+            onViewHistory(challenge)
+          }}
+          className="w-full rounded-2xl bg-white/10 py-3 text-sm font-bold text-white active:scale-95"
+        >
           挑戦の履歴を見る
         </button>
-        <button onClick={onHome} className="w-full rounded-2xl bg-transparent py-2 text-sm font-bold text-white/50 active:scale-95">
+        <button
+          onClick={() => {
+            sfx.navHome()
+            onHome()
+          }}
+          className="w-full rounded-2xl bg-transparent py-2 text-sm font-bold text-white/50 active:scale-95"
+        >
           ホームへ戻る
         </button>
       </div>

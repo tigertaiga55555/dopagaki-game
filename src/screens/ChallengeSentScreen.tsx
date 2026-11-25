@@ -7,6 +7,7 @@ import { ENDLESS_THEME } from '../config/endlessTheme'
 import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
 import { NavBar } from '../components/NavBar'
 import { checkChallengeCreatedAchievement } from '../utils/achievementStorage'
+import { sfx } from '../utils/sound'
 import type { ChallengeRecord } from '../challenge/types'
 import type { EndlessDifficulty } from '../types'
 
@@ -119,15 +120,30 @@ export function ChallengeSentScreen({ challenge, onDone, onBack }: Props) {
 
       <div className="flex w-full max-w-xs flex-col gap-3">
         <button
-          onClick={handleShare}
+          onClick={() => {
+            sfx.uiTap()
+            handleShare()
+          }}
           className="w-full rounded-2xl bg-gradient-to-b from-amber-400 to-orange-500 py-4 text-base font-black text-[#2a1200] shadow-[0_6px_0_0_rgba(154,52,18,0.8)] transition-transform active:translate-y-1 active:shadow-[0_2px_0_0_rgba(154,52,18,0.8)]"
         >
           共有する
         </button>
-        <button onClick={handleCopy} className="w-full rounded-2xl bg-white/10 py-3 text-sm font-bold text-white active:scale-95">
+        <button
+          onClick={() => {
+            sfx.uiTap()
+            handleCopy()
+          }}
+          className="w-full rounded-2xl bg-white/10 py-3 text-sm font-bold text-white active:scale-95"
+        >
           {copied ? 'コピーしました！' : 'URLをコピー'}
         </button>
-        <button onClick={onDone} className="w-full rounded-2xl bg-transparent py-2 text-sm font-bold text-white/50 active:scale-95">
+        <button
+          onClick={() => {
+            sfx.navHome()
+            onDone()
+          }}
+          className="w-full rounded-2xl bg-transparent py-2 text-sm font-bold text-white/50 active:scale-95"
+        >
           ホームへ戻る
         </button>
       </div>

@@ -12,6 +12,7 @@ import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
 import { trackChallengeHistoryView } from '../utils/analytics'
 import { checkChallengeZeroWallAchievement, checkEndlessChallengeDefenseAchievement } from '../utils/achievementStorage'
 import { getOrCreatePlayerId } from '../utils/profileStorage'
+import { sfx } from '../utils/sound'
 import type { ChallengeApiError, ChallengeAttemptRecord, ChallengeMode, ChallengeRecord } from '../challenge/types'
 import type { AchievementId } from '../types'
 
@@ -96,7 +97,13 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-5 px-6 text-center">
         <p className="text-sm font-bold text-white/70">履歴の読み込みに失敗しました。</p>
-        <button onClick={onBack} className="rounded-2xl bg-white/10 px-6 py-3 text-sm font-bold text-white active:scale-95">
+        <button
+          onClick={() => {
+            sfx.navBack()
+            onBack()
+          }}
+          className="rounded-2xl bg-white/10 px-6 py-3 text-sm font-bold text-white active:scale-95"
+        >
           戻る
         </button>
       </div>
@@ -124,7 +131,13 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
       <AchievementUnlockBanner newlyUnlocked={newlyUnlocked} />
       <div className="flex items-center justify-between px-5 pt-4">
-        <button onClick={onBack} className="rounded-full bg-white/10 px-4 py-1.5 text-xs font-bold text-white/70 active:scale-95">
+        <button
+          onClick={() => {
+            sfx.navBack()
+            onBack()
+          }}
+          className="rounded-full bg-white/10 px-4 py-1.5 text-xs font-bold text-white/70 active:scale-95"
+        >
           ← 戻る
         </button>
         <p className="text-sm font-black tracking-widest text-white/80">挑戦の履歴</p>

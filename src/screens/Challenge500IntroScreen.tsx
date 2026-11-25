@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { QuitButton } from '../components/QuitButton'
 import { CHALLENGE500_CONFIG } from '../config/challenge500Config'
+import { sfx } from '../utils/sound'
 
 interface Props {
   onStart: () => void
@@ -45,14 +46,20 @@ export function Challenge500IntroScreen({ onStart, onQuit }: Props) {
 
         {page < PAGE_COUNT - 1 ? (
           <button
-            onClick={() => setPage((p) => p + 1)}
+            onClick={() => {
+              sfx.uiTap()
+              setPage((p) => p + 1)
+            }}
             className="w-full max-w-xs rounded-2xl bg-white/10 py-4 text-base font-black text-white active:scale-95"
           >
             次へ
           </button>
         ) : (
           <button
-            onClick={onStart}
+            onClick={() => {
+              sfx.uiTap()
+              onStart()
+            }}
             className="w-full max-w-xs rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-5 text-lg font-black text-white shadow-[0_8px_0_0_rgba(126,34,206,0.8)] transition-transform active:translate-y-1 active:shadow-[0_2px_0_0_rgba(126,34,206,0.8)]"
           >
             500%に挑戦する

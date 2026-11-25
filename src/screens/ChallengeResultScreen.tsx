@@ -13,6 +13,7 @@ import {
 } from '../utils/achievementStorage'
 import { recordChallengeAttemptResult } from '../utils/challengeStatsStorage'
 import { getProfile } from '../utils/profileStorage'
+import { sfx } from '../utils/sound'
 import type { ChallengeApiError, ChallengeAttemptRecord, ChallengeRecord } from '../challenge/types'
 import type { AchievementId, FinalResultV4 } from '../types'
 
@@ -145,10 +146,22 @@ export function ChallengeResultScreen({ challenge, myResult, myEndlessStreak, on
       <div className="flex min-h-dvh flex-col items-center justify-center gap-5 px-6 text-center">
         <p className="text-sm font-bold text-white/70">結果の送信に失敗しました。通信環境をご確認のうえ、もう一度お試しください。</p>
         <div className="flex w-full max-w-xs flex-col gap-3">
-          <button onClick={onRetry} className="w-full rounded-2xl bg-white/10 py-3 text-sm font-bold text-white active:scale-95">
+          <button
+            onClick={() => {
+              sfx.uiTap()
+              onRetry()
+            }}
+            className="w-full rounded-2xl bg-white/10 py-3 text-sm font-bold text-white active:scale-95"
+          >
             もう一度挑戦する
           </button>
-          <button onClick={onHome} className="w-full rounded-2xl bg-transparent py-2 text-sm font-bold text-white/50 active:scale-95">
+          <button
+            onClick={() => {
+              sfx.navHome()
+              onHome()
+            }}
+            className="w-full rounded-2xl bg-transparent py-2 text-sm font-bold text-white/50 active:scale-95"
+          >
             ホームへ戻る
           </button>
         </div>
@@ -215,15 +228,30 @@ export function ChallengeResultScreen({ challenge, myResult, myEndlessStreak, on
 
       <div className="flex w-full max-w-xs flex-col gap-3">
         <button
-          onClick={onRetry}
+          onClick={() => {
+            sfx.uiTap()
+            onRetry()
+          }}
           className="w-full rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-4 text-base font-black tracking-widest text-white shadow-[0_6px_0_0_rgba(126,34,206,0.8)] transition-transform active:translate-y-1 active:shadow-[0_2px_0_0_rgba(126,34,206,0.8)]"
         >
           もう一度挑戦する
         </button>
-        <button onClick={onViewHistory} className="w-full rounded-2xl bg-white/10 py-3 text-sm font-bold text-white active:scale-95">
+        <button
+          onClick={() => {
+            sfx.uiTap()
+            onViewHistory()
+          }}
+          className="w-full rounded-2xl bg-white/10 py-3 text-sm font-bold text-white active:scale-95"
+        >
           挑戦の履歴を見る
         </button>
-        <button onClick={onHome} className="w-full rounded-2xl bg-transparent py-2 text-sm font-bold text-white/50 active:scale-95">
+        <button
+          onClick={() => {
+            sfx.navHome()
+            onHome()
+          }}
+          className="w-full rounded-2xl bg-transparent py-2 text-sm font-bold text-white/50 active:scale-95"
+        >
           ホームへ戻る
         </button>
       </div>
