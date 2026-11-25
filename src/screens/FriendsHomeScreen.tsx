@@ -3,6 +3,7 @@ import { NavBar } from '../components/NavBar'
 import { resolveAvatarEmoji } from '../config/profileConfig'
 import { getActiveRoomForHost } from '../battle/privateRoomClient'
 import { getOrCreateFriendCode, listFriends, listIncomingFriendRequests, respondToFriendRequest, sendFriendRequest } from '../friends/friendsClient'
+import { sfx } from '../utils/sound'
 import type { FriendSummary, IncomingFriendRequest } from '../friends/types'
 import type { PresenceSnapshot } from '../presence/presenceTypes'
 
@@ -163,7 +164,10 @@ export function FriendsHomeScreen({
               className="flex-1 rounded-xl bg-white/10 px-3 py-2.5 text-center text-lg font-black tracking-[0.15em] text-white outline-none"
             />
             <button
-              onClick={handleSendRequest}
+              onClick={() => {
+                sfx.uiTap()
+                handleSendRequest()
+              }}
               className="rounded-xl bg-gradient-to-b from-fuchsia-500 to-purple-600 px-4 text-sm font-black text-white active:scale-95"
             >
               申請
@@ -180,14 +184,20 @@ export function FriendsHomeScreen({
                 <span className="text-xl">{resolveAvatarEmoji(req.fromProfile.avatar)}</span>
                 <p className="min-w-0 flex-1 truncate text-sm font-black text-white">{req.fromProfile.nickname}</p>
                 <button
-                  onClick={() => handleRespond(req.requestId, 'accept')}
+                  onClick={() => {
+                    sfx.uiTap()
+                    handleRespond(req.requestId, 'accept')
+                  }}
                   disabled={busyRequestId === req.requestId}
                   className="rounded-full bg-emerald-500/80 px-2.5 py-1 text-[11px] font-black text-white active:scale-95 disabled:opacity-50"
                 >
                   承認
                 </button>
                 <button
-                  onClick={() => handleRespond(req.requestId, 'reject')}
+                  onClick={() => {
+                    sfx.uiTap()
+                    handleRespond(req.requestId, 'reject')
+                  }}
                   disabled={busyRequestId === req.requestId}
                   className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/60 active:scale-95 disabled:opacity-50"
                 >
@@ -213,13 +223,22 @@ export function FriendsHomeScreen({
               <div key={friend.playerId} className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2.5">
                 <span className="text-xl">{resolveAvatarEmoji(friend.profile.avatar)}</span>
                 <div className="min-w-0 flex-1 text-left">
-                  <button onClick={() => onOpenFriendProfile(friend.playerId)} className="block truncate text-sm font-black text-white active:opacity-70">
+                  <button
+                    onClick={() => {
+                      sfx.uiTap()
+                      onOpenFriendProfile(friend.playerId)
+                    }}
+                    className="block truncate text-sm font-black text-white active:opacity-70"
+                  >
                     {friend.profile.nickname}
                   </button>
                   <p className={`text-[10px] font-bold ${PRESENCE_CLASS[presence]}`}>{PRESENCE_LABEL[presence]}</p>
                 </div>
                 <button
-                  onClick={() => onOpenFriendProfile(friend.playerId)}
+                  onClick={() => {
+                    sfx.uiTap()
+                    onOpenFriendProfile(friend.playerId)
+                  }}
                   className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-bold text-white/70 active:scale-95"
                 >
                   プロフィール
@@ -230,7 +249,10 @@ export function FriendsHomeScreen({
                   消え、一生招待できなかった）の修正。適格性はクリック後、サーバー側が判断する。
                 */}
                 <button
-                  onClick={() => handleInviteClick(friend)}
+                  onClick={() => {
+                    sfx.uiTap()
+                    handleInviteClick(friend)
+                  }}
                   disabled={busyInviteId === friend.playerId || invited}
                   className={`rounded-full px-2.5 py-1 text-[10px] font-black active:scale-95 disabled:opacity-50 ${
                     hasPass ? 'bg-fuchsia-500/30 text-fuchsia-200' : 'bg-amber-500/20 text-amber-300'
