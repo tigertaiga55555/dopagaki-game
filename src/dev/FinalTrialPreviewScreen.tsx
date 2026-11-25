@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { FINAL_TRIAL_CONFIG } from '../config/finalTrialConfig'
 import { FinalTrialScreen } from '../screens/FinalTrialScreen'
 import { ResultScreen } from '../screens/ResultScreen'
+import { buildRushSharePayload, createShareNonce, encodeResultSharePayload } from '../share/resultSharePayload'
 import type { FinalResultV4, PlayStats } from '../types'
 
 /**
@@ -45,6 +46,7 @@ const FAKE_STATS: PlayStats = {
   shortVideoSamples: [],
   colorWordFooledCount: 0,
   notifRushSamples: [],
+  bonusGainRaw: 0,
 }
 
 const MODE_LABEL: Record<FinalPreviewMode, string> = {
@@ -55,13 +57,20 @@ const MODE_LABEL: Record<FinalPreviewMode, string> = {
 
 export function FinalTrialPreviewScreen({ mode }: { mode: FinalPreviewMode }) {
   const [result, setResult] = useState<FinalResultV4 | null>(null)
+  /** 次フェーズ（item 61-66）: QA専用画面でも実際のResultScreenと同じresultId契約を満たす。 */
+  const [resultShareId, setResultShareId] = useState('')
   const [playKey, setPlayKey] = useState(0)
 
   if (result) {
     return (
       <ResultScreen
         result={result}
+        resultId={resultShareId}
         onRetry={() => {
+          setResult(null)
+          setPlayKey((k) => k + 1)
+        }}
+        onHome={() => {
           setResult(null)
           setPlayKey((k) => k + 1)
         }}
@@ -82,7 +91,10 @@ export function FinalTrialPreviewScreen({ mode }: { mode: FinalPreviewMode }) {
         startAtQuestion={startAtQuestion}
         showForceCorrect
         autoForceCorrectDelayMs={mode === 'clear200' ? 900 : undefined}
-        onFinish={setResult}
+        onFinish={(r) => {
+          setResult(r)
+          setResultShareId(encodeResultSharePayload(buildRushSharePayload(r.percent, createShareNonce())))
+        }}
         onQuit={() => setPlayKey((k) => k + 1)}
       />
     </div>

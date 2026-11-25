@@ -37,8 +37,11 @@ const PAGE_BG = '#0b0620'
 type Variant = 'normal' | 'overdrive' | 'max'
 
 function getVariantId(result: FinalResultV4): Variant {
-  const { isOverdrive, isMax } = getResultCardVariant(result)
-  if (isMax) return 'max'
+  // Ver.6 Phase 1: isMax単体ではなくisPremium（200%ちょうど／300-400チェックポイント終了／
+  // 500%完全クリアの3者共通）を使う。視覚的な豪華さ（ゴールド装飾）は共有し、
+  // ヘッダー文言だけをbuildContent側でtier別に出し分ける。
+  const { isOverdrive, isPremium } = getResultCardVariant(result)
+  if (isPremium) return 'max'
   if (isOverdrive) return 'overdrive'
   return 'normal'
 }
@@ -246,20 +249,24 @@ interface CardContent {
 
 function buildContent(ctx: CanvasRenderingContext2D, result: FinalResultV4): CardContent {
   const variant = getVariantId(result)
-  const { isFinalTrial, isMax, isOverdrive } = getResultCardVariant(result)
+  const { isFinalTrial, isMax, isOverdrive, isChallenge500Progress, isChallenge500Clear, isPremium } = getResultCardVariant(result)
 
-  const headerText = isMax
-    ? '🏆 PERFECT CLEAR!! 🏆'
-    : isFinalTrial
-      ? '⚡ FINAL DOPA TRIAL ⚡'
-      : isOverdrive
-        ? '⚡ DOPA OVERDRIVE ⚡'
-        : 'ドパガキゲーム'
-  const headerColor = isMax ? '#ffffff' : isOverdrive ? '#fcd34d' : '#f0abfc'
-  const headerSize = isMax ? 14 : 12
+  const headerText = isChallenge500Clear
+    ? '🏆 DOPA 500% ABSOLUTE CLEAR 🏆'
+    : isChallenge500Progress
+      ? '⚡ 限界突破チャレンジ ⚡'
+      : isMax
+        ? '🏆 PERFECT CLEAR!! 🏆'
+        : isFinalTrial
+          ? '⚡ FINAL DOPA TRIAL ⚡'
+          : isOverdrive
+            ? '⚡ DOPA OVERDRIVE ⚡'
+            : 'ドパガキゲーム'
+  const headerColor = isPremium ? '#ffffff' : isOverdrive ? '#fcd34d' : '#f0abfc'
+  const headerSize = isPremium ? 14 : 12
 
   const percentColor = isOverdrive ? '#fcd34d' : result.percent >= 100 ? '#fde68a' : '#ffffff'
-  const percentGlow = isMax ? 'rgba(250,204,21,0.9)' : 'rgba(217,70,239,0.5)'
+  const percentGlow = isPremium ? 'rgba(250,204,21,0.9)' : 'rgba(217,70,239,0.5)'
   const typeColor = isOverdrive ? '#fde68a' : '#f0abfc'
 
   const crimeInnerWidth = CONTENT_WIDTH - 24 // p-3(12px)*2
@@ -338,6 +345,23 @@ function layoutCard(
       drawCenteredText(
         ctx,
         `FINAL DOPA TRIAL ${result.finalTrial.trialsCleared} / 16`,
+        centerX,
+        cardTop + cursor,
+        900,
+        14,
+        'rgba(255,255,255,0.7)',
+        0.5,
+      )
+    }
+  }
+
+  // Ver.6 Phase 1: 限界突破チャレンジ（200〜500%）の進捗（チェックポイント or 完全クリア）
+  if (result.challenge500) {
+    cursor += 6 + 14
+    if (draw) {
+      drawCenteredText(
+        ctx,
+        result.challenge500.cleared ? 'CHALLENGE COMPLETE' : `CHECKPOINT ${result.challenge500.floor}%`,
         centerX,
         cardTop + cursor,
         900,

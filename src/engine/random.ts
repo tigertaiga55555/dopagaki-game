@@ -37,3 +37,39 @@ export function weightedPick<K extends string>(weights: Record<K, number>): K {
   }
   return entries[entries.length - 1][0]
 }
+
+/**
+ * 次フェーズ（item 154-156、ENDLESS中級・上級の難易度再設計）: 「streak（連続正解数）が
+ * 伸びるほど重みの重心が連続的にシフトする」という要件を、1箇所の汎用ロジックとして
+ * 実装する（中級/上級それぞれに個別の階段関数を書くと、境界で不自然な段差が出たり
+ * 実装が重複したりするため）。
+ *
+ * curveは { streak, weights } の制御点を昇順で並べたもの。streakがある制御点の間に
+ * あれば、両端の重みを線形補間する（各キーごとに独立に補間するため、重みの合計が
+ * 制御点間で厳密に100である必要はない——weightedPick側で正規化される）。streakが
+ * 最初の制御点より小さい、または最後の制御点より大きい場合は、それぞれ最初/最後の
+ * 重みのまま変化しない（既存のisEndlessMilestone等と同じ「範囲外はクランプ」方針）。
+ */
+export interface WeightCurvePoint<K extends string> {
+  streak: number
+  weights: Record<K, number>
+}
+
+export function interpolateWeightCurve<K extends string>(streak: number, curve: readonly WeightCurvePoint<K>[]): Record<K, number> {
+  const first = curve[0]
+  if (streak <= first.streak) return first.weights
+  const last = curve[curve.length - 1]
+  if (streak >= last.streak) return last.weights
+  for (let i = 0; i < curve.length - 1; i++) {
+    const a = curve[i]
+    const b = curve[i + 1]
+    if (streak >= a.streak && streak <= b.streak) {
+      const t = (streak - a.streak) / (b.streak - a.streak)
+      const keys = Object.keys(a.weights) as K[]
+      const out = {} as Record<K, number>
+      for (const k of keys) out[k] = a.weights[k] + (b.weights[k] - a.weights[k]) * t
+      return out
+    }
+  }
+  return last.weights
+}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { pick } from '../engine/random'
 import { createResolveOnce } from '../engine/resolveOnce'
@@ -30,7 +31,7 @@ function computeMinTargetTimeMs() {
 
 function Component({ spec, onResult }: QuestionComponentProps) {
   const { direction } = spec.data as { direction: (typeof DIRECTIONS)[number] }
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
   const guardRef = useRef<ReturnType<typeof createResolveOnce<QuestionResult>> | null>(null)
   if (!guardRef.current) guardRef.current = createResolveOnce(onResult)

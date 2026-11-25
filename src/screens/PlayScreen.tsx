@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { getOverdriveFrameClass, getOverdriveTier, LimitErrorOverlay, OverdriveAmbience, OverdriveRevealOverlay } from '../components/OverdriveFx'
 import { QuitButton } from '../components/QuitButton'
 import { getVisualLevelDef } from '../config/visualConfig'
@@ -7,12 +8,45 @@ import { computeFinalResult } from '../engine/resultEngineV4'
 import { useRushGame } from '../engine/useRushGame'
 import { QUESTION_MODULES } from '../questions'
 import { FinalTrialScreen } from './FinalTrialScreen'
+import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
+import { localHeartRepository } from '../utils/heartRepository'
 import { isMuted, setMuted } from '../utils/sound'
-import type { FinalResultV4, PlayStats } from '../types'
+import type { ChallengeProblemSetItem, FinalResultV4, PlayStats } from '../types'
 
 interface Props {
   onFinish: (result: FinalResultV4) => void
   onQuit: () => void
+  /**
+   * Ver.6 Phase 5.2（Challenge機能完成）: 指定されると、通常のランダム出題の代わりに
+   * この配列を順番に出題する（Challenge挑戦時、作成者と完全に同じ問題で再生するため）。
+   */
+  replayQuestions?: ChallengeProblemSetItem[]
+  /**
+   * Ver.6 Phase 6（1対1リアルタイム対戦）: 1問ごとの判定確定を外部へ伝える追加フック
+   * （useRushGameのonQuestionResolvedをそのまま橋渡しするだけ）。単機プレイの既存呼び出し元は
+   * 渡さないため挙動は変わらない。
+   */
+  onQuestionResolved?: (info: { correct: boolean; reactionMs: number; scoreDelta: number; bonusGainDelta: number }) => void
+  /**
+   * Ver.6 Phase 6: 120%到達後、内部でFinalTrialScreenへ引き継がれた後の進捗
+   * （FinalTrialScreen自身のonProgressと同じ形）。
+   */
+  onFinalTrialProgress?: (percent: number) => void
+  /**
+   * Ver.6 Phase 6（1対1リアルタイム対戦UI調整）: BattleのRIVAL%表示をQuitButtonの帯に
+   * 差し込むためのスロット。単機プレイ・Endless・Challengeの既存呼び出し元は渡さないため
+   * 挙動は変わらない。
+   */
+  battleHud?: ReactNode
+  /**
+   * Ver.6 Phase 10（実績拡張ラウンド）: 既定true（本番の単機プレイの挙動は不変）。
+   * falseを渡すと、computeFinalResult/computeFinalTrialResultのofficialフラグへそのまま
+   * 伝播し、自己ベスト更新・playCount加算・DOPA%実績判定を一切行わない。Challenge
+   * （ChallengePlayScreen.tsx、mode='normal'/'finalTrial'）・Battle（BattleMatchScreen.tsx）
+   * はどちらもreplayQuestions付きでこのPlayScreenを再利用するが、「公式DOPA RUSHプレイ」
+   * ではないため、呼び出し元が明示的にfalseを渡す。
+   */
+  official?: boolean
 }
 
 const JUDGEMENT_COLOR: Record<string, string> = {
@@ -24,11 +58,38 @@ const JUDGEMENT_COLOR: Record<string, string> = {
 
 const PARTICLE_POSITIONS = Array.from({ length: 8 }).map((_, i) => ({ x: (i * 12.5) % 100, delay: i * 0.2 }))
 
-export function PlayScreen({ onFinish, onQuit }: Props) {
+export function PlayScreen({ onFinish, onQuit, replayQuestions, onQuestionResolved, onFinalTrialProgress, battleHud, official = true }: Props) {
   const [finalEntryStats, setFinalEntryStats] = useState<PlayStats | null>(null)
-  const { snapshot, handleQuestionResult } = useRushGame(
-    (payload) => onFinish(computeFinalResult(payload)),
+
+  /**
+   * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 53: Heart消費タイミング修正）:
+   * 以前はこのPlayScreenのマウント直後（＝3・2・1のカウントダウンが始まる前）に
+   * 消費していたため、カウントダウンの途中でやめても返却されない不具合があった。
+   * 正しい基準点は「STARTが実際に表示される瞬間」——useRushGame.ts側のtick()内、
+   * 3・2・1が終わって最初の問題が出題される1回限りの遷移点（onCountdownComplete）
+   * へ移した。official=trueの場合（本番のHome「START」経由のみ）だけ消費する——
+   * Challenge（official=false、replayQuestions付き）・Battle（official=false）は
+   * 一切消費しない（item 7/13、既存方針を維持）。120%→FinalTrialScreen・
+   * 200%→Challenge500Screenへの内部引き継ぎはこのPlayScreen自身を再マウントせず、
+   * useRushGameのtick()内の該当分岐も二度と再実行されないため、1プレイにつき必ず
+   * 1回だけ消費される（二重消費なし）。heartConsumedRefは、二重レンダリング等で
+   * onCountdownCompleteが万一2回呼ばれても消費が2回走らないようにする、べき等性の
+   * ための追加の安全網（ユーザー指示）。
+   */
+  const heartConsumedRef = useRef(false)
+  const handleCountdownComplete = useCallback(() => {
+    if (!official || heartConsumedRef.current) return
+    heartConsumedRef.current = true
+    // 次フェーズ（DOPA PASS基盤ラウンド、item 26）: DOPA PASS所有者はHeartを消費しない。
+    // 無料ユーザーのHeart消費ロジック自体（この呼び出し自体）は一切変更しない——
+    // bypass引数はheartRepository.ts側が前ラウンドから既に持っていた境界。
+    localHeartRepository.consumeHeart(Date.now(), qaLocalEntitlementRepository.hasEntitlement('UNLIMITED_HEART'))
+  }, [official])
+
+  const { snapshot, handleQuestionResult, getRecordedProblemSet, replayIndex } = useRushGame(
+    (payload) => onFinish(computeFinalResult(payload, getRecordedProblemSet(), official)),
     (stats) => setFinalEntryStats(stats),
+    { replayQuestions, onQuestionResolved, onCountdownComplete: handleCountdownComplete },
   )
   const [muted, setMutedState] = useState(isMuted())
   const shakeWrapperRef = useRef<HTMLDivElement>(null)
@@ -69,7 +130,17 @@ export function PlayScreen({ onFinish, onQuit }: Props) {
   // （PlayScreenを再マウントさせない＝Question subtreeのkey不変則には抵触しない。
   // 通常ゲームは既にcurrentSpecがnullで問題を表示していないため、切り替えの影響を受けない）。
   if (finalEntryStats) {
-    return <FinalTrialScreen initialStats={finalEntryStats} onFinish={onFinish} onQuit={onQuit} />
+    return (
+      <FinalTrialScreen
+        initialStats={finalEntryStats}
+        onFinish={onFinish}
+        onQuit={onQuit}
+        onProgress={onFinalTrialProgress}
+        replayQuestions={replayQuestions?.slice(replayIndex)}
+        battleHud={battleHud}
+        official={official}
+      />
+    )
   }
 
   const overdriveTier = getOverdriveTier(snapshot.displayPercent)
@@ -88,7 +159,7 @@ export function PlayScreen({ onFinish, onQuit }: Props) {
 
   return (
     <div className={`relative flex min-h-dvh flex-col overflow-hidden ${frameClass}`}>
-      <QuitButton onQuit={onQuit} />
+      <QuitButton onQuit={onQuit} leftSlot={battleHud} />
       {visual.particles && (
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           {PARTICLE_POSITIONS.map((p, i) => (

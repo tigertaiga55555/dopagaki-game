@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { pickExcluding, randInt, shuffle } from '../engine/random'
 import { sfx } from '../utils/sound'
@@ -30,7 +31,7 @@ function computeMinTargetTimeMs() {
 
 function Component({ spec, onResult }: QuestionComponentProps) {
   const { target, icons } = spec.data as { target: string; icons: Icon[] }
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const doneRef = useRef(false)
 
   useEffect(() => {

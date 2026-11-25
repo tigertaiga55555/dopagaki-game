@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQuestionStartRef } from '../useQuestionStartRef'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { randInt, shuffle } from '../../engine/random'
 import { QuestionShell } from '../QuestionShell'
+import { SelectionOrderBadge, sequenceOrderOf } from '../SelectionOrderBadge'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
 interface Item {
@@ -43,7 +45,7 @@ function computeTargetTimeMs() {
 function Component({ spec, onResult }: FinalQuestionComponentProps) {
   const { a, b, items, order } = spec.data as { a: number; b: number; sum: number; items: Item[]; order: number[] }
   const [clearedCount, setClearedCount] = useState(0)
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const guardRef = useRef<ReturnType<typeof createResolveOnce<FinalQuestionResult>> | null>(null)
   if (!guardRef.current) guardRef.current = createResolveOnce(onResult)
   const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -84,15 +86,21 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
         {a} ＋ {b} ＝ ？
       </p>
       <div className="grid grid-cols-4 gap-3">
-        {items.map((it) => (
-          <button
-            key={it.id}
-            onPointerDown={() => handleTap(it)}
-            className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-xl font-black text-white active:scale-90"
-          >
-            {it.value}
-          </button>
-        ))}
+        {items.map((it) => {
+          const orderLabel = sequenceOrderOf(it.id, order, clearedCount)
+          return (
+            <button
+              key={it.id}
+              onPointerDown={() => handleTap(it)}
+              className={`relative flex h-14 w-14 items-center justify-center rounded-2xl text-xl font-black text-white active:scale-90 ${
+                orderLabel !== null ? 'bg-amber-400/25' : 'bg-white/10'
+              }`}
+            >
+              {it.value}
+              {orderLabel !== null && <SelectionOrderBadge order={orderLabel} />}
+            </button>
+          )
+        })}
       </div>
     </QuestionShell>
   )

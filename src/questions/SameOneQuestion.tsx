@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { shuffle } from '../engine/random'
 import { QuestionShell } from './QuestionShell'
@@ -15,7 +16,7 @@ function generate() {
 
 function Component({ spec, onResult }: QuestionComponentProps) {
   const { items, dupValue } = spec.data as { items: string[]; dupValue: string }
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const doneRef = useRef(false)
 
   useEffect(() => {

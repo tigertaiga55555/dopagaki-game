@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { TIMING_SAFETY } from '../config/timingConfig'
 import { shuffle } from '../engine/random'
 import { sfx } from '../utils/sound'
+import { useInputGateReady } from './useInputGateReady'
+import { useQuestionStartRef } from './useQuestionStartRef'
 import type { QuestionComponentProps, QuestionModule } from '../types'
 
 const CARD_ICONS = ['🎬', '🎵', '🎮', '🍿', '✨', '🎧', '📸', '🎨']
@@ -35,8 +37,9 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   const [cardIndex, setCardIndex] = useState(0)
   const [flying, setFlying] = useState(false)
   const cardIndexRef = useRef(0)
-  const startRef = useRef(performance.now())
+  const startRef = useQuestionStartRef()
   const doneRef = useRef(false)
+  const ready = useInputGateReady()
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
   const failTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const flyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -58,11 +61,11 @@ function Component({ spec, onResult }: QuestionComponentProps) {
   }
 
   function handlePointerDown(e: ReactPointerEvent) {
-    if (doneRef.current || flying) return
+    if (!ready || doneRef.current || flying) return
     dragStartRef.current = { x: e.clientX, y: e.clientY }
   }
   function handlePointerUp(e: ReactPointerEvent) {
-    if (doneRef.current || flying || !dragStartRef.current) return
+    if (!ready || doneRef.current || flying || !dragStartRef.current) return
     const dx = e.clientX - dragStartRef.current.x
     const dy = e.clientY - dragStartRef.current.y
     dragStartRef.current = null

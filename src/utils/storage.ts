@@ -1,5 +1,56 @@
+import type { EndlessDifficulty } from '../types'
+
 const BEST_PERCENT_KEY = 'dopagaki:bestPercentV4'
 const PLAY_COUNT_KEY = 'dopagaki:playCountV4'
+/**
+ * Ver.6 Phase 10（実績拡張ラウンド、Grind実績）: PLAY_COUNT_KEY（既存、通常モード/FINAL DOPA
+ * TRIAL/500%チャレンジの単機プレイだけが対象）とは別に、Grind実績専用の累計カウンタ。
+ * 「公式プレイ」の定義（DOPA RUSH・ENDLESS・世界対戦・フレンド対戦を含み、Challenge・
+ * ENDLESS Challenge・QA/Previewは含まない）に厳密に合わせるため、新しいキーで独立して
+ * 持つ——既存PLAY_COUNT_KEYはisFirstPlay等の既存UI文言の判定にしか使われておらず、
+ * 意味を変えると既存の挙動（「初回プレイですか」の判定）に影響するため触らない。
+ * インクリメントはresultEngineV4.ts（official=trueの時のみ）・useEndlessGame.ts
+ * （qaMode=falseの時のみ）・BattleMatchScreen.tsx（battle_finish時、world/friend両方）の
+ * 4箇所からだけ呼ばれる。
+ */
+const OFFICIAL_PLAY_COUNT_KEY = 'dopagaki:officialPlayCountV1'
+
+/**
+ * Ver.6 Phase 4: Endlessモードの自己ベスト（連続正解数）は難易度ごとに別々に保存する
+ * （初級/中級/上級は別記録。ユーザー指示どおり、記録ロジックは下のgetEndlessBest/
+ * updateEndlessBest関数に閉じ、UIからは難易度を渡すだけで扱えるようにしてある
+ * ——将来Profile/Ranking/Cloud Saveを実装する際、この2関数の中身だけを差し替えれば
+ * 済む構造にするため、UIへ密結合させていない）。
+ */
+const ENDLESS_BEST_KEY: Record<EndlessDifficulty, string> = {
+  beginner: 'dopagaki:endlessBestBeginnerV1',
+  intermediate: 'dopagaki:endlessBestIntermediateV1',
+  advanced: 'dopagaki:endlessBestAdvancedV1',
+}
+
+/**
+ * Ver.6 Phase 7（ホーム/ENDLESS実機QA最終改善）: ENDLESS上級の「下線反転」ルール説明を
+ * 一度でも見たかどうかのフラグ。他のキーと衝突しない新規キー名（V1）を使う。
+ * 初回は必ずルール全文を見せ、2回目以降はテンポを落とさない短い確認にするためだけに使う。
+ */
+const ENDLESS_ADVANCED_RULE_SEEN_KEY = 'dopagaki:endlessAdvancedRuleSeenV1'
+
+export function hasSeenEndlessAdvancedRule(): boolean {
+  try {
+    return localStorage.getItem(ENDLESS_ADVANCED_RULE_SEEN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function markEndlessAdvancedRuleSeen(): void {
+  try {
+    localStorage.setItem(ENDLESS_ADVANCED_RULE_SEEN_KEY, '1')
+  } catch {
+    // localStorage不可の環境（プライベートモード等）では単に記憶されないだけで、
+    // 毎回ルール説明を見ることになるが機能自体は壊れない。
+  }
+}
 
 function readNumber(key: string): number | null {
   try {
@@ -41,5 +92,37 @@ export function incrementPlayCount(): number {
     return next
   } catch {
     return getPlayCount()
+  }
+}
+
+export function getOfficialPlayCount(): number {
+  return readNumber(OFFICIAL_PLAY_COUNT_KEY) ?? 0
+}
+
+export function incrementOfficialPlayCount(): number {
+  try {
+    const next = getOfficialPlayCount() + 1
+    localStorage.setItem(OFFICIAL_PLAY_COUNT_KEY, String(next))
+    return next
+  } catch {
+    return getOfficialPlayCount()
+  }
+}
+
+export function getEndlessBest(difficulty: EndlessDifficulty): number {
+  return readNumber(ENDLESS_BEST_KEY[difficulty]) ?? 0
+}
+
+/** 難易度ごとの自己ベスト（連続正解数）を更新する。更新されたら true を返す。 */
+export function updateEndlessBest(difficulty: EndlessDifficulty, score: number): boolean {
+  try {
+    const current = getEndlessBest(difficulty)
+    if (score > current) {
+      localStorage.setItem(ENDLESS_BEST_KEY[difficulty], String(score))
+      return true
+    }
+    return false
+  } catch {
+    return false
   }
 }

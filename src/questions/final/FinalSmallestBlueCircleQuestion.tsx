@@ -1,44 +1,40 @@
 import { useEffect, useRef } from 'react'
+import { ShapeIcon, SHAPE_IDS, SHAPE_LABELS, type ShapeId } from '../../components/ShapeIcon'
 import { TIMING_SAFETY } from '../../config/timingConfig'
 import { createResolveOnce } from '../../engine/resolveOnce'
 import { randInt, shuffle } from '../../engine/random'
 import { QuestionShell } from '../QuestionShell'
 import type { FinalQuestionComponentProps, FinalQuestionModule, FinalQuestionResult } from '../../types'
 
-const OTHER_COLORS = [
-  { id: 'red', hex: '#ef4444' },
-  { id: 'green', hex: '#22c55e' },
-  { id: 'yellow', hex: '#eab308' },
-] as const
-const BLUE_HEX = '#3b82f6'
-
-interface Circle {
+interface Item {
   id: number
-  hex: string
+  shape: ShapeId
   size: number
 }
 
 /**
- * FINAL DOPA TRIAL Q5〜Q8（2条件処理プール）：「青い丸の中で一番小さいものを押せ！」。
- * 「青を選ぶ」＋「その中で最小」の複合判断。青以外の中に一番小さいサイズを混ぜ、
- * 色を無視した「サイズだけ最小」への誤答を誘発する。
+ * Ver.6 Phase 1: 旧「青い丸の中で一番小さいものを押せ！」（色識別が正解条件の一部だった
+ * 問題）を、指定図形の中でのサイズ比較に再設計した。「対象図形を選ぶ」＋「その中で最小」の
+ * 複合判断。対象外の図形の中にわざと一番小さいサイズを混ぜ、図形を無視した
+ * 「サイズだけ最小」への誤答を誘発する構成は旧実装を踏襲している。
  */
 function generate() {
-  const others = shuffle(OTHER_COLORS).slice(0, 2)
-  const blueCount = randInt(2, 3)
+  const targetShape = SHAPE_IDS[randInt(0, SHAPE_IDS.length - 1)]
+  const others = shuffle(SHAPE_IDS.filter((s) => s !== targetShape)).slice(0, 2)
+  const targetCount = randInt(2, 3)
   const sizes = new Set<number>()
-  while (sizes.size < 2 + blueCount) sizes.add(randInt(34, 88))
+  while (sizes.size < 2 + targetCount) sizes.add(randInt(34, 88))
   const sizeList = [...sizes].sort((a, b) => a - b)
   const trapSize = sizeList[0]
-  const blueSizes = sizeList.slice(1, 1 + blueCount)
-  const otherSizes = [trapSize, ...sizeList.slice(1 + blueCount)]
+  const targetSizes = sizeList.slice(1, 1 + targetCount)
+  const otherSizes = [trapSize, ...sizeList.slice(1 + targetCount)]
 
-  const circles: Circle[] = [
-    ...others.map((c, i) => ({ id: i, hex: c.hex, size: otherSizes[i] })),
-    ...blueSizes.map((s, i) => ({ id: 2 + i, hex: BLUE_HEX, size: s })),
+  const items: Item[] = [
+    ...others.map((s, i) => ({ id: i, shape: s, size: otherSizes[i] })),
+    ...targetSizes.map((s, i) => ({ id: 2 + i, shape: targetShape, size: s })),
   ]
-  const target = Math.min(...blueSizes)
-  return { circles: shuffle(circles), target }
+  const target = Math.min(...targetSizes)
+  return { items: shuffle(items), targetShape, target }
 }
 
 function computeTargetTimeMs() {
@@ -46,7 +42,7 @@ function computeTargetTimeMs() {
 }
 
 function Component({ spec, onResult }: FinalQuestionComponentProps) {
-  const { circles, target } = spec.data as { circles: Circle[]; target: number }
+  const { items, targetShape, target } = spec.data as { items: Item[]; targetShape: ShapeId; target: number }
   const startRef = useRef(performance.now())
   const guardRef = useRef<ReturnType<typeof createResolveOnce<FinalQuestionResult>> | null>(null)
   if (!guardRef.current) guardRef.current = createResolveOnce(onResult)
@@ -62,11 +58,15 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
   }
 
   return (
-    <QuestionShell instruction={'青い丸の中で\n一番小さいものを押せ！'}>
+    <QuestionShell instruction={`${SHAPE_LABELS[targetShape]}の中で\n一番小さいものを押せ！`}>
       <div className="grid grid-cols-3 gap-3">
-        {circles.map((c) => (
-          <button key={c.id} onPointerDown={() => finish(c.size === target && c.hex === BLUE_HEX)} className="flex h-20 w-20 items-center justify-center active:scale-90">
-            <span className="rounded-full" style={{ width: c.size, height: c.size, backgroundColor: c.hex }} />
+        {items.map((it) => (
+          <button
+            key={it.id}
+            onPointerDown={() => finish(it.size === target && it.shape === targetShape)}
+            className="flex h-20 w-20 items-center justify-center active:scale-90"
+          >
+            <ShapeIcon shape={it.shape} size={it.size} />
           </button>
         ))}
       </div>
@@ -76,7 +76,7 @@ function Component({ spec, onResult }: FinalQuestionComponentProps) {
 
 export const FinalSmallestBlueCircleModule: FinalQuestionModule = {
   id: 'finalSmallestBlueCircle',
-  tags: ['color', 'visual', 'inhibition'],
+  tags: ['visual', 'inhibition'],
   tier: 'twoCondition',
   generate,
   computeTargetTimeMs,
