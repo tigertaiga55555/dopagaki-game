@@ -1,3 +1,5 @@
+import { sfx } from '../utils/sound'
+
 interface Props {
   /** 「← 戻る」。常にスタックを1つだけpopする——画面ごとに意味の違うバックボタンは作らない。 */
   onBack: () => void
@@ -33,7 +35,10 @@ export function NavBar({ onBack, onHome }: Props) {
       }}
     >
       <button
-        onClick={onBack}
+        onClick={() => {
+          sfx.navBack()
+          onBack()
+        }}
         className="flex items-center gap-1 rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold leading-none text-white/75 active:scale-90"
         aria-label="戻る"
       >
@@ -42,7 +47,10 @@ export function NavBar({ onBack, onHome }: Props) {
       </button>
       {onHome && (
         <button
-          onClick={onHome}
+          onClick={() => {
+            sfx.navHome()
+            onHome()
+          }}
           className="flex items-center gap-1 rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold leading-none text-white/75 active:scale-90"
           aria-label="ホームへ戻る"
         >

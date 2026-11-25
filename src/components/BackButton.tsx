@@ -1,3 +1,5 @@
+import { sfx } from '../utils/sound'
+
 interface Props {
   onBack: () => void
   label?: string
@@ -25,7 +27,10 @@ export function BackButton({ onBack, label = '戻る' }: Props) {
       }}
     >
       <button
-        onClick={onBack}
+        onClick={() => {
+          sfx.navBack()
+          onBack()
+        }}
         className="flex items-center gap-1 rounded-full bg-white/15 px-3 py-1 text-[11px] font-bold leading-none text-white/75 active:scale-90"
         aria-label={`${label}へ戻る`}
       >
