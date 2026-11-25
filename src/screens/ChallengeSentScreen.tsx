@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { resolveAvatarEmoji } from '../config/profileConfig'
 import { buildChallengeUrl } from '../challenge/url'
 import { BASE_DOPA_PERCENT_NOTE, formatAccuracyPercent } from '../challenge/formatPerformance'
+import { SHARE_HASHTAG } from '../config/messagesV4'
 import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
 import { ENDLESS_THEME } from '../config/endlessTheme'
 import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
@@ -50,10 +51,12 @@ export function ChallengeSentScreen({ challenge, onDone, onBack }: Props) {
 
   async function handleShare() {
     // Ver.6 Phase 8（ENDLESS Challenge）: ENDLESSは％ではなくSTREAK数を煽り文に使う。
+    // 次フェーズ: 結果共有（share/shareResult.ts buildXShareText）と同じ規約で、
+    // 文面の末尾に必ずSHARE_HASHTAGを1個だけ付与する（DOPA RUSH系・ENDLESS系いずれも）。
     const text =
       isEndless && endlessDifficulty
-        ? `${challenge.creatorNickname}からの挑戦状！ENDLESS ${ENDLESS_DIFFICULTY_LABEL[endlessDifficulty]}で${challenge.creatorScore}連続を記録した。これ抜ける？`
-        : `${challenge.creatorNickname}からの挑戦状！${MODE_LABEL[challenge.mode]}で${challenge.creatorScore}％を記録した。この記録を超えてみろ！`
+        ? `${challenge.creatorNickname}からの挑戦状！ENDLESS ${ENDLESS_DIFFICULTY_LABEL[endlessDifficulty]}で${challenge.creatorScore}連続を記録した。これ抜ける？\n${SHARE_HASHTAG}`
+        : `${challenge.creatorNickname}からの挑戦状！${MODE_LABEL[challenge.mode]}で${challenge.creatorScore}％を記録した。この記録を超えてみろ！\n${SHARE_HASHTAG}`
     if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       try {
         await navigator.share({ title: 'ドパガキゲーム 挑戦状', text, url })
