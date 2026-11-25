@@ -1,3 +1,5 @@
+import { sfx } from '../utils/sound'
+
 interface Props {
   onClose: () => void
 }
@@ -19,7 +21,13 @@ export function ChallengeInfoModal({ onClose }: Props) {
         <p className="mb-5 text-xs leading-relaxed text-white/60">
           今回の記録を、他の人に挑戦してもらえる機能です。送られた相手は同じ条件でプレイし、あなたの記録超えを目指します。
         </p>
-        <button onClick={onClose} className="w-full rounded-2xl bg-white/10 py-3 text-sm font-black text-white active:scale-95">
+        <button
+          onClick={() => {
+            sfx.uiTap()
+            onClose()
+          }}
+          className="w-full rounded-2xl bg-white/10 py-3 text-sm font-black text-white active:scale-95"
+        >
           閉じる
         </button>
       </div>

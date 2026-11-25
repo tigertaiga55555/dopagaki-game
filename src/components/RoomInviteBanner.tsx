@@ -1,4 +1,5 @@
 import { resolveAvatarEmoji } from '../config/profileConfig'
+import { sfx } from '../utils/sound'
 import type { PublicProfileSnapshot } from '../friends/types'
 
 interface Props {
@@ -24,10 +25,22 @@ export function RoomInviteBanner({ fromProfile, onAccept, onDismiss }: Props) {
           友達と対戦に招待されました
         </p>
         <div className="flex flex-col gap-1">
-          <button onClick={onAccept} className="rounded-full bg-fuchsia-500 px-3 py-1 text-[11px] font-black text-white active:scale-95">
+          <button
+            onClick={() => {
+              sfx.uiTap()
+              onAccept()
+            }}
+            className="rounded-full bg-fuchsia-500 px-3 py-1 text-[11px] font-black text-white active:scale-95"
+          >
             参加
           </button>
-          <button onClick={onDismiss} className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold text-white/60 active:scale-95">
+          <button
+            onClick={() => {
+              sfx.uiTap()
+              onDismiss()
+            }}
+            className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold text-white/60 active:scale-95"
+          >
             あとで
           </button>
         </div>

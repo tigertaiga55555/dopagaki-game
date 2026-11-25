@@ -3,6 +3,7 @@ import { formatMmSs } from '../utils/formatTime'
 import { localHeartRepository } from '../utils/heartRepository'
 import { canWatchRewardedAd, getRewardedAdViewsRemainingToday, recordRewardedAdViewed } from '../utils/rewardedAdStorage'
 import { MockRewardedAd } from './MockRewardedAd'
+import { sfx } from '../utils/sound'
 
 interface Props {
   /** 次の1回復までの残りミリ秒（既に0以上へ回復していた場合に備え、呼び出し元が開く直前の最新値を渡す）。 */
@@ -48,14 +49,20 @@ export function HeartEmptyModal({ initialEtaMs, onClose, canUseRewardedAd = true
           <p className="mb-3 text-sm font-black text-emerald-300">+1 Heart 獲得しました</p>
         ) : canWatch ? (
           <button
-            onClick={() => setWatchingAd(true)}
+            onClick={() => {
+              sfx.uiTap()
+              setWatchingAd(true)
+            }}
             className="mb-3 w-full rounded-2xl bg-amber-500/90 py-3 text-sm font-black text-black active:scale-95"
           >
             動画を見て +1 Heart（本日あと{getRewardedAdViewsRemainingToday()}回）
           </button>
         ) : null}
         <button
-          onClick={onClose}
+          onClick={() => {
+            sfx.uiTap()
+            onClose()
+          }}
           className="w-full rounded-2xl bg-white/10 py-3 text-sm font-black text-white active:scale-95"
         >
           閉じる

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { sfx } from '../utils/sound'
 
 interface Props {
   onComplete: () => void
@@ -30,7 +31,13 @@ export function MockRewardedAd({ onComplete, onCancel }: Props) {
       <p className="mb-3 text-xs font-bold uppercase tracking-wider text-white/40">広告（QAモック）</p>
       <p className="mb-6 text-5xl font-black tabular-nums text-amber-300">{remaining}</p>
       <p className="mb-8 text-sm font-bold text-white/60">視聴完了後に +1 Heart</p>
-      <button onClick={onCancel} className="text-xs font-bold text-white/30 underline">
+      <button
+        onClick={() => {
+          sfx.uiTap()
+          onCancel()
+        }}
+        className="text-xs font-bold text-white/30 underline"
+      >
         キャンセル（QA操作）
       </button>
     </div>

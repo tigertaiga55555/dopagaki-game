@@ -1,5 +1,6 @@
 import { getAchievementDefById } from '../config/achievements'
 import { getSecretTheme, getTitleRarityTheme } from '../config/titleRarityTheme'
+import { sfx } from '../utils/sound'
 import type { TitleDef } from '../types'
 
 interface Props {
@@ -38,11 +39,16 @@ interface Props {
 export function TitleBadge({ title, onClick }: Props) {
   const isSecret = getAchievementDefById(title.id)?.secret === true
 
+  function handleClick() {
+    sfx.uiTap()
+    onClick?.()
+  }
+
   if (isSecret) {
     const secretTheme = getSecretTheme()
     return (
       <button
-        onClick={onClick}
+        onClick={handleClick}
         className={`flex items-center gap-1.5 rounded-full border px-4 py-1.5 active:scale-95 ${secretTheme.unlockedBorderClass} ${secretTheme.unlockedBackgroundClass} ${secretTheme.unlockedGlowClass} ${secretTheme.unlockedPulseClass}`}
       >
         <span className="text-[9px] font-black tracking-widest text-indigo-300/70">{secretTheme.label}</span>
@@ -55,7 +61,7 @@ export function TitleBadge({ title, onClick }: Props) {
 
   return (
     <button
-      onClick={onClick}
+      onClick={handleClick}
       className={`flex items-center gap-1.5 rounded-full border px-4 py-1.5 active:scale-95 ${theme.badgeBorderClass} ${theme.badgeBackgroundClass} ${theme.badgeGlowClass} ${theme.badgePulseClass}`}
     >
       <span className="text-[9px] font-black tracking-widest text-white/40">{theme.label}</span>

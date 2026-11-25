@@ -1,4 +1,5 @@
 import type { PassTitleDef } from '../config/passTitles'
+import { sfx } from '../utils/sound'
 
 interface Props {
   title: PassTitleDef
@@ -15,7 +16,10 @@ interface Props {
 export function PassTitleBadge({ title, onClick }: Props) {
   return (
     <button
-      onClick={onClick}
+      onClick={() => {
+        sfx.uiTap()
+        onClick?.()
+      }}
       className="flex items-center gap-1.5 rounded-full border border-amber-400/70 bg-gradient-to-r from-amber-500/25 via-yellow-400/15 to-amber-500/25 px-4 py-1.5 shadow-[0_0_16px_rgba(251,191,36,0.3)] active:scale-95"
     >
       <span aria-hidden="true" className="text-sm">

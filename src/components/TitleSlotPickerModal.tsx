@@ -1,6 +1,7 @@
 import { PASS_TITLE_DEFS_BY_ID } from '../config/passTitles'
 import { TITLE_DEFS_BY_ID } from '../config/titles'
 import { getTitleRarityTheme } from '../config/titleRarityTheme'
+import { sfx } from '../utils/sound'
 import type { PlayerProfile, TitleId } from '../types'
 import type { TitleSlot } from '../utils/profileStorage'
 
@@ -71,21 +72,32 @@ export function TitleSlotPickerModal({ profile, hasPass, pendingTitleId, onEquip
                 </div>
                 {holdsPending ? (
                   <button
-                    onClick={() => onUnequip(slot)}
+                    onClick={() => {
+                      sfx.uiTap()
+                      onUnequip(slot)
+                    }}
                     className="shrink-0 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white/70 active:scale-95"
                   >
                     外す
                   </button>
                 ) : pendingTitleId !== undefined ? (
                   <button
-                    onClick={() => onEquip?.(slot)}
+                    onClick={() => {
+                      // 次フェーズ（item 149-153、UI効果音拡充ラウンド）: ここが「称号を実際に
+                      // 装備する」が確定する瞬間——専用のtitleEquip()を鳴らす（uiTapではない）。
+                      sfx.titleEquip()
+                      onEquip?.(slot)
+                    }}
                     className="shrink-0 rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 px-3 py-1.5 text-[11px] font-black text-white active:scale-95"
                   >
                     {SLOT_EQUIP_LABEL[slot]}
                   </button>
                 ) : currentId ? (
                   <button
-                    onClick={() => onUnequip(slot)}
+                    onClick={() => {
+                      sfx.uiTap()
+                      onUnequip(slot)
+                    }}
                     className="shrink-0 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white/70 active:scale-95"
                   >
                     外す
@@ -98,7 +110,13 @@ export function TitleSlotPickerModal({ profile, hasPass, pendingTitleId, onEquip
 
         {!hasPass && <p className="mt-3 text-[10px] font-bold text-white/30">サブ枠（あと2つ）はDOPA PASS限定です</p>}
 
-        <button onClick={onClose} className="mt-4 w-full rounded-2xl bg-white/10 py-3 text-sm font-black text-white active:scale-95">
+        <button
+          onClick={() => {
+            sfx.uiTap()
+            onClose()
+          }}
+          className="mt-4 w-full rounded-2xl bg-white/10 py-3 text-sm font-black text-white active:scale-95"
+        >
           閉じる
         </button>
       </div>

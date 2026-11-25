@@ -4,6 +4,7 @@ import { computeHeartSlotsView, isHeartSlotFilledAt } from '../utils/heartDispla
 import { formatMmSs } from '../utils/formatTime'
 import { HeartIcon } from './HeartIcon'
 import { HeartDetailModal } from './HeartDetailModal'
+import { sfx } from '../utils/sound'
 
 /** Heart表示の自動更新間隔（回復timerをmm:ssで見せるため、既存の15秒間隔より短く1秒ごとに揃える）。 */
 const TICK_MS = 1000
@@ -53,7 +54,10 @@ export function HeartDisplay({ unlimited = false }: { unlimited?: boolean }) {
       <div className="flex flex-col items-end gap-0.5 self-end">
         {unlimited ? (
           <button
-            onClick={() => setShowDetail(true)}
+            onClick={() => {
+              sfx.uiTap()
+              setShowDetail(true)
+            }}
             className="flex items-center gap-1 active:opacity-70"
             aria-label="Heart unlimited (DOPA PASS)"
           >
@@ -63,7 +67,10 @@ export function HeartDisplay({ unlimited = false }: { unlimited?: boolean }) {
         ) : (
           <>
             <button
-              onClick={() => setShowDetail(true)}
+              onClick={() => {
+              sfx.uiTap()
+              setShowDetail(true)
+            }}
               className="flex items-center gap-1 active:opacity-70"
               aria-label={`Heart ${count} / ${HEART_CAP}`}
             >

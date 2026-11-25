@@ -4,6 +4,7 @@ import { formatMmSs } from '../utils/formatTime'
 import { canWatchRewardedAd, getRewardedAdViewsRemainingToday, recordRewardedAdViewed } from '../utils/rewardedAdStorage'
 import { HeartIcon } from './HeartIcon'
 import { MockRewardedAd } from './MockRewardedAd'
+import { sfx } from '../utils/sound'
 
 interface Props {
   onClose: () => void
@@ -68,7 +69,10 @@ export function HeartDetailModal({ onClose, unlimited = false }: Props) {
         {granted && <p className="mb-3 text-sm font-black text-emerald-300">+1 Heart 獲得しました</p>}
         {canWatch && (
           <button
-            onClick={() => setWatchingAd(true)}
+            onClick={() => {
+              sfx.uiTap()
+              setWatchingAd(true)
+            }}
             className="mb-3 w-full rounded-2xl bg-amber-500/90 py-3 text-sm font-black text-black active:scale-95"
           >
             動画を見て +1 Heart（本日あと{getRewardedAdViewsRemainingToday()}回）
@@ -76,7 +80,10 @@ export function HeartDetailModal({ onClose, unlimited = false }: Props) {
         )}
 
         <button
-          onClick={onClose}
+          onClick={() => {
+            sfx.uiTap()
+            onClose()
+          }}
           className="w-full rounded-2xl bg-white/10 py-3 text-sm font-black text-white active:scale-95"
         >
           閉じる

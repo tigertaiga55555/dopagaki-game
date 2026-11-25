@@ -1,4 +1,5 @@
 import type { PassTitleDef } from '../config/passTitles'
+import { sfx } from '../utils/sound'
 
 interface Props {
   title: PassTitleDef
@@ -25,7 +26,13 @@ export function PassTitleDetailModal({ title, onClose }: Props) {
         <p className="mb-4 text-xs leading-relaxed text-white/50">{title.description}</p>
         <p className="mb-5 text-xs font-black text-amber-300">永久保持（68/68 実績完了率にはカウントされません）</p>
 
-        <button onClick={onClose} className="w-full rounded-2xl bg-white/10 py-3 text-sm font-black text-white active:scale-95">
+        <button
+          onClick={() => {
+            sfx.uiTap()
+            onClose()
+          }}
+          className="w-full rounded-2xl bg-white/10 py-3 text-sm font-black text-white active:scale-95"
+        >
           閉じる
         </button>
       </div>

@@ -1,3 +1,5 @@
+import { sfx } from '../utils/sound'
+
 interface Props {
   nickname: string
   busy?: boolean
@@ -18,11 +20,20 @@ export function ConfirmRemoveFriendModal({ nickname, busy, onConfirm, onCancel }
       <div className="anim-pop w-full max-w-xs rounded-3xl border border-rose-400/30 bg-[#1a0e2e] p-5 text-center" onClick={(e) => e.stopPropagation()}>
         <p className="mb-4 text-sm font-black text-white">{nickname}をフレンドから削除しますか？</p>
         <div className="flex gap-2">
-          <button onClick={onCancel} className="flex-1 rounded-xl bg-white/10 py-2.5 text-sm font-bold text-white active:scale-95">
+          <button
+            onClick={() => {
+              sfx.uiTap()
+              onCancel()
+            }}
+            className="flex-1 rounded-xl bg-white/10 py-2.5 text-sm font-bold text-white active:scale-95"
+          >
             キャンセル
           </button>
           <button
-            onClick={onConfirm}
+            onClick={() => {
+              sfx.uiTap()
+              onConfirm()
+            }}
             disabled={busy}
             className="flex-1 rounded-xl bg-rose-500/90 py-2.5 text-sm font-black text-white active:scale-95 disabled:opacity-60"
           >

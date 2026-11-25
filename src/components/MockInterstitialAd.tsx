@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { sfx } from '../utils/sound'
 
 interface Props {
   onClose: () => void
@@ -25,7 +26,13 @@ export function MockInterstitialAd({ onClose }: Props) {
       <p className="mb-3 text-xs font-bold uppercase tracking-wider text-white/40">広告（QAモック）</p>
       <p className="mb-8 text-2xl font-black text-white/70">インタースティシャル</p>
       {canClose ? (
-        <button onClick={onClose} className="rounded-2xl bg-white/10 px-8 py-3 text-sm font-black text-white active:scale-95">
+        <button
+          onClick={() => {
+            sfx.uiTap()
+            onClose()
+          }}
+          className="rounded-2xl bg-white/10 px-8 py-3 text-sm font-black text-white active:scale-95"
+        >
           閉じる
         </button>
       ) : (

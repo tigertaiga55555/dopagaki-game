@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ACHIEVEMENT_DEFS_BY_ID } from '../config/achievements'
 import { TITLE_DEFS_BY_ID } from '../config/titles'
 import { getSecretTheme, getTitleRarityTheme } from '../config/titleRarityTheme'
+import { sfx } from '../utils/sound'
 import type { AchievementId } from '../types'
 
 interface Props {
@@ -71,7 +72,10 @@ export function TitleDetailModal({ achievementId, unlocked, onClose }: Props) {
               </p>
             ) : (
               <button
-                onClick={() => setShowHint(true)}
+                onClick={() => {
+                  sfx.uiTap()
+                  setShowHint(true)
+                }}
                 className="rounded-full border border-indigo-400/40 bg-indigo-500/10 px-3 py-1 text-[10px] font-black tracking-widest text-indigo-200 active:scale-95"
               >
                 ？ HINT
@@ -82,7 +86,13 @@ export function TitleDetailModal({ achievementId, unlocked, onClose }: Props) {
 
         <p className={`mb-5 mt-2 text-xs font-black ${unlocked ? 'text-emerald-300' : 'text-white/30'}`}>{unlocked ? '✓ ACHIEVED' : '未解除'}</p>
 
-        <button onClick={onClose} className="w-full rounded-2xl bg-white/10 py-3 text-sm font-black text-white active:scale-95">
+        <button
+          onClick={() => {
+            sfx.uiTap()
+            onClose()
+          }}
+          className="w-full rounded-2xl bg-white/10 py-3 text-sm font-black text-white active:scale-95"
+        >
           閉じる
         </button>
       </div>

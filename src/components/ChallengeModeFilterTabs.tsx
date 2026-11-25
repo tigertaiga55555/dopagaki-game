@@ -1,4 +1,5 @@
 import { CHALLENGE_MODE_FILTERS, type ChallengeModeFilter } from '../utils/challengeModeFilter'
+import { sfx } from '../utils/sound'
 
 interface Props {
   value: ChallengeModeFilter
@@ -18,7 +19,10 @@ export function ChallengeModeFilterTabs({ value, onChange }: Props) {
       {CHALLENGE_MODE_FILTERS.map((tab) => (
         <button
           key={tab.id}
-          onClick={() => onChange(tab.id)}
+          onClick={() => {
+            sfx.uiTap()
+            onChange(tab.id)
+          }}
           className={`flex-1 rounded-full px-2 py-1.5 text-[10px] font-black tracking-widest transition-colors ${
             value === tab.id ? 'bg-fuchsia-500/80 text-white' : 'text-white/45'
           }`}
