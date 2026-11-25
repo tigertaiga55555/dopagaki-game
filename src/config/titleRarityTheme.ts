@@ -94,10 +94,16 @@ const THEMES: Record<TitleRarity, TitleRarityTheme> = {
     badgeBorderClass: 'border-fuchsia-400/60',
     badgeBackgroundClass: 'bg-fuchsia-500/15',
     badgeTextClass: 'text-fuchsia-200',
-    // item 117: 「控えめな粒子」を、複数の小さなbox-shadowを重ねて疑似的に表現する
-    // （専用パーティクルDOM/キャンバスは追加しない——軽量さを優先）。
-    badgeGlowClass:
-      'shadow-[0_0_16px_rgba(217,70,239,0.4),2px_-6px_0_-3px_rgba(232,121,249,0.5),-3px_5px_0_-3px_rgba(232,121,249,0.4)]',
+    /**
+     * 次フェーズ（item 146、大型最終仕上げラウンド）: item 117で「控えめな粒子」を複数の
+     * 小さなbox-shadow（offset+負のspread）で疑似的に表現していたが、blur:0・spread:負の
+     * box-shadowはオフセット分ずれた「要素自身の形（カード全体の角丸矩形）のコピー」を
+     * 描画してしまい、「本体の後ろに紫のカードが数px分ずれて重なって見える」二重表示
+     * バグの原因になっていた（実機で確認・ユーザー報告どおり）。小さな丸い粒子ではなく、
+     * カード全体の縮小コピーが背後に見えてしまっていた。該当のoffset shadowを削除し、
+     * 単純な単層のソフトグロー（0,0オフセット・ぼかしのみ）へ修正した。
+     */
+    badgeGlowClass: 'shadow-[0_0_18px_rgba(217,70,239,0.45)]',
     badgePulseClass: '',
     profileRingClass: '',
     lockedBorderClass: 'border-fuchsia-600/55',
@@ -126,12 +132,20 @@ const THEMES: Record<TitleRarity, TitleRarityTheme> = {
     badgeGlowClass: 'shadow-[0_0_26px_rgba(199,92,255,0.5)]',
     badgePulseClass: 'anim-rarity-rainbow-slow',
     profileRingClass: 'ring-2 ring-fuchsia-300/70 anim-rarity-rainbow-slow shadow-[0_0_24px_rgba(199,92,255,0.45)]',
-    // MYTHICロック中は虹グラデーション・発光は使わない（解放後だけの特別感を守るため）が、
-    // item 132でEPIC（fuchsia）・LEGENDARY（amber）とはっきり見分けがつく、やや赤みがかった
-    // 紫（violet〜pink寄り）まで明るくして「この先ヤバそう」感を強めた。
-    lockedBorderClass: 'border-purple-500/60',
-    lockedBackgroundClass: 'bg-gradient-to-r from-purple-900/35 via-fuchsia-900/30 to-purple-900/35',
-    lockedTextClass: 'text-purple-200/45',
+    /**
+     * 次フェーズ（item 143、大型最終仕上げラウンド）: 「ロック中でも『これはとんでもない』
+     * と一目で伝わるように」というユーザー指示により、MYTHICだけはロック中にも虹色/
+     * オーロラ系の枠線（解放後と同じ暖色の虹グラデーションを、background-imageとして
+     * 枠の全面に使う既存の技法を再利用）を複数色が自然に遷移する形で持たせ、ごく緩やかな
+     * 発光（opacityの呼吸）も加えた——他のrarity（COMMON〜LEGENDARY）はロック中に発光・
+     * アニメーションを一切付けない方針のままだが、MYTHICだけ唯一の例外とする。解放後
+     * （anim-rarity-rainbow-slow、6秒・フルの発光）より明確に遅く（11秒）・暗いまま
+     * にすることで、「覚醒した差」は保つ。
+     */
+    lockedBorderClass:
+      'border-transparent bg-[linear-gradient(90deg,#4a1f3d,#4a3a14,#1a3f3a,#1c2a4a,#3a1a4a,#4a1f3d)] bg-[length:280%_100%] anim-mythic-locked shadow-[0_0_14px_rgba(168,85,247,0.3)]',
+    lockedBackgroundClass: 'bg-[#0f0817]',
+    lockedTextClass: 'text-purple-200/55',
   },
 }
 
@@ -172,27 +186,42 @@ export interface SecretTheme {
   profileRingClass: string
 }
 
+/**
+ * 次フェーズ（item 144、大型最終仕上げラウンド）: 「現在のデザインは弱すぎる。MYTHICより
+ * さらにヤバいと誰もが感じるレベルまで引き上げる」というユーザー指示により、解放後の
+ * 見た目をさらに強化した——深い黒・インディゴ・青紫をベースに、①宝石的反射・星屑を
+ * 狙った複数の小さなradial-gradientの光点を背景に焼き込み（固定位置・静的、追加の
+ * DOM/アニメーション要素なしで「プリズム光・細かい光粒」を表現）、②鋭いフレアとして
+ * 白に近い輝きを一番内側に、インディゴの本体glow・マゼンタの外側フリンジと合わせて
+ * 3層のshadowにした。安っぽいRGBゲーミング表現（虹色が全周を回り続ける演出）は禁止
+ * というユーザー指示どおり、色相は白・インディゴ・紫・マゼンタの範囲に留め、MYTHICの
+ * 暖色の虹（赤/オレンジ/ティール/青/紫が順に流れる）とは明確に別系統のまま維持する。
+ * 未解放側も、名称・条件は隠したまま「ここに何かヤバいものが眠っている」と伝わる程度に、
+ * ごく薄い単色の光点と最小限の枠glowだけ足した（解放後ほど目立たせない——
+ * ロック中のSECRETが他のどのrarityよりもなお沈んで見えるという既存の原則は維持）。
+ */
 export function getSecretTheme(): SecretTheme {
   return {
     label: 'SECRET',
-    // 未解放: 通常の「暗いrarity色」のどれとも違う、黒に近い藍色＋ごく微かな異質な発光
-    // （item 131: ロック中のCOMMON〜MYTHICが軒並み明るくなった後も、SECRETだけはここを
-    // 変えず沈んだままにすることで「別物」感を保つ）。
-    lockedBorderClass: 'border-indigo-950',
-    lockedBackgroundClass: 'bg-[#05030f]',
+    // 未解放: 通常の「暗いrarity色」のどれとも違う、黒に近い藍色。item 144: ごく薄い
+    // 単色の光点を1つだけ焼き込み、枠にも最小限のglowを足して「何かが眠っている」気配を
+    // 残しつつ、他のどのrarityのロック中より暗いままにする（item 131の原則を維持）。
+    lockedBorderClass: 'border-indigo-950 shadow-[0_0_8px_rgba(99,102,241,0.15)]',
+    lockedBackgroundClass: 'bg-[radial-gradient(circle_at_70%_25%,rgba(129,90,255,0.1)_0%,rgba(129,90,255,0)_3%),#05030f]',
     lockedTextClass: 'text-indigo-300/30',
     // 解放後: 本物の名称・条件を見せつつ、SECRET専用の藍〜紫トーンを維持する
-    // （MYTHICの暖色系虹・金ピカとは別系統）。item 131: 単純な2色グラデーションから、
-    // 黒に近い深い藍〜紫に、ごく微かなマゼンタのきらめきを一点だけ混ぜた不均一な
-    // グラデーションへ——「暗いのにギラつく」質感と「微かな虹彩/ノイズ」を狙う。
+    // （MYTHICの暖色系虹・金ピカとは別系統）。黒に近い深い藍〜紫の不均一なグラデーションに、
+    // 宝石的反射・星屑を狙った複数の小さな光点（radial-gradient）を重ねた——
+    // 「暗いのにギラつく」質感と「微かな虹彩/ノイズ」を狙う。
     unlockedBorderClass: 'border-indigo-400/50',
     unlockedBackgroundClass:
-      'bg-[linear-gradient(135deg,#030108_0%,#180a38_30%,#2a0f52_52%,#140830_72%,#050212_100%)]',
+      'bg-[radial-gradient(circle_at_18%_22%,rgba(255,255,255,0.4)_0%,rgba(255,255,255,0)_2%),radial-gradient(circle_at_80%_65%,rgba(192,92,255,0.5)_0%,rgba(192,92,255,0)_3%),radial-gradient(circle_at_55%_12%,rgba(255,255,255,0.3)_0%,rgba(255,255,255,0)_1.5%),radial-gradient(circle_at_30%_80%,rgba(129,90,255,0.35)_0%,rgba(129,90,255,0)_2.5%),linear-gradient(135deg,#030108_0%,#180a38_30%,#2a0f52_52%,#140830_72%,#050212_100%)]',
     unlockedTextClass: 'text-indigo-200',
-    // glow本体はインディゴ、ごく薄いマゼンタの滲みを外側にもう一層重ねて「普通の発光では
-    // ない」不穏さを足す（金・オレンジ系は一切使わない）。
-    unlockedGlowClass: 'shadow-[0_0_20px_rgba(99,102,241,0.45),0_0_38px_rgba(192,92,255,0.12)]',
+    // 3層のshadow: 内側＝白に近い鋭いフレア、中間＝インディゴの本体glow、外側＝マゼンタの
+    // 滲み。金・オレンジ系は一切使わない（MYTHICとの混同を避ける）。
+    unlockedGlowClass: 'shadow-[0_0_8px_rgba(226,232,255,0.35),0_0_22px_rgba(99,102,241,0.5),0_0_42px_rgba(192,92,255,0.18)]',
     unlockedPulseClass: 'anim-rarity-secret-slow',
-    profileRingClass: 'ring-2 ring-indigo-400/70 anim-rarity-secret-slow shadow-[0_0_20px_rgba(99,102,241,0.4),0_0_38px_rgba(192,92,255,0.12)]',
+    profileRingClass:
+      'ring-2 ring-indigo-400/70 anim-rarity-secret-slow shadow-[0_0_8px_rgba(226,232,255,0.3),0_0_22px_rgba(99,102,241,0.4),0_0_42px_rgba(192,92,255,0.18)]',
   }
 }

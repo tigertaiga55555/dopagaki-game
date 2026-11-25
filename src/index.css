@@ -870,6 +870,30 @@ body {
 }
 
 /**
+ * 次フェーズ（item 143、大型最終仕上げラウンド）: MYTHICロック中専用——「虹色/オーロラ系の
+ * 枠線を暗い背景でも明確に見える形で、複数色が自然に遷移、微かな発光」というユーザー指示。
+ * 同じrarity-rainbow-slow（background-positionのシフト）を再利用しつつ、解放後（6秒）より
+ * 明確に遅い11秒にして「まだ眠っている・覚醒前」の落ち着いた動きにし、加えてごく緩やかな
+ * opacityの呼吸（rarity-mythic-locked-glow、3.6秒）を重ねて「微かな発光」を表現する
+ * （解放後のanim-rarity-rainbow-slowより遅く・暗いままで、ロックとの差ははっきり残す）。
+ */
+@keyframes rarity-mythic-locked-glow {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.anim-mythic-locked {
+  animation:
+    rarity-rainbow-slow 11s linear infinite,
+    rarity-mythic-locked-glow 3.6s ease-in-out infinite;
+}
+
+/**
  * 次フェーズ（item 117-119、リリース前最終デザインラウンド→item 131で追加調整）:
  * SECRET専用の異質な明滅。MYTHIC（anim-rarity-rainbow-slow、暖色の虹が流れる）とは
  * 別系統——色そのものは変えず（config/titleRarityTheme.tsのSECRET配色をそのまま使う）、
