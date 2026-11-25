@@ -11,6 +11,7 @@ import { grantShareRewardIfEligible, localShareRewardRepository, SHARE_REWARD_DA
 import { shareResult, shareResultViaWebShare } from '../share/shareResult'
 import { trackChallengeCreated, trackShareClick, trackXShareClick, trackXShareRewardGranted } from '../utils/analytics'
 import { getProfile } from '../utils/profileStorage'
+import { sfx } from '../utils/sound'
 import type { ChallengeProblemSetItem, ChallengeRecord } from '../challenge/types'
 import type { AchievementId, EndlessDifficulty } from '../types'
 
@@ -159,7 +160,10 @@ export function EndlessResultScreen({
           <p className={`text-sm font-black tracking-widest ${theme.textClass}`}>{score}連続を超えろ</p>
           <div className="relative w-full">
             <button
-              onClick={handleSendChallenge}
+              onClick={() => {
+                sfx.uiTap()
+                handleSendChallenge()
+              }}
               disabled={challengeBusy}
               className="w-full rounded-2xl bg-gradient-to-b from-amber-400 to-orange-500 py-3.5 text-sm font-black text-[#2a1200] shadow-[0_5px_0_0_rgba(154,52,18,0.8)] transition-transform active:translate-y-1 active:shadow-[0_1px_0_0_rgba(154,52,18,0.8)] disabled:opacity-60"
             >
@@ -167,7 +171,10 @@ export function EndlessResultScreen({
             </button>
             {/* item 100: ボタン本体の押下範囲と干渉しない位置（右上の外側）に、ごく小さな？アイコン。 */}
             <button
-              onClick={() => setShowChallengeInfo(true)}
+              onClick={() => {
+                sfx.uiTap()
+                setShowChallengeInfo(true)
+              }}
               aria-label="挑戦状とは？"
               className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-[#1a0e2e] text-[11px] font-black text-white/70 active:scale-90"
             >
@@ -182,7 +189,10 @@ export function EndlessResultScreen({
           （黒地＝Xのブランドカラー）にして混同を避ける。ボタン自体は常に活性のまま。 */}
       <div className="flex w-full max-w-xs flex-col items-center gap-1.5">
         <button
-          onClick={handleShareToX}
+          onClick={() => {
+            sfx.uiTap()
+            handleShareToX()
+          }}
           className="w-full rounded-2xl bg-black py-3.5 text-sm font-black text-white transition-transform active:scale-[0.98]"
         >
           𝕏 結果をシェア{!hasPass && canRewardThisShare && ' ❤️+1'}
@@ -196,7 +206,10 @@ export function EndlessResultScreen({
 
       <div className="flex w-full max-w-xs flex-col items-center gap-1.5">
         <button
-          onClick={handleShareResult}
+          onClick={() => {
+            sfx.uiTap()
+            handleShareResult()
+          }}
           className="w-full rounded-2xl bg-white/10 py-3 text-sm font-bold text-white transition-transform active:scale-[0.98]"
         >
           結果を共有
@@ -206,15 +219,30 @@ export function EndlessResultScreen({
 
       <div className="flex w-full max-w-xs flex-col gap-3">
         <button
-          onClick={onRetry}
+          onClick={() => {
+            sfx.uiTap()
+            onRetry()
+          }}
           className={`w-full rounded-2xl py-4 text-lg font-black tracking-widest text-white transition-transform active:translate-y-1 ${theme.buttonGradientClass} ${theme.buttonShadowClass}`}
         >
           もう一度
         </button>
-        <button onClick={onChangeDifficulty} className="w-full rounded-2xl bg-white/10 py-3 text-base font-bold text-white active:scale-95">
+        <button
+          onClick={() => {
+            sfx.uiTap()
+            onChangeDifficulty()
+          }}
+          className="w-full rounded-2xl bg-white/10 py-3 text-base font-bold text-white active:scale-95"
+        >
           難易度を選ぶ
         </button>
-        <button onClick={onHome} className="w-full rounded-2xl bg-transparent py-2 text-sm font-bold text-white/50 active:scale-95">
+        <button
+          onClick={() => {
+            sfx.navHome()
+            onHome()
+          }}
+          className="w-full rounded-2xl bg-transparent py-2 text-sm font-bold text-white/50 active:scale-95"
+        >
           ホームへ戻る
         </button>
       </div>

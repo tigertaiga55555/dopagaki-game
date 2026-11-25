@@ -11,6 +11,7 @@ import { ENDLESS_THEME } from '../config/endlessTheme'
 import { matchesChallengeModeFilter, type ChallengeModeFilter } from '../utils/challengeModeFilter'
 import { applyHistoryDisplayLimit } from '../utils/historyDisplay'
 import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
+import { sfx } from '../utils/sound'
 import type { ChallengeApiError, ChallengeRecord, ParticipatedChallengeSummary } from '../challenge/types'
 
 interface Props {
@@ -82,6 +83,7 @@ export function ParticipatedChallengesScreen({ onBack, onHome, onOpenHistory }: 
 
   async function handleOpen(id: string) {
     if (openingId) return
+    sfx.uiTap()
     setOpeningId(id)
     const res = await remoteChallengeDataSource.getChallenge(id)
     setOpeningId(null)

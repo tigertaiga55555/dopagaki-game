@@ -3,6 +3,7 @@ import { NavBar } from '../components/NavBar'
 import { getCurrentPassPrice, getEffectiveReleaseAtMs, daysRemainingInLaunchCampaign, isLaunchCampaignActive } from '../config/dopaPassConfig'
 import { qaPaymentAdapter } from '../payment/qaPaymentAdapter'
 import { trackPassPaywallView, trackPassPurchaseCancel, trackPassPurchaseError, trackPassPurchaseStart, type PassPaywallSource } from '../utils/analytics'
+import { sfx } from '../utils/sound'
 
 interface Props {
   source: PassPaywallSource
@@ -64,6 +65,7 @@ export function PassPaywallScreen({ source, onBack, onHome, onPurchased }: Props
   }, [source])
 
   async function handlePurchase() {
+    sfx.uiTap()
     setBusy(true)
     setErrorMessage(null)
     trackPassPurchaseStart()

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { InversionPrompt } from '../components/InversionPrompt'
 import { opposite } from '../engine/inversion/words'
 import { hasSeenEndlessAdvancedRule, markEndlessAdvancedRuleSeen } from '../utils/storage'
+import { sfx } from '../utils/sound'
 
 interface Props {
   onContinue: () => void
@@ -40,7 +41,13 @@ export function EndlessAdvancedRuleCard({ onContinue }: Props) {
       </p>
 
       {!expanded && (
-        <button onClick={() => setExpanded(true)} className="text-xs font-bold text-white/50 underline underline-offset-4">
+        <button
+          onClick={() => {
+            sfx.uiTap()
+            setExpanded(true)
+          }}
+          className="text-xs font-bold text-white/50 underline underline-offset-4"
+        >
           ルールを見る（実例つき）
         </button>
       )}
@@ -66,7 +73,10 @@ export function EndlessAdvancedRuleCard({ onContinue }: Props) {
       )}
 
       <button
-        onClick={handleContinue}
+        onClick={() => {
+          sfx.uiTap()
+          handleContinue()
+        }}
         className="w-full max-w-xs rounded-2xl bg-gradient-to-b from-red-500 to-red-800 py-4 text-lg font-black tracking-widest text-white shadow-[0_6px_0_0_rgba(127,29,29,0.9)] transition-transform active:translate-y-1 active:shadow-none"
       >
         START

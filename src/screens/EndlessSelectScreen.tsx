@@ -2,6 +2,7 @@ import { ENDLESS_DIFFICULTIES, ENDLESS_DIFFICULTY_LABEL } from '../config/endles
 import { ENDLESS_THEME } from '../config/endlessTheme'
 import { NavBar } from '../components/NavBar'
 import { getEndlessBest } from '../utils/storage'
+import { sfx } from '../utils/sound'
 import type { EndlessDifficulty } from '../types'
 
 interface Props {
@@ -48,7 +49,10 @@ export function EndlessSelectScreen({ onSelect, onBack, onHome }: Props) {
             return (
               <button
                 key={difficulty}
-                onClick={() => onSelect(difficulty)}
+                onClick={() => {
+                  sfx.uiTap()
+                  onSelect(difficulty)
+                }}
                 className={`flex items-center justify-between rounded-2xl px-5 py-4 text-left transition-transform active:scale-95 ${theme.cardClass}`}
               >
                 <span className="flex flex-col items-start gap-0.5">
