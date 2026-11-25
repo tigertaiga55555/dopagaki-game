@@ -1,14 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavBar } from '../../components/NavBar'
+import { AchievementUnlockBanner } from '../../components/AchievementUnlockBanner'
 import { resolveAvatarEmoji } from '../../config/profileConfig'
 import { listFriends } from '../../friends/friendsClient'
 import type { FriendSummary } from '../../friends/types'
 import { connectToPrivateRoom, getOutgoingRoomInvites, type PrivateRoomSocket } from '../../battle/privateRoomClient'
 import { buildPrivateRoomUrl } from '../../battle/privateRoomUrl'
-import { PRIVATE_ROOM_MAX_MEMBERS, visibleTableCount, type PrivateRoomMember, type PrivateRoomState, type PrivateRoomTable } from '../../battle/privateRoomEngine'
+import {
+  hasBeatenAllOtherMembers,
+  isRoomFullHouseActive,
+  PRIVATE_ROOM_MAX_MEMBERS,
+  visibleTableCount,
+  type PrivateRoomMember,
+  type PrivateRoomState,
+  type PrivateRoomTable,
+} from '../../battle/privateRoomEngine'
 import type { RoomClosedReason } from '../../battle/privateRoomTypes'
 import type { BattleFormat, BattleOpponentProfile } from '../../battle/types'
-import type { EndlessDifficulty } from '../../types'
+import { checkFriendRoomFrenemyAchievement, checkFriendRoomFullHouseAchievement } from '../../utils/achievementStorage'
+import type { AchievementId, EndlessDifficulty } from '../../types'
 
 interface Props {
   roomCode: string
@@ -78,6 +88,8 @@ export function PrivateRoomLobbyScreen({
   const [connError, setConnError] = useState<string | null>(null)
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
   const [inviteModalOpen, setInviteModalOpen] = useState(false)
+  // 次フェーズ（item 137-141、大型最終仕上げラウンド）: SECRET「ドパガキ大集合」「フレネミー」。
+  const [newlyUnlocked, setNewlyUnlocked] = useState<AchievementId[]>([])
 
   const socketRef = useRef<PrivateRoomSocket | null>(null)
   const enteredMatchRef = useRef<string | null>(null)
@@ -90,6 +102,18 @@ export function PrivateRoomLobbyScreen({
       (msg) => {
         if (msg.type === 'room_state') {
           setRoomState(msg.state)
+          /**
+           * 次フェーズ（item 137-141、大型最終仕上げラウンド）: SECRET「ドパガキ大集合」
+           * （ルームが8/8満員、かつ4TABLEすべてが同時に対戦進行中）・「フレネミー」（同じ
+           * ルーム内で自分以外の7人全員に最低1回ずつ勝利）をroom_state更新のたびに判定する。
+           * どちらもサーバーから届く最新のPrivateRoomStateだけを見る、構造を変えない
+           * 読み取り専用の判定（既存のロビー進行ロジック自体には一切影響しない）。
+           */
+          setNewlyUnlocked([
+            ...checkFriendRoomFullHouseAchievement(isRoomFullHouseActive(msg.state)),
+            ...checkFriendRoomFrenemyAchievement(hasBeatenAllOtherMembers(msg.state, playerId)),
+          ])
+
           const myTable = msg.state.tables.find((t) => t.activeMatch && (t.activeMatch.memberAId === playerId || t.activeMatch.memberBId === playerId))
           const active = myTable?.activeMatch
           if (active && enteredMatchRef.current !== active.matchId && !isMatchAlreadyHandled(active.matchId)) {
@@ -155,6 +179,7 @@ export function PrivateRoomLobbyScreen({
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-black">
       <NavBar onBack={onBack} onHome={onHome} />
+      <AchievementUnlockBanner newlyUnlocked={newlyUnlocked} />
 
       <div className="flex flex-1 flex-col items-center gap-4 overflow-y-auto px-6 py-4">
         <h1 className="text-lg font-black tracking-widest text-fuchsia-300">🤝 友達と対戦</h1>

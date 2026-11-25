@@ -5,7 +5,12 @@ import { addParticipatedChallengeId } from '../challenge/participatedChallengesS
 import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
 import { PerformanceComparisonTable } from '../components/PerformanceComparisonTable'
 import { trackChallengeWin } from '../utils/analytics'
-import { checkChallengeParticipatedAchievement, checkChallengeWinAchievements, checkEndlessChallengeWinAchievement } from '../utils/achievementStorage'
+import {
+  checkChallengeBeatGodAchievement,
+  checkChallengeParticipatedAchievement,
+  checkChallengeWinAchievements,
+  checkEndlessChallengeWinAchievement,
+} from '../utils/achievementStorage'
 import { recordChallengeAttemptResult } from '../utils/challengeStatsStorage'
 import { getProfile } from '../utils/profileStorage'
 import type { ChallengeApiError, ChallengeAttemptRecord, ChallengeRecord } from '../challenge/types'
@@ -106,7 +111,15 @@ export function ChallengeResultScreen({ challenge, myResult, myEndlessStreak, on
         // Ver.6 Phase 10（実績拡張ラウンド）: 通常Challengeも同じladder（受けて立つ/記録破り/
         // 刺客/破壊者/挑戦状クラッシャー）へ合算する。
         const stats = recordChallengeAttemptResult(res.value.result)
-        setNewlyUnlocked([...checkChallengeParticipatedAchievement(), ...checkChallengeWinAchievements(stats.winCount)])
+        // 次フェーズ（item 137-141、大型最終仕上げラウンド）: SECRET「神越え」。相手（作成者）の
+        // 基準記録が500%だった挑戦状へ挑み、既存のタイブレーク判定も含めて最終的にWINした
+        // 場合だけ解除する（500%到達そのものではなく、500%の相手に勝つことが条件）。
+        const beatGod = challenge.creatorScore === 500 && res.value.result === 'win'
+        setNewlyUnlocked([
+          ...checkChallengeParticipatedAchievement(),
+          ...checkChallengeWinAchievements(stats.winCount),
+          ...checkChallengeBeatGodAchievement(beatGod),
+        ])
       } else {
         setState({ status: 'error', error: res.error })
       }

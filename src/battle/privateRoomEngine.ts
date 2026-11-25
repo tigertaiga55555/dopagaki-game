@@ -383,3 +383,32 @@ export function isExpired(state: PrivateRoomState, nowMs: number): boolean {
 export function touchActivity(state: PrivateRoomState, nowMs: number): PrivateRoomState {
   return { ...state, lastActivityAt: nowMs }
 }
+
+/**
+ * 次フェーズ（item 137-141、大型最終仕上げラウンド）: SECRET「ドパガキ大集合」の判定条件
+ * ——ルームがPRIVATE_ROOM_MAX_MEMBERS（8）人満員、かつ全TABLE（PRIVATE_ROOM_MAX_TABLES=4）が
+ * 同時に対戦進行中（activeMatchがすべて非null）。単に8人入室しただけでは解除しない
+ * （ユーザー指示）。PrivateRoomLobbyScreen.tsxがroom_state更新のたびに呼ぶ、
+ * 状態を一切変更しない読み取り専用の純粋関数（テスト容易性のため分離）。
+ */
+export function isRoomFullHouseActive(state: PrivateRoomState): boolean {
+  return state.members.length === PRIVATE_ROOM_MAX_MEMBERS && state.tables.every((t) => t.activeMatch !== null)
+}
+
+/**
+ * 次フェーズ（item 137-141、大型最終仕上げラウンド）: SECRET「フレネミー」の判定条件——
+ * 現在のルームの自分以外のメンバーがちょうど7人（＝ルームが満員）いて、そのメンバー
+ * 全員に対してmatchHistory（新しい順、最大PRIVATE_ROOM_MATCH_HISTORY_CAP件）内で
+ * 少なくとも1勝ずつ記録がある。同じ相手に複数回勝っても1人分としてのみ数える
+ * （Setで重複排除）。
+ */
+export function hasBeatenAllOtherMembers(state: PrivateRoomState, playerId: string): boolean {
+  const otherMemberIds = state.members.map((m) => m.playerId).filter((id) => id !== playerId)
+  if (otherMemberIds.length !== PRIVATE_ROOM_MAX_MEMBERS - 1) return false
+  const beatenIds = new Set(
+    state.matchHistory
+      .filter((h) => (h.playerAId === playerId && h.winner === 'a') || (h.playerBId === playerId && h.winner === 'b'))
+      .map((h) => (h.playerAId === playerId ? h.playerBId : h.playerAId)),
+  )
+  return otherMemberIds.every((id) => beatenIds.has(id))
+}

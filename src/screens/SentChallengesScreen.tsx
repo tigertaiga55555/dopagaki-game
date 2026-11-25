@@ -6,7 +6,7 @@ import { getCreatedChallengeIds } from '../challenge/createdChallengesStorage'
 import { trackChallengeSentListView } from '../utils/analytics'
 import { ENDLESS_THEME } from '../config/endlessTheme'
 import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
-import { checkChallengeDefenseAchievements, checkChallengeWantedAchievement } from '../utils/achievementStorage'
+import { checkChallengeDefenseAchievements, checkChallengeLastBossAchievement, checkChallengeWantedAchievement } from '../utils/achievementStorage'
 import { matchesChallengeModeFilter, type ChallengeModeFilter } from '../utils/challengeModeFilter'
 import { applyHistoryDisplayLimit } from '../utils/historyDisplay'
 import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
@@ -72,7 +72,16 @@ export function SentChallengesScreen({ onBack, onHome, onOpenHistory }: Props) {
         // 最大値で判定する（全Challengeのchallenger総数ではなく、1つで10人以上が条件）。
         const totalDefeated = res.value.reduce((sum, s) => sum + s.defeatedCount, 0)
         const maxChallengerCount = res.value.reduce((max, s) => Math.max(max, s.challengerCount), 0)
-        setNewlyUnlocked([...checkChallengeDefenseAchievements(totalDefeated), ...checkChallengeWantedAchievement(maxChallengerCount)])
+        // 次フェーズ（item 137-141、大型最終仕上げラウンド）: SECRET「ラスボス」。複数Challenge
+        // の合算ではなく、1つのChallengeSummary単体でchallengerCount（異なる挑戦者数）が
+        // 10人以上、かつclearedCount（突破者数）が0件（誰にも破られていない）を満たす必要がある
+        // （既存の「指名手配」=challengerCount単体の最大値、とは防衛必須の点で別条件）。
+        const isLastBoss = res.value.some((s) => s.challengerCount >= 10 && s.clearedCount === 0)
+        setNewlyUnlocked([
+          ...checkChallengeDefenseAchievements(totalDefeated),
+          ...checkChallengeWantedAchievement(maxChallengerCount),
+          ...checkChallengeLastBossAchievement(isLastBoss),
+        ])
       } else {
         setState({ status: 'error', error: res.error })
       }

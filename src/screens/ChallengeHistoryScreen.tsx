@@ -10,7 +10,7 @@ import {
 } from '../challenge/formatPerformance'
 import { AchievementUnlockBanner } from '../components/AchievementUnlockBanner'
 import { trackChallengeHistoryView } from '../utils/analytics'
-import { checkEndlessChallengeDefenseAchievement } from '../utils/achievementStorage'
+import { checkChallengeZeroWallAchievement, checkEndlessChallengeDefenseAchievement } from '../utils/achievementStorage'
 import { getOrCreatePlayerId } from '../utils/profileStorage'
 import type { ChallengeApiError, ChallengeAttemptRecord, ChallengeMode, ChallengeRecord } from '../challenge/types'
 import type { AchievementId } from '../types'
@@ -67,7 +67,12 @@ export function ChallengeHistoryScreen({ challenge, onBack }: Props) {
         // 確認できた時点で「終わらない門番」を解除する。
         if (isCreator && challenge.mode === 'endless') {
           const defended = res.value.attempts.some((a) => resultForViewer(a.result, 'host') === 'win')
-          setNewlyUnlocked(checkEndlessChallengeDefenseAchievement(defended))
+          // 次フェーズ（item 137-141、大型最終仕上げラウンド）: SECRET「0の壁」。自分の
+          // 挑戦状自体が0 STREAKで作成され、かつ0 STREAKのまま終えた挑戦者を防衛
+          // （ホスト視点でWIN＝挑戦者視点でlose/draw）できていた場合だけ解除する
+          // （既存の「終わらない門番」=defendedだけの判定とは別条件）。
+          const zeroWall = challenge.creatorScore === 0 && res.value.attempts.some((a) => a.score === 0 && resultForViewer(a.result, 'host') === 'win')
+          setNewlyUnlocked([...checkEndlessChallengeDefenseAchievement(defended), ...checkChallengeZeroWallAchievement(zeroWall)])
         }
       } else {
         setState({ status: 'error', error: res.error })

@@ -17,7 +17,7 @@ import { pickFinalQuestion } from './finalQuestionPicker'
 import { generateNextQuestion } from './questionPicker'
 import { pick } from './random'
 import { pickChallenge500Question } from '../questions/challenge500'
-import { checkEndlessAchievements, checkGrindAchievements } from '../utils/achievementStorage'
+import { checkEndlessAchievements, checkEndlessTripleCrownAchievement, checkGrindAchievements } from '../utils/achievementStorage'
 import { trackEndlessEnd, trackEndlessStart } from '../utils/analytics'
 import { getEndlessBest, getOfficialPlayCount, incrementOfficialPlayCount, updateEndlessBest } from '../utils/storage'
 import { sfx } from '../utils/sound'
@@ -303,9 +303,18 @@ export function useEndlessGame(
     // Ver.6 Phase 10: Grind実績（公式プレイ回数）もqaMode=falseの公式ENDLESSプレイだけで加算する
     // （ENDLESS Challenge・ChallengeリプレイはqaMode=trueで呼ばれるため、ここには含まれない）。
     if (!qaMode) incrementOfficialPlayCount()
+    // 次フェーズ（item 137-141、大型最終仕上げラウンド）: SECRET「三冠王」。表のラダーには
+    // 存在しない人外認定（上級100連続）は、endlessStreak型のまま上のcheckEndlessAchievements
+    // だけで自然に解除される（secretフラグはAchievementScreen.tsxの表示側だけで効く）ため、
+    // ここで追加の判定は不要。三冠王は3難易度の自己ベストを横断する複合条件のため専用関数を呼ぶ
+    // （qaModeでは他の実績同様に一切解除しない）。
     const newlyUnlockedAchievements = qaMode
       ? []
-      : [...checkEndlessAchievements(difficulty, next.streak), ...checkGrindAchievements(getOfficialPlayCount())]
+      : [
+          ...checkEndlessAchievements(difficulty, next.streak),
+          ...checkGrindAchievements(getOfficialPlayCount()),
+          ...checkEndlessTripleCrownAchievement(getEndlessBest('beginner'), getEndlessBest('intermediate'), getEndlessBest('advanced')),
+        ]
     setSnapshot((s) => ({ ...s, state: next, currentSlot: null, milestoneLabel: null }))
     onFinish({
       score: next.streak,

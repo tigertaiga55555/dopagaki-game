@@ -9,7 +9,9 @@ import {
   createPrivateRoomState,
   enterTable,
   findTableOf,
+  hasBeatenAllOtherMembers,
   isExpired,
+  isRoomFullHouseActive,
   leaveTable,
   setMemberConnected,
   setTableReady,
@@ -336,5 +338,102 @@ describe('privateRoomEngine: ロビー状態（FRIENDS/TABLE/ナビ追加調整�
   it('touchActivity: lastActivityAtだけを更新する（フレンド招待送信等の活動記録用）', () => {
     const state = touchActivity(freshRoom(), 9999)
     expect(state.lastActivityAt).toBe(9999)
+  })
+})
+
+/**
+ * 次フェーズ（item 137-141、大型最終仕上げラウンド）: SECRET「ドパガキ大集合」
+ * 「フレネミー」の判定条件の専用テスト。
+ */
+describe('isRoomFullHouseActive（SECRET「ドパガキ大集合」）', () => {
+  function readyAllFourTables(state: PrivateRoomState): PrivateRoomState {
+    let s = state
+    const ids = s.members.map((m) => m.playerId)
+    for (let tableId = 1; tableId <= PRIVATE_ROOM_MAX_TABLES; tableId++) {
+      const a = ids[(tableId - 1) * 2]
+      const b = ids[(tableId - 1) * 2 + 1]
+      s = mustEnter(s, a, tableId)
+      s = mustEnter(s, b, tableId)
+      s = (setTableReady(s, a, tableId, true) as { ok: true; state: PrivateRoomState }).state
+      s = (setTableReady(s, b, tableId, true) as { ok: true; state: PrivateRoomState }).state
+      s = (startTableMatch(s, tableId, `match-${tableId}`) as { ok: true; state: PrivateRoomState }).state
+    }
+    return s
+  }
+
+  it('8人未満・または一部TABLEが対戦中でなければfalse', () => {
+    let state = freshRoom()
+    for (const id of ['p1', 'p2', 'p3']) state = mustAdd(state, id)
+    expect(isRoomFullHouseActive(state)).toBe(false)
+  })
+
+  it('8/8満員でも、4TABLEのうち1つでも対戦中でなければfalse（単に満員なだけでは解除しない）', () => {
+    let state = freshRoom()
+    for (let i = 1; i <= 7; i++) state = mustAdd(state, `p${i}`)
+    expect(state.members).toHaveLength(PRIVATE_ROOM_MAX_MEMBERS)
+    // TABLE1〜3だけ対戦開始、TABLE4は空のまま。
+    const ids = state.members.map((m) => m.playerId)
+    for (let tableId = 1; tableId <= 3; tableId++) {
+      const a = ids[(tableId - 1) * 2]
+      const b = ids[(tableId - 1) * 2 + 1]
+      state = mustEnter(state, a, tableId)
+      state = mustEnter(state, b, tableId)
+      state = (setTableReady(state, a, tableId, true) as { ok: true; state: PrivateRoomState }).state
+      state = (setTableReady(state, b, tableId, true) as { ok: true; state: PrivateRoomState }).state
+      state = (startTableMatch(state, tableId, `match-${tableId}`) as { ok: true; state: PrivateRoomState }).state
+    }
+    expect(isRoomFullHouseActive(state)).toBe(false)
+  })
+
+  it('8/8満員、かつ4TABLEすべてが同時に対戦進行中ならtrue', () => {
+    let state = freshRoom()
+    for (let i = 1; i <= 7; i++) state = mustAdd(state, `p${i}`)
+    state = readyAllFourTables(state)
+    expect(isRoomFullHouseActive(state)).toBe(true)
+  })
+})
+
+describe('hasBeatenAllOtherMembers（SECRET「フレネミー」）', () => {
+  // 1つのTABLEを使い回して何度も対戦させるため、各対戦後に両者を離席させて座席を空ける
+  // （enterTableは「既にどこかの座席にいる」プレイヤーの再入室を拒否するため）。
+  function winFor(state: PrivateRoomState, winnerId: string, loserId: string, tableId: number, matchId: string): PrivateRoomState {
+    let s = mustEnter(state, winnerId, tableId)
+    s = mustEnter(s, loserId, tableId)
+    s = (setTableReady(s, winnerId, tableId, true) as { ok: true; state: PrivateRoomState }).state
+    s = (setTableReady(s, loserId, tableId, true) as { ok: true; state: PrivateRoomState }).state
+    s = (startTableMatch(s, tableId, matchId) as { ok: true; state: PrivateRoomState }).state
+    const table = s.tables.find((t) => t.tableId === tableId)!
+    const outcome = table.activeMatch!.memberAId === winnerId ? 'a' : 'b'
+    s = applyMatchResult(s, matchId, outcome, {}, 9000)
+    s = (leaveTable(s, winnerId) as { ok: true; state: PrivateRoomState }).state
+    s = (leaveTable(s, loserId) as { ok: true; state: PrivateRoomState }).state
+    return s
+  }
+
+  it('ルームが8人未満（自分以外が7人に満たない）ならfalse', () => {
+    let state = freshRoom()
+    for (const id of ['p1', 'p2', 'p3']) state = mustAdd(state, id)
+    expect(hasBeatenAllOtherMembers(state, 'host')).toBe(false)
+  })
+
+  it('8人満員でも、1人でもまだ勝ったことがない相手がいればfalse', () => {
+    let state = freshRoom()
+    for (let i = 1; i <= 7; i++) state = mustAdd(state, `p${i}`)
+    // hostはp1〜p6には勝っているが、p7にはまだ勝っていない。
+    for (let i = 1; i <= 6; i++) {
+      state = winFor(state, 'host', `p${i}`, 1, `m-${i}`)
+    }
+    expect(hasBeatenAllOtherMembers(state, 'host')).toBe(false)
+  })
+
+  it('自分以外の7人全員に最低1回ずつ勝っていればtrue（同じ相手への複数勝利は1人分として扱う）', () => {
+    let state = freshRoom()
+    for (let i = 1; i <= 7; i++) state = mustAdd(state, `p${i}`)
+    for (let i = 1; i <= 7; i++) {
+      state = winFor(state, 'host', `p${i}`, 1, `m-${i}`)
+    }
+    // p1に重ねてもう一度勝っても、distinct判定には影響しない。
+    state = winFor(state, 'host', 'p1', 1, 'm-extra')
+    expect(hasBeatenAllOtherMembers(state, 'host')).toBe(true)
   })
 })
