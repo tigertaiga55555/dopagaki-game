@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { buildCreateChallengeInput, deriveChallengeMode } from './createChallengeFromResult'
-import { getOrCreatePlayerId, updateIcon, updateNickname } from '../utils/profileStorage'
+import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
+import { getOrCreatePlayerId, getProfile, updateIcon, updateNickname } from '../utils/profileStorage'
 import type { FinalResultV4 } from '../types'
 
 function installFakeLocalStorage(): Storage {
@@ -99,6 +100,35 @@ describe('buildCreateChallengeInput (Ver.6 Phase 5.2: Profile snapshot)', () => 
     expect(input?.creatorIcon).toEqual({ kind: 'preset', iconId: 'flame' })
     expect(input?.creatorEquippedTitle).toBeNull()
     expect(input?.creatorPlayerId.length).toBeGreaterThan(0)
+  })
+
+  it('item 157-159: creatorSubTitleIdsはProfile.subTitleIdsのスナップショットそのまま（デフォルトは[null, null]）', () => {
+    const result = baseResult({ recordedProblemSet: [{ type: 'color', targetTimeMs: 900, data: {} }] })
+    const input = buildCreateChallengeInput(result)
+    expect(input?.creatorSubTitleIds).toEqual([null, null])
+  })
+
+  it('item 157-159: creatorSubTitleIdsはProfile.subTitleIdsに値が設定されていればそのまま反映する', () => {
+    const profile = getProfile()
+    localStorage.setItem('dopagaki:profileV1', JSON.stringify({ ...profile, subTitleIds: ['title-sub1', 'title-sub2'] }))
+    const result = baseResult({ recordedProblemSet: [{ type: 'color', targetTimeMs: 900, data: {} }] })
+    const input = buildCreateChallengeInput(result)
+    expect(input?.creatorSubTitleIds).toEqual(['title-sub1', 'title-sub2'])
+  })
+
+  it('item 157-159: creatorHasPassはDOPA PASS非所有ならfalse', () => {
+    const result = baseResult({ recordedProblemSet: [{ type: 'color', targetTimeMs: 900, data: {} }] })
+    const input = buildCreateChallengeInput(result)
+    expect(input?.creatorHasPass).toBe(false)
+  })
+
+  it('item 157-159: creatorHasPassはDOPA PASS所有者ならtrue（qaLocalEntitlementRepositoryのスナップショット）', () => {
+    const now = Date.now()
+    localStorage.setItem('dopagaki:dopaPassStateV1', JSON.stringify({ owned: true, grantedAt: now, isLaunchCampaignPurchaser: false }))
+    expect(qaLocalEntitlementRepository.hasEntitlement('DOPA_PASS')).toBe(true)
+    const result = baseResult({ recordedProblemSet: [{ type: 'color', targetTimeMs: 900, data: {} }] })
+    const input = buildCreateChallengeInput(result)
+    expect(input?.creatorHasPass).toBe(true)
   })
 
   it('problemSetとconditionsとcreatorScoreを正しく組み立てる', () => {

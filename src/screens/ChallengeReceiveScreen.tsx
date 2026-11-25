@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react'
+import { DopaPassBadge } from '../components/DopaPassBadge'
+import { PassTitleBadge } from '../components/PassTitleBadge'
+import { SubTitleBadge } from '../components/SubTitleBadge'
+import { TitleBadge } from '../components/TitleBadge'
+import { getAchievementDefById } from '../config/achievements'
+import { PASS_TITLE_DEFS_BY_ID } from '../config/passTitles'
 import { resolveAvatarEmoji } from '../config/profileConfig'
 import { TITLE_DEFS_BY_ID } from '../config/titles'
+import { composeCardFlourish, getSecretTheme, getTitleRarityTheme } from '../config/titleRarityTheme'
 import { remoteChallengeDataSource } from '../challenge/remoteChallengeDataSource'
 import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
 import { ENDLESS_THEME } from '../config/endlessTheme'
@@ -83,7 +90,41 @@ export function ChallengeReceiveScreen({ challengeId, onAccept, onHome, onViewHi
   }
 
   const { challenge } = state
-  const equippedTitle = challenge.creatorEquippedTitle ? TITLE_DEFS_BY_ID[challenge.creatorEquippedTitle] : null
+  /**
+   * 次フェーズ（item 157-159、挑戦状受信画面のプロフィール表示を通常プロフィールと統一）:
+   * ProfileScreen.tsxと全く同じ解決ロジック（PASS限定Title／通常Title／レアリティ／
+   * SECRET判定／カード外枠の併存合成）を、相手（作成者）のスナップショットに対して行う。
+   * 既存のequippedTitle（プレーン文字列表示）は廃止し、TitleBadge/PassTitleBadge/
+   * SubTitleBadge/DopaPassBadgeを全てそのまま再利用する——ユーザー指示「今後デザインを
+   * 変更した時に表示が分岐しない構造に」を満たすため、ProfileScreen.tsx側のロジックを
+   * 複製せず、同じ共通コンポーネント・同じヘルパー関数を呼ぶだけにする。
+   */
+  const equippedPassTitle = challenge.creatorEquippedTitle ? PASS_TITLE_DEFS_BY_ID[challenge.creatorEquippedTitle] : null
+  const equippedRegularTitle = !equippedPassTitle && challenge.creatorEquippedTitle ? TITLE_DEFS_BY_ID[challenge.creatorEquippedTitle] : null
+  const equippedIsSecret = equippedRegularTitle ? getAchievementDefById(equippedRegularTitle.id)?.secret === true : false
+  const titleFlourishClass = equippedPassTitle
+    ? 'border-amber-400/60 shadow-[0_0_24px_rgba(251,191,36,0.3)]'
+    : equippedRegularTitle
+      ? equippedIsSecret
+        ? getSecretTheme().profileRingClass
+        : getTitleRarityTheme(equippedRegularTitle.rarity).profileRingClass
+      : ''
+  const titleRingBoxShadow = equippedRegularTitle
+    ? equippedIsSecret
+      ? getSecretTheme().profileRingBoxShadow
+      : getTitleRarityTheme(equippedRegularTitle.rarity).profileRingBoxShadow
+    : ''
+  const titleRingPulseClass = equippedRegularTitle
+    ? equippedIsSecret
+      ? getSecretTheme().profileRingPulseClass
+      : getTitleRarityTheme(equippedRegularTitle.rarity).profileRingPulseClass
+    : ''
+  const cardFlourishClass = equippedPassTitle
+    ? titleFlourishClass
+    : [composeCardFlourish(titleRingBoxShadow, challenge.creatorHasPass), titleRingPulseClass].filter((c) => c.length > 0).join(' ')
+  // サブ称号は「相手がPASS所有かつ少なくとも1枠設定しているか」で表示を分ける
+  // （ProfileScreen.tsxのhasPass &&と同じ考え方——PASS非所有者はこの行自体を出さない）。
+  const hasAnySubTitle = challenge.creatorSubTitleIds.some((id) => id !== null)
   const isEndless = challenge.mode === 'endless'
   const endlessDifficulty = challenge.conditions.endlessDifficulty as EndlessDifficulty | undefined
   const endlessTheme = endlessDifficulty ? ENDLESS_THEME[endlessDifficulty] : null
@@ -108,12 +149,39 @@ export function ChallengeReceiveScreen({ challengeId, onAccept, onHome, onViewHi
       <p className="text-xl font-black text-white">挑戦状が届きました</p>
       <p className="-mt-4 text-xs font-bold text-white/50">この記録に挑戦するためのモードです。</p>
 
-      <div className="flex w-full max-w-xs flex-col items-center gap-3 rounded-3xl border border-fuchsia-400/25 bg-gradient-to-b from-white/[0.06] to-white/[0.02] px-6 py-6">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-fuchsia-400/50 bg-fuchsia-500/10 text-4xl shadow-[0_0_20px_rgba(217,70,239,0.3)]">
+      <div
+        className={`relative flex w-full max-w-xs flex-col items-center gap-3 rounded-3xl border border-fuchsia-400/25 bg-gradient-to-b from-white/[0.06] to-white/[0.02] px-6 py-6 ${cardFlourishClass}`}
+      >
+        {challenge.creatorHasPass && (
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[#140a22] p-0.5">
+            <DopaPassBadge compact />
+          </div>
+        )}
+
+        <div
+          className={`flex h-20 w-20 items-center justify-center rounded-full bg-fuchsia-500/10 text-4xl ${
+            titleFlourishClass || 'border-2 border-fuchsia-400/50 shadow-[0_0_20px_rgba(217,70,239,0.3)]'
+          }`}
+        >
           {resolveAvatarEmoji(challenge.creatorIcon)}
         </div>
         <p className="text-lg font-black text-white">{challenge.creatorNickname}</p>
-        {equippedTitle && <p className="text-xs font-bold tracking-widest text-fuchsia-300/90">{equippedTitle.name}</p>}
+
+        {equippedPassTitle ? (
+          <PassTitleBadge title={equippedPassTitle} />
+        ) : equippedRegularTitle ? (
+          <TitleBadge title={equippedRegularTitle} />
+        ) : (
+          <p className="text-xs font-bold tracking-widest text-white/40">称号未装備</p>
+        )}
+
+        {challenge.creatorHasPass && hasAnySubTitle && (
+          <div className="flex w-full items-center justify-center gap-2">
+            {challenge.creatorSubTitleIds.map((id, index) => (
+              <SubTitleBadge key={index} titleId={id} slotLabel={index === 0 ? 'サブ1' : 'サブ2'} />
+            ))}
+          </div>
+        )}
 
         {isEndless && endlessDifficulty && endlessTheme ? (
           <>
