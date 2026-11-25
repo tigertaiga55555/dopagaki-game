@@ -46,13 +46,17 @@ export interface TitleRarityTheme {
   profileRingClass: string
   /**
    * 次フェーズ（item 159、PASS専用カード外枠の刷新）: profileRingClassと同じ見た目を
-   * 「生のbox-shadow値」（Tailwindのshadow-[...]アービトラリ値の中身、アンダースコアで
-   * 空白をエスケープした形）として持つ。ring-*ユーティリティは複数並べても後勝ちで
-   * 競合してしまう（2つのring-*を同時に使うと、スタイルシートの出現順に依存して
-   * どちらか一方しか効かず、見た目が不安定になる）ため、Title本来のリング効果と
-   * DOPA PASSの金装飾を「併存」させる場合は、1つのshadow-[...]へ両方のbox-shadow
-   * レイヤーをカンマ区切りで合成する（config/titleRarityTheme.tsのcomposeCardFlourish
-   * 参照）。COMMON/RARE/EPICは profileRingClass と同じく空文字。
+   * 「生のCSS box-shadow値」（通常のスペース区切り。Tailwindクラス名として埋め込む
+   * わけではないため、アンダースコアでのエスケープは不要）として持つ。ring-*
+   * ユーティリティは複数並べても後勝ちで競合してしまう（2つのring-*を同時に使うと、
+   * スタイルシートの出現順に依存してどちらか一方しか効かず、見た目が不安定になる）
+   * ため、Title本来のリング効果とDOPA PASSの金装飾を「併存」させる場合は、
+   * composeCardFlourish()がこの値を含めて1つのbox-shadow文字列へカンマ区切りで合成し、
+   * 呼び出し側はそれをclassNameではなく`style={{ boxShadow: ... }}`として適用する
+   * （実機検証で発覚した不具合の修正: 実行時に動的合成される文字列はTailwindの
+   * JITクラス名スキャンでは検出できず、classNameに埋め込んでも対応するCSSが
+   * 生成されない。composeCardFlourish()のコメント参照）。
+   * COMMON/RARE/EPICは profileRingClass と同じく空文字。
    */
   profileRingBoxShadow: string
   /** 次フェーズ（item 159）: profileRingClassに含まれるpulseアニメーションクラスだけを
@@ -139,7 +143,7 @@ const THEMES: Record<TitleRarity, TitleRarityTheme> = {
     badgeGlowClass: 'shadow-[0_0_22px_rgba(250,204,21,0.5)]',
     badgePulseClass: 'anim-rarity-pulse-slow',
     profileRingClass: 'ring-2 ring-amber-300/70 shadow-[0_0_20px_rgba(250,204,21,0.4)]',
-    profileRingBoxShadow: '0_0_0_2px_rgba(252,211,77,0.7),0_0_20px_rgba(250,204,21,0.4)',
+    profileRingBoxShadow: '0 0 0 2px rgba(252,211,77,0.7), 0 0 20px rgba(250,204,21,0.4)',
     profileRingPulseClass: '',
     lockedBorderClass: 'border-amber-500/60',
     lockedBackgroundClass: 'bg-amber-900/30',
@@ -154,7 +158,7 @@ const THEMES: Record<TitleRarity, TitleRarityTheme> = {
     badgeGlowClass: 'shadow-[0_0_26px_rgba(199,92,255,0.5)]',
     badgePulseClass: 'anim-rarity-rainbow-slow',
     profileRingClass: 'ring-2 ring-fuchsia-300/70 anim-rarity-rainbow-slow shadow-[0_0_24px_rgba(199,92,255,0.45)]',
-    profileRingBoxShadow: '0_0_0_2px_rgba(240,171,252,0.7),0_0_24px_rgba(199,92,255,0.45)',
+    profileRingBoxShadow: '0 0 0 2px rgba(240,171,252,0.7), 0 0 24px rgba(199,92,255,0.45)',
     profileRingPulseClass: 'anim-rarity-rainbow-slow',
     /**
      * 次フェーズ（item 143、大型最終仕上げラウンド）: 「ロック中でも『これはとんでもない』
@@ -252,7 +256,7 @@ export function getSecretTheme(): SecretTheme {
     profileRingClass:
       'ring-2 ring-indigo-400/70 anim-rarity-secret-slow shadow-[0_0_8px_rgba(226,232,255,0.3),0_0_22px_rgba(99,102,241,0.4),0_0_42px_rgba(192,92,255,0.18)]',
     profileRingBoxShadow:
-      '0_0_0_2px_rgba(129,140,248,0.7),0_0_8px_rgba(226,232,255,0.3),0_0_22px_rgba(99,102,241,0.4),0_0_42px_rgba(192,92,255,0.18)',
+      '0 0 0 2px rgba(129,140,248,0.7), 0 0 8px rgba(226,232,255,0.3), 0 0 22px rgba(99,102,241,0.4), 0 0 42px rgba(192,92,255,0.18)',
     profileRingPulseClass: 'anim-rarity-secret-slow',
   }
 }
@@ -270,17 +274,40 @@ export function getSecretTheme(): SecretTheme {
  * 両方が同じCSS変数（--tw-ring-shadow等）を書き換え合うため、どちらか一方しか効かず
  * スタイルシートの出現順に依存して見た目が不安定になる。これを避けるため、Title側の
  * リング効果を生のbox-shadow値（profileRingBoxShadow）として受け取り、PASSの金リング
- * （ring相当の0 0 0 4pxレイヤー）＋金のソフトグロー を別レイヤーとして追加し、1つの
- * shadow-[...]アービトラリ値へカンマ区切りで合成する——box-shadowは複数レイヤーを
- * 公式にサポートしており、レイヤーの重なり順もここで完全に制御できる（Title本来の色を
- * 内側・PASSの金を外側に配置し、「紫×ゴールド」の二層表現にする）。
+ * （ring相当の0 0 0 4pxレイヤー）＋金のソフトグロー を別レイヤーとして追加し、box-shadowの
+ * 複数レイヤー機能でカンマ区切りに合成する——レイヤーの重なり順もここで完全に制御できる
+ * （Title本来の色を内側・PASSの金を外側に配置し、「紫×ゴールド」の二層表現にする）。
+ *
+ * 実機検証で発覚した不具合の修正（item 159フォローアップ）: 当初はこの合成結果を
+ * Tailwindの`shadow-[...]`アービトラリ値クラス名として返し、呼び出し側がclassNameに
+ * 埋め込んでいたが、Tailwind（v4/JIT）はソースコード中に**リテラルとして存在する
+ * クラス名文字列**だけを静的スキャンしてCSSを生成するため、実行時に初めて
+ * 組み合わさる（Title側の値×PASS有無×ベースの光彩、何通りもの組み合わせがある）
+ * この関数の戻り値は、スキャン対象のどのファイルにも完全な文字列として存在せず、
+ * 対応するCSSルールが一切生成されない（実機のgetComputedStyle().boxShadowが
+ * "none"になる）——ユニットテストは「関数の戻り値」しか見ないため、この「生成した
+ * クラス名に対応するCSSが実際に存在するか」は検出できなかった。
+ *
+ * 修正: この関数はTailwindクラス名ではなく、**生のCSS box-shadow値の文字列**
+ * （通常のスペース区切り、Tailwindのアンダースコアエスケープ不要）をそのまま返す。
+ * 呼び出し側（ProfileScreen.tsx・ChallengeReceiveScreen.tsx）はこれをclassNameではなく
+ * `style={{ boxShadow: ... }}`のインラインstyleとして適用する——動的に組み合わされる
+ * 値はTailwindのクラス名検出に依存しないインラインstyleで表現し、静的な文字列
+ * （Title側のprofileRingClass、アバター用のtitleFlourishClass等）はそのままTailwind
+ * クラスとして使い続ける、という区別を徹底する。
+ *
+ * baseBoxShadow（省略可）: 呼び出し元のカードが元々持っていた、常時表示の環境光
+ * （ambient glow）のbox-shadow値。インラインstyleでbox-shadowを設定すると、同じ
+ * 要素にTailwindのshadow-*クラスで設定されていた値は（インラインの詳細度が常に
+ * 勝つため）完全に上書きされて消えてしまう。これを防ぐため、環境光も含めて1つの
+ * 合成値として返し、呼び出し側はクラス由来の環境光を失わずに済む。
  *
  * Title装飾が無い（COMMON/RARE/EPIC装備時・称号未装備時）場合は、PASSの金レイヤーだけが
- * そのまま使われる（旧passCardFlourishClassと同じ見た目の意図、box-shadowでの表現に統一）。
- * PASS非所有者は常に''（何も付与しない、Titleの効果だけがそのまま表示される）。
+ * そのまま使われる（旧passCardFlourishClassと同じ見た目の意図）。
+ * PASS非所有者・Title装飾なし・baseBoxShadow未指定なら''（何も付与しない）。
  */
-export function composeCardFlourish(titleRingBoxShadow: string, hasPass: boolean): string {
-  const passLayer = hasPass ? '0_0_0_4px_rgba(252,211,77,0.55),0_0_16px_rgba(251,191,36,0.3)' : ''
-  const layers = [titleRingBoxShadow, passLayer].filter((l) => l.length > 0).join(',')
-  return layers ? `shadow-[${layers}]` : ''
+export function composeCardFlourish(titleRingBoxShadow: string, hasPass: boolean, baseBoxShadow: string = ''): string {
+  const passLayer = hasPass ? '0 0 0 4px rgba(252,211,77,0.55), 0 0 16px rgba(251,191,36,0.3)' : ''
+  const layers = [baseBoxShadow, titleRingBoxShadow, passLayer].filter((l) => l.length > 0)
+  return layers.join(', ')
 }

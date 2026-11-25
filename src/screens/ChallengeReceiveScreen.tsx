@@ -119,9 +119,14 @@ export function ChallengeReceiveScreen({ challengeId, onAccept, onHome, onViewHi
       ? getSecretTheme().profileRingPulseClass
       : getTitleRarityTheme(equippedRegularTitle.rarity).profileRingPulseClass
     : ''
-  const cardFlourishClass = equippedPassTitle
-    ? titleFlourishClass
-    : [composeCardFlourish(titleRingBoxShadow, challenge.creatorHasPass), titleRingPulseClass].filter((c) => c.length > 0).join(' ')
+  // 実機検証で発覚した不具合の修正（item 159フォローアップ）: composeCardFlourish()の
+  // 戻り値は実行時に動的合成される文字列のため、classNameへshadow-[...]として埋め込んで
+  // もTailwindのJIT静的スキャンでは検出されずCSSが生成されない。style={{boxShadow}}の
+  // インラインstyleとして適用する（titleRarityTheme.tsのcomposeCardFlourish()コメント
+  // 参照）。pulseアニメーションクラス（anim-rarity-*-slow）は手書きCSS（Tailwind
+  // ユーティリティではない）のため、classNameのままで問題ない。
+  const cardFlourishClass = equippedPassTitle ? titleFlourishClass : titleRingPulseClass
+  const cardFlourishBoxShadow = equippedPassTitle ? undefined : composeCardFlourish(titleRingBoxShadow, challenge.creatorHasPass) || undefined
   // サブ称号は「相手がPASS所有かつ少なくとも1枠設定しているか」で表示を分ける
   // （ProfileScreen.tsxのhasPass &&と同じ考え方——PASS非所有者はこの行自体を出さない）。
   const hasAnySubTitle = challenge.creatorSubTitleIds.some((id) => id !== null)
@@ -151,6 +156,7 @@ export function ChallengeReceiveScreen({ challengeId, onAccept, onHome, onViewHi
 
       <div
         className={`relative flex w-full max-w-xs flex-col items-center gap-3 rounded-3xl border border-fuchsia-400/25 bg-gradient-to-b from-white/[0.06] to-white/[0.02] px-6 py-6 ${cardFlourishClass}`}
+        style={cardFlourishBoxShadow ? { boxShadow: cardFlourishBoxShadow } : undefined}
       >
         {challenge.creatorHasPass && (
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[#140a22] p-0.5">

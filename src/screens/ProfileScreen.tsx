@@ -100,10 +100,21 @@ export function ProfileScreen({
    * 「排他ではなく併存」へ変更する——紫の世界観（Titleの装飾）を維持しつつ、PASSなら
    * 常にゴールド系の枠線・光沢を追加する（完全な黄色ベタ枠ではなく、紫×ゴールドの
    * 高級感）。composeCardFlourish()がTitle側のring box-shadow値とPASSの金レイヤーを
-   * 1つのshadow-[...]へ安全に合成する（2つのring-*ユーティリティを並べる旧実装は
+   * 1つのbox-shadow文字列へ安全に合成する（2つのring-*ユーティリティを並べる旧実装は
    * CSS変数の競合で見た目が不安定になるため採用しない）。
-   * PASS限定Title装備時（既にborder-amber-400/60で金基調）はそのまま維持する
-   * （PASS限定Title自体が既に金テーマのため、追加の併存ロジックは不要）。
+   *
+   * 実機検証で発覚した不具合の修正: この合成結果は実行時に初めて組み合わさる動的な
+   * 文字列のため、Tailwind（JIT）のクラス名静的スキャンでは検出できず、classNameへ
+   * `shadow-[...]`として埋め込んでも対応するCSSが生成されなかった（実機の
+   * getComputedStyle().boxShadowが"none"になることで発覚）。そのため、この値は
+   * classNameではなく`style={{ boxShadow: ... }}`のインラインstyleとして適用する
+   * （composeCardFlourish()のコメント参照）。インラインでbox-shadowを設定すると、
+   * 元々className側のshadow-[0_0_30px_rgba(217,70,239,0.08)]（カード常時の環境光）が
+   * 完全に上書きされて消えてしまうため、composeCardFlourish()の第3引数で環境光も
+   * 含めて合成し、インライン側に一本化する。
+   * PASS限定Title装備時（既にborder-amber-400/60 shadow-[...]で金基調、静的な文字列
+   * なのでTailwindクラスのままで正しく描画される）はそのまま維持する——追加の
+   * 併存ロジックは不要。
    */
   const titleRingBoxShadow = equippedRegularTitle
     ? equippedIsSecret
@@ -115,9 +126,10 @@ export function ProfileScreen({
       ? getSecretTheme().profileRingPulseClass
       : getTitleRarityTheme(equippedRegularTitle.rarity).profileRingPulseClass
     : ''
-  const cardFlourishClass = equippedPassTitle
-    ? titleFlourishClass
-    : [composeCardFlourish(titleRingBoxShadow, hasPass), titleRingPulseClass].filter((c) => c.length > 0).join(' ')
+  const cardFlourishClass = equippedPassTitle ? titleFlourishClass : titleRingPulseClass
+  const cardFlourishBoxShadow = equippedPassTitle
+    ? undefined
+    : composeCardFlourish(titleRingBoxShadow, hasPass, '0 0 30px rgba(217,70,239,0.08)') || undefined
 
   useEffect(() => {
     trackProfileView()
@@ -135,7 +147,10 @@ export function ProfileScreen({
       <div className="flex flex-1 flex-col items-center gap-6 px-6 py-4">
         {/* プレイヤーカード */}
         <div
-          className={`relative flex w-full max-w-xs flex-col items-center gap-3 rounded-3xl border border-fuchsia-400/20 bg-gradient-to-b from-white/[0.06] to-white/[0.02] px-6 py-6 text-center shadow-[0_0_30px_rgba(217,70,239,0.08)] ${cardFlourishClass}`}
+          className={`relative flex w-full max-w-xs flex-col items-center gap-3 rounded-3xl border border-fuchsia-400/20 bg-gradient-to-b from-white/[0.06] to-white/[0.02] px-6 py-6 text-center ${
+            equippedPassTitle ? 'shadow-[0_0_30px_rgba(217,70,239,0.08)]' : ''
+          } ${cardFlourishClass}`}
+          style={cardFlourishBoxShadow ? { boxShadow: cardFlourishBoxShadow } : undefined}
         >
           {hasPass && (
             <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-[#140a22] p-0.5">
