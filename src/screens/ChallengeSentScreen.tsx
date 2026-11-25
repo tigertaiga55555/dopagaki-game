@@ -59,7 +59,11 @@ export function ChallengeSentScreen({ challenge, onDone, onBack }: Props) {
         : `${challenge.creatorNickname}からの挑戦状！${MODE_LABEL[challenge.mode]}で${challenge.creatorScore}％を記録した。この記録を超えてみろ！\n${SHARE_HASHTAG}`
     if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       try {
-        await navigator.share({ title: 'ドパガキゲーム 挑戦状', text, url })
+        // 次フェーズ: iOSのWeb Share APIは、textと別にurlも渡すと共有先アプリ（X等）が
+        // urlだけを採用してtextを丸ごと無視することがある既知の不安定な挙動がある
+        // （utils/share.tsのshareImageOnIOS等、既存コードの知見と同じ）。urlをtextへ
+        // 直接埋め込み、urlフィールドは渡さないことで、どの共有先でも文面が欠落しないようにする。
+        await navigator.share({ title: 'ドパガキゲーム 挑戦状', text: `${text}\n${url}` })
         return
       } catch (e) {
         if ((e as Error)?.name === 'AbortError') return

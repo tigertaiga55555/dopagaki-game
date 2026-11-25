@@ -99,7 +99,9 @@ export async function shareResultWithImage(
     return 'shared-with-image'
   }
   if (typeof nav?.share === 'function') {
-    await nav.share({ text: getShareText(percent, typeName, finalTrial, challenge500), url: getShareUrl() })
+    // textと別にurlも渡すと共有先アプリがurlだけを採用してtextを無視することがあるため、
+    // 既に計算済みのfullText（テキスト+URLを1本化済み）をそのまま渡す。
+    await nav.share({ text: fullText })
     return 'shared-text-only'
   }
   await navigator.clipboard.writeText(fullText)

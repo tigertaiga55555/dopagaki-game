@@ -14,23 +14,29 @@ describe('shareResultViaWebShare（item 97-99: OSの共有シートへ結果テ�
     vi.restoreAllMocks()
   })
 
-  it('navigator.shareがある環境: text＋urlを渡して呼び出し、"shared"を返す', async () => {
+  it('navigator.shareがある環境: text＋urlを1本の文字列にまとめて渡して呼び出し、"shared"を返す（urlを別フィールドで渡すと共有先アプリがtextを無視することがある既知の問題を回避）', async () => {
     const share = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(globalThis, 'navigator', { value: { share }, configurable: true })
 
     const outcome = await shareResultViaWebShare({ mode: 'rush', percent: 49, resultId: 'rid-1', shareUrl: 'https://example.com/s/rid-1' })
 
     expect(outcome).toBe('shared')
-    expect(share).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://example.com/s/rid-1', text: expect.stringContaining('49') }))
+    // {text}だけの1オブジェクトで呼ばれる（urlは別フィールドとして渡さない）ことを、
+    // 完全一致のtoHaveBeenCalledWithで保証する。
+    expect(share).toHaveBeenCalledWith({ text: expect.stringContaining('49') })
+    const [{ text: calledText }] = share.mock.calls[0]
+    expect(calledText).toContain('https://example.com/s/rid-1')
   })
 
-  it('ENDLESSのpayloadでも正しいmode別テキストで呼び出す', async () => {
+  it('ENDLESSのpayloadでも正しいmode別テキスト＋urlで呼び出す', async () => {
     const share = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(globalThis, 'navigator', { value: { share }, configurable: true })
 
     await shareResultViaWebShare({ mode: 'endless', difficulty: 'advanced', streak: 23, resultId: 'rid-2', shareUrl: 'https://example.com/s/rid-2' })
 
-    expect(share).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('23') }))
+    expect(share).toHaveBeenCalledWith({ text: expect.stringContaining('23') })
+    const [{ text: calledText }] = share.mock.calls[0]
+    expect(calledText).toContain('https://example.com/s/rid-2')
   })
 
   it('ユーザーが共有シートを自分でキャンセルした場合（AbortError）は"cancelled"を返す（トースト非表示の判断に使う）', async () => {

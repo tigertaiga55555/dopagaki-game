@@ -60,7 +60,10 @@ export async function shareResultViaWebShare(input: ShareResultInput): Promise<W
   const nav = typeof navigator !== 'undefined' ? navigator : undefined
   if (typeof nav?.share === 'function') {
     try {
-      await nav.share({ text, url: input.shareUrl })
+      // 次フェーズ: textと別にurlも渡すと、共有先アプリ（X等）がurlだけを採用してtextを
+      // 丸ごと無視することがある既知の不安定な挙動がある（utils/share.tsの既存知見と同じ）。
+      // urlをtextへ直接埋め込み、urlフィールドは渡さない。
+      await nav.share({ text: `${text}\n${input.shareUrl}` })
       return 'shared'
     } catch (e) {
       if ((e as Error)?.name === 'AbortError') return 'cancelled'
