@@ -248,7 +248,10 @@ jobs:
           # Ver.6 Phase 5.3（Challenge勝敗判定強化）: performanceが必須フィールドになったため、
           # 検証用ペイロードにも妥当なChallengePerformanceを含める（欠けていると
           # validateCreateChallengeInputがHTTP 400 "performance is invalid"で弾く）。
-          CREATE_PAYLOAD='{"creatorPlayerId":"ci-verify-creator","creatorNickname":"CI Verify","creatorIcon":{"kind":"preset","iconId":"bolt"},"creatorEquippedTitle":null,"mode":"challenge500","problemSet":{"version":1,"items":[{"type":"numberPick","data":{"answer":3}}]},"conditions":{"mode":"challenge500"},"creatorScore":420,"performance":{"finalDopaPercent":420,"baseDopaPercent":400,"accuracy":0.8,"maxCombo":15,"medianCorrectReactionMs":500}}'
+          # 次フェーズ（item 157-159、挑戦状受信画面のプロフィール表示を通常プロフィールと統一）:
+          # creatorSubTitleIds/creatorHasPassが必須フィールドになったため、検証用ペイロードにも含める
+          # （欠けているとvalidateCreateChallengeInputがHTTP 400で弾く）。
+          CREATE_PAYLOAD='{"creatorPlayerId":"ci-verify-creator","creatorNickname":"CI Verify","creatorIcon":{"kind":"preset","iconId":"bolt"},"creatorEquippedTitle":null,"creatorSubTitleIds":[null,null],"creatorHasPass":false,"mode":"challenge500","problemSet":{"version":1,"items":[{"type":"numberPick","data":{"answer":3}}]},"conditions":{"mode":"challenge500"},"creatorScore":420,"performance":{"finalDopaPercent":420,"baseDopaPercent":400,"accuracy":0.8,"maxCombo":15,"medianCorrectReactionMs":500}}'
           CREATE_RESP=$(curl -sS -w '\n%{http_code}' -X POST "${PREVIEW_URL}/api/challenges" \
             -H "Content-Type: application/json" \
             --data "$CREATE_PAYLOAD")
@@ -374,7 +377,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           for STREAK in 0 6; do
-            ENDLESS_PAYLOAD='{"creatorPlayerId":"ci-verify-endless-creator","creatorNickname":"CI Verify","creatorIcon":{"kind":"preset","iconId":"bolt"},"creatorEquippedTitle":null,"mode":"endless","problemSet":{"version":1,"items":[{"type":"numberPick","data":{"answer":3}}]},"conditions":{"mode":"endless","endlessDifficulty":"beginner"},"creatorScore":STREAK_PLACEHOLDER,"performance":null}'
+            # creatorSubTitleIds/creatorHasPassが必須フィールドになったため、ここも同様に含める。
+            ENDLESS_PAYLOAD='{"creatorPlayerId":"ci-verify-endless-creator","creatorNickname":"CI Verify","creatorIcon":{"kind":"preset","iconId":"bolt"},"creatorEquippedTitle":null,"creatorSubTitleIds":[null,null],"creatorHasPass":false,"mode":"endless","problemSet":{"version":1,"items":[{"type":"numberPick","data":{"answer":3}}]},"conditions":{"mode":"endless","endlessDifficulty":"beginner"},"creatorScore":STREAK_PLACEHOLDER,"performance":null}'
             ENDLESS_PAYLOAD=${ENDLESS_PAYLOAD/STREAK_PLACEHOLDER/$STREAK}
             ENDLESS_RESP=$(curl -sS -w '\n%{http_code}' -X POST "${PREVIEW_URL}/api/challenges" \
               -H "Content-Type: application/json" \
