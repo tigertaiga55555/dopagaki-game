@@ -2,6 +2,7 @@ import { ENDLESS_DIFFICULTY_LABEL } from '../config/endlessConfig'
 import { TITLE_TEXT } from '../config/messagesV4'
 import { decodeResultSharePayload } from '../share/resultSharePayload'
 import { resolveShareLandingDestination } from '../share/resultShareLanding'
+import { sfx } from '../utils/sound'
 
 interface Props {
   resultId: string
@@ -30,7 +31,13 @@ export function ResultShareLandingScreen({ resultId, onHome, onStart }: Props) {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-5 px-6 text-center">
         <p className="text-sm font-bold text-white/70">この結果は表示できませんでした。URLが正しいかご確認ください。</p>
-        <button onClick={onHome} className="rounded-2xl bg-white/10 px-6 py-3 text-sm font-bold text-white active:scale-95">
+        <button
+          onClick={() => {
+            sfx.navHome()
+            onHome()
+          }}
+          className="rounded-2xl bg-white/10 px-6 py-3 text-sm font-bold text-white active:scale-95"
+        >
           ホームへ戻る
         </button>
       </div>
@@ -65,12 +72,21 @@ export function ResultShareLandingScreen({ resultId, onHome, onStart }: Props) {
       <p className="text-sm font-bold text-white/70">{payload.mode === 'rush' ? 'あなたは何％までいける？' : 'あなたはどこまで続けられる？'}</p>
 
       <button
-        onClick={onStart}
+        onClick={() => {
+          sfx.uiTap()
+          onStart()
+        }}
         className="w-full max-w-xs rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-4 text-base font-black tracking-widest text-white active:scale-95"
       >
         自分もプレイする
       </button>
-      <button onClick={onHome} className="w-full max-w-xs rounded-2xl bg-transparent py-2 text-sm font-bold text-white/50 active:scale-95">
+      <button
+        onClick={() => {
+          sfx.navHome()
+          onHome()
+        }}
+        className="w-full max-w-xs rounded-2xl bg-transparent py-2 text-sm font-bold text-white/50 active:scale-95"
+      >
         ホームへ戻る
       </button>
     </div>

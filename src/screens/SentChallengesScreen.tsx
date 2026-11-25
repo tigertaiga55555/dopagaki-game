@@ -10,6 +10,7 @@ import { checkChallengeDefenseAchievements, checkChallengeLastBossAchievement, c
 import { matchesChallengeModeFilter, type ChallengeModeFilter } from '../utils/challengeModeFilter'
 import { applyHistoryDisplayLimit } from '../utils/historyDisplay'
 import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
+import { sfx } from '../utils/sound'
 import type { ChallengeApiError, ChallengeRecord, ChallengeSummary } from '../challenge/types'
 import type { AchievementId } from '../types'
 
@@ -93,6 +94,7 @@ export function SentChallengesScreen({ onBack, onHome, onOpenHistory }: Props) {
 
   async function handleOpen(id: string) {
     if (openingId) return
+    sfx.uiTap()
     setOpeningId(id)
     const res = await remoteChallengeDataSource.getChallenge(id)
     setOpeningId(null)

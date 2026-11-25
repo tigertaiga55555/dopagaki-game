@@ -168,7 +168,10 @@ export function ResultScreen({ result, resultId, onRetry, onHome, onChallengeSen
       {challengeInput && onChallengeSent && (
         <div className="relative w-full max-w-xs">
           <button
-            onClick={handleSendChallenge}
+            onClick={() => {
+              sfx.uiTap()
+              handleSendChallenge()
+            }}
             disabled={challengeBusy}
             className="w-full rounded-2xl bg-gradient-to-b from-amber-400 to-orange-500 py-3.5 text-sm font-black text-[#2a1200] shadow-[0_5px_0_0_rgba(154,52,18,0.8)] transition-transform active:translate-y-1 active:shadow-[0_1px_0_0_rgba(154,52,18,0.8)] disabled:opacity-60"
           >
@@ -176,7 +179,10 @@ export function ResultScreen({ result, resultId, onRetry, onHome, onChallengeSen
           </button>
           {/* item 100: ボタン本体の押下範囲と干渉しない位置（右上の外側）に、ごく小さな？アイコン。 */}
           <button
-            onClick={() => setShowChallengeInfo(true)}
+            onClick={() => {
+              sfx.uiTap()
+              setShowChallengeInfo(true)
+            }}
             aria-label="挑戦状とは？"
             className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-[#1a0e2e] text-[11px] font-black text-white/70 active:scale-90"
           >
@@ -186,7 +192,10 @@ export function ResultScreen({ result, resultId, onRetry, onHome, onChallengeSen
       )}
 
       <button
-        onClick={handleShareToX}
+        onClick={() => {
+          sfx.uiTap()
+          handleShareToX()
+        }}
         className="w-full max-w-xs rounded-2xl bg-black py-3.5 text-sm font-black text-white transition-transform active:scale-[0.98]"
       >
         𝕏 結果をシェア{!hasPass && canRewardThisShare && ' ❤️+1'}
@@ -198,7 +207,10 @@ export function ResultScreen({ result, resultId, onRetry, onHome, onChallengeSen
       )}
 
       <button
-        onClick={handleShareResult}
+        onClick={() => {
+          sfx.uiTap()
+          handleShareResult()
+        }}
         className="w-full max-w-xs rounded-2xl bg-white/10 py-3 text-sm font-bold text-white transition-transform active:scale-[0.98]"
       >
         結果を共有
@@ -206,7 +218,10 @@ export function ResultScreen({ result, resultId, onRetry, onHome, onChallengeSen
       {toast && <p className="anim-pop text-center text-xs font-bold text-amber-200/90">{toast}</p>}
 
       <button
-        onClick={onRetry}
+        onClick={() => {
+          sfx.uiTap()
+          onRetry()
+        }}
         className="mt-2 w-full max-w-xs rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-5 text-lg font-black text-white shadow-[0_8px_0_0_rgba(126,34,206,0.8)] transition-transform active:translate-y-1 active:shadow-[0_2px_0_0_rgba(126,34,206,0.8)]"
       >
         {getRetryLabel(result.percent)}
@@ -215,7 +230,13 @@ export function ResultScreen({ result, resultId, onRetry, onHome, onChallengeSen
           （Endless/Challenge/Battle）はいずれも控えめな「ホームへ戻る」を持つのに、
           この画面だけ持っていなかった既存の不整合を、既存の主要CTA（挑戦状/シェア/
           リトライ）を一切押し出さない最後列のテキストリンクとして揃える。 */}
-      <button onClick={onHome} className="w-full rounded-2xl bg-transparent py-2 text-sm font-bold text-white/50 active:scale-95">
+      <button
+        onClick={() => {
+          sfx.navHome()
+          onHome()
+        }}
+        className="w-full rounded-2xl bg-transparent py-2 text-sm font-bold text-white/50 active:scale-95"
+      >
         ホームへ戻る
       </button>
 
