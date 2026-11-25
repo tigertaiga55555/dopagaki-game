@@ -18,6 +18,7 @@ import {
 import type { RoomClosedReason } from '../../battle/privateRoomTypes'
 import type { BattleFormat, BattleOpponentProfile } from '../../battle/types'
 import { checkFriendRoomFrenemyAchievement, checkFriendRoomFullHouseAchievement } from '../../utils/achievementStorage'
+import { sfx } from '../../utils/sound'
 import type { AchievementId, EndlessDifficulty } from '../../types'
 
 interface Props {
@@ -198,7 +199,10 @@ export function PrivateRoomLobbyScreen({
         */}
         {isHost && (
           <button
-            onClick={() => setInviteModalOpen(true)}
+            onClick={() => {
+              sfx.uiTap()
+              setInviteModalOpen(true)
+            }}
             className="w-full max-w-xs rounded-2xl border border-fuchsia-400/30 bg-fuchsia-500/10 py-2.5 text-sm font-black text-fuchsia-200 active:scale-95"
           >
             👥 フレンドを招待
@@ -270,7 +274,10 @@ export function PrivateRoomLobbyScreen({
 
         {isHost && (
           <button
-            onClick={() => setCloseConfirmOpen(true)}
+            onClick={() => {
+              sfx.uiTap()
+              setCloseConfirmOpen(true)
+            }}
             className="w-full max-w-xs rounded-2xl border border-rose-400/40 bg-rose-500/10 py-3 text-sm font-bold text-rose-300 active:scale-95"
           >
             ルームを閉じる
@@ -281,10 +288,14 @@ export function PrivateRoomLobbyScreen({
       {closeConfirmOpen && (
         <ConfirmCloseModal
           onConfirm={() => {
+            sfx.uiTap()
             sendMessage({ v: 1, type: 'close_room' })
             setCloseConfirmOpen(false)
           }}
-          onCancel={() => setCloseConfirmOpen(false)}
+          onCancel={() => {
+            sfx.uiTap()
+            setCloseConfirmOpen(false)
+          }}
         />
       )}
 
@@ -299,7 +310,10 @@ export function PrivateRoomLobbyScreen({
             if (result.ok) sendMessage({ v: 1, type: 'touch_activity' })
             return result
           }}
-          onClose={() => setInviteModalOpen(false)}
+          onClose={() => {
+            sfx.uiTap()
+            setInviteModalOpen(false)
+          }}
         />
       )}
     </div>
@@ -321,7 +335,10 @@ function MemberRow({
 }) {
   return (
     <button
-      onClick={onOpenProfile}
+      onClick={() => {
+        sfx.uiTap()
+        onOpenProfile()
+      }}
       className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left active:scale-[0.98] ${
         // item 48/60: 「これは自分」を、ホストの👑クラウンとは明確に別の見た目（フクシアのring+背景）で
         // 一目で分かるようにする——host表示との混同を避ける。item 60: 視覚だけで区別させる
@@ -395,7 +412,10 @@ function TableCard({
         <div className="space-y-2">
           <div className="flex gap-2">
             <button
-              onClick={() => onSetRules('normal', null)}
+              onClick={() => {
+                sfx.uiTap()
+                onSetRules('normal', null)
+              }}
               className={`flex-1 rounded-xl py-2 text-xs font-black ${
                 table.battleType === 'normal' ? 'bg-fuchsia-500/30 text-fuchsia-200' : 'bg-white/5 text-white/40'
               }`}
@@ -403,7 +423,10 @@ function TableCard({
               NORMAL
             </button>
             <button
-              onClick={() => onSetRules('endless', table.endlessDifficulty ?? 'beginner')}
+              onClick={() => {
+                sfx.uiTap()
+                onSetRules('endless', table.endlessDifficulty ?? 'beginner')
+              }}
               className={`flex-1 rounded-xl py-2 text-xs font-black ${
                 table.battleType === 'endless' ? 'bg-fuchsia-500/30 text-fuchsia-200' : 'bg-white/5 text-white/40'
               }`}
@@ -416,7 +439,10 @@ function TableCard({
               {(['beginner', 'intermediate', 'advanced'] as EndlessDifficulty[]).map((d) => (
                 <button
                   key={d}
-                  onClick={() => onSetRules('endless', d)}
+                  onClick={() => {
+                    sfx.uiTap()
+                    onSetRules('endless', d)
+                  }}
                   className={`flex-1 rounded-xl py-1.5 text-[11px] font-bold ${
                     table.endlessDifficulty === d ? 'bg-fuchsia-500/30 text-fuchsia-200' : 'bg-white/5 text-white/40'
                   }`}
@@ -428,14 +454,23 @@ function TableCard({
           )}
           <div className="flex gap-2">
             <button
-              onClick={() => onSetReady(!iAmReady)}
+              onClick={() => {
+                sfx.uiTap()
+                onSetReady(!iAmReady)
+              }}
               className={`flex-1 rounded-xl py-2.5 text-sm font-black active:scale-95 ${
                 iAmReady ? 'bg-emerald-500/80 text-black' : 'bg-gradient-to-b from-fuchsia-500 to-purple-600 text-white'
               }`}
             >
               {iAmReady ? 'READY済み（キャンセル）' : 'READY'}
             </button>
-            <button onClick={onLeave} className="rounded-xl border border-white/15 px-3 text-xs font-bold text-white/60 active:scale-95">
+            <button
+              onClick={() => {
+                sfx.uiTap()
+                onLeave()
+              }}
+              className="rounded-xl border border-white/15 px-3 text-xs font-bold text-white/60 active:scale-95"
+            >
               離席
             </button>
           </div>
@@ -466,7 +501,10 @@ function Seat({
   if (!member) {
     return (
       <button
-        onClick={onEnter}
+        onClick={() => {
+          sfx.uiTap()
+          onEnter()
+        }}
         disabled={disabled}
         className="flex h-16 flex-col items-center justify-center gap-0.5 rounded-xl border border-dashed border-white/15 text-xs font-bold text-white/40 active:scale-95 disabled:opacity-30"
       >
@@ -583,7 +621,10 @@ function InviteFriendModal({
                 <span className="text-lg">{resolveAvatarEmoji(f.profile.avatar)}</span>
                 <p className="min-w-0 flex-1 truncate text-sm font-bold text-white">{f.profile.nickname}</p>
                 <button
-                  onClick={() => handleInvite(f)}
+                  onClick={() => {
+                    sfx.uiTap()
+                    handleInvite(f)
+                  }}
                   disabled={disabled}
                   className="rounded-full bg-fuchsia-500/30 px-2.5 py-1 text-[10px] font-black text-fuchsia-200 active:scale-95 disabled:opacity-40"
                 >
@@ -593,7 +634,13 @@ function InviteFriendModal({
             )
           })}
         </div>
-        <button onClick={onClose} className="mt-3 w-full rounded-xl bg-white/10 py-2 text-xs font-bold text-white/70 active:scale-95">
+        <button
+          onClick={() => {
+            sfx.uiTap()
+            onClose()
+          }}
+          className="mt-3 w-full rounded-xl bg-white/10 py-2 text-xs font-bold text-white/70 active:scale-95"
+        >
           閉じる
         </button>
       </div>
