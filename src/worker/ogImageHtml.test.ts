@@ -149,9 +149,23 @@ describe('buildChallengeImageHtml（item 92, 147: 挑戦状専用の画像、通
     expect(fiveHundred).toContain('DOPA RUSH')
   })
 
-  it('item 147: 1200x630の原画像に対し、上下左右に十分なsafe marginを確保している（上下44px・左右68px、重要テキストが端ギリギリにならない）', () => {
+  it('item 147: 1200x630の原画像に対し、左右に十分なsafe marginを確保している（左右68px、上下は内容を上寄せにして下部に大きな余白を残す構成のため12px）', () => {
     const html = buildChallengeImageHtml('ドパ太郎', 'normal', 50)
-    expect(html).toContain('padding:44px 68px 44px')
+    expect(html).toContain('padding:12px 68px 12px')
+  })
+
+  /**
+   * 次フェーズ（item 147追補）: 実投稿のツイートで下部（「ドパガキゲーム」行・下部バー）が
+   * 切れて表示される、という報告を受けた追加修正の回帰テスト。X側のクライアント表示が
+   * 1200x630より横長な比率へ画像をcover的に当てはめ、上基準で下側をクロップしている
+   * 可能性が高いと判断し、contentを上寄せ（justify-content:flex-start）にして、下部に
+   * 「切られても良い」大きな余白を意図的に残す構成へ変更した。中央寄せ（center）には
+   * 戻さないことを保証する。
+   */
+  it('item 147追補: contentは中央寄せではなく上寄せ（flex-start）で、下部に意図的な余白を残す', () => {
+    const html = buildChallengeImageHtml('ドパ太郎', 'normal', 50)
+    expect(html).toContain('justify-content:flex-start')
+    expect(html).not.toContain('justify-content:center')
   })
 
   it('item 147: 配色（赤/オレンジ系）・バッジ・文言・ゲームロジックは変更していない', () => {

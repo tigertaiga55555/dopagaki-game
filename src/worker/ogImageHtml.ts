@@ -30,10 +30,10 @@ const IMAGE_HEIGHT = 630
  * `padding`は省略時（RUSH/ENDLESS通常結果シェア、従来どおり）"40px 60px"のまま——
  * 次フェーズ（item 102）でChallenge専用カードだけに非対称パディングを渡せるようにした。
  */
-function frame(accentBorderColor: string, backgroundGradient: string, body: string, padding = '40px 60px'): string {
+function frame(accentBorderColor: string, backgroundGradient: string, body: string, padding = '40px 60px', justify: 'center' | 'flex-start' = 'center'): string {
   return `<div style="display:flex;flex-direction:column;width:${IMAGE_WIDTH}px;height:${IMAGE_HEIGHT}px;background:${backgroundGradient};position:relative;">
 <div style="display:flex;width:${IMAGE_WIDTH}px;height:14px;background:${accentBorderColor};"></div>
-<div style="display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:${padding};">
+<div style="display:flex;flex:1;flex-direction:column;align-items:center;justify-content:${justify};gap:18px;padding:${padding};">
 ${body}
 </div>
 <div style="display:flex;width:${IMAGE_WIDTH}px;height:14px;background:${accentBorderColor};"></div>
@@ -123,6 +123,19 @@ export function buildResultImageHtml(payload: ResultSharePayload): string {
  * 除く——これは外枠のみで、中のテキスト要素には使わない）。桁数が変わっても中央位置が
  * 動かないよう、数字の文字幅ではなく「行数」で高さが決まる縦積みflexboxだけで組む
  * （0・3桁・500%のいずれでも、各行の高さ自体は変わらないため中心は動かない）。
+ *
+ * 次フェーズ（item 147追補、実投稿での再現報告を受けた追加修正）: ローカルwrangler dev
+ * での1200x630 PNG自体は正しく生成されていたが、実際に投稿されたツイートを開くと
+ * 下部（「ドパガキゲーム」行＋下部バー）が切れて表示される、という報告があった。
+ * 画像自体の生成は正しいため、これはサーバー側のHTML/PNGの不具合ではなく、X（または
+ * その内部で使われるクライアント側のカード描画）が1200x630よりも横長な比率の表示枠へ
+ * 画像をcover的に当てはめ、上を基準に下側をクロップしている可能性が高いと判断した
+ * （上部バー・バッジは常に見えており、下側だけが欠けるという報告と一致する）。
+ * X側の実際のクロップ量は外部から確定できないため、「下側が数十〜百数十px程度
+ * 切られても本質的な内容が失われない」という前提で、contentを中央寄せ（justify-content:
+ * center）ではなく上寄せ（flex-start）にし、行間gapも20→14pxへ詰めて、6行の内容物
+ * 全体を1200x630の上側・中央寄りの範囲へ収める——下部は意図的に「切られても良い
+ * 余白」として大きく残す。配色・文言・6行構成・フォントサイズ自体は変更していない。
  */
 export function buildChallengeImageHtml(
   creatorNickname: string,
@@ -134,7 +147,7 @@ export function buildChallengeImageHtml(
   const unitLabel = isEndless ? 'STREAK' : '%'
   const modeLabel = isEndless ? `ENDLESS ${escapeHtml(ENDLESS_DIFFICULTY_LABEL[endlessDifficulty!])}` : 'DOPA RUSH'
 
-  const body = `<div style="display:flex;flex-direction:column;align-items:center;gap:20px;">
+  const body = `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
 ${pillBadge('挑戦状', CHALLENGE_BORDER)}
 <div style="display:flex;font-size:34px;font-weight:900;color:#ffffff;">${escapeHtml(creatorNickname)}の記録、超えられる？</div>
 <div style="display:flex;"><div style="display:flex;font-size:150px;font-weight:900;color:#fbbf24;line-height:1;">${creatorScore}</div></div>
@@ -142,7 +155,7 @@ ${pillBadge('挑戦状', CHALLENGE_BORDER)}
 <div style="display:flex;font-size:30px;font-weight:900;color:#fca5a5;letter-spacing:2px;">${modeLabel}</div>
 <div style="display:flex;font-size:26px;font-weight:700;color:rgba(255,255,255,0.55);">ドパガキゲーム</div>
 </div>`
-  return frame(CHALLENGE_BORDER, CHALLENGE_BG, body, '44px 68px 44px')
+  return frame(CHALLENGE_BORDER, CHALLENGE_BG, body, '12px 68px 12px', 'flex-start')
 }
 
 export const OG_IMAGE_WIDTH = IMAGE_WIDTH
