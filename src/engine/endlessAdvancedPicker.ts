@@ -1,39 +1,26 @@
-import { FINAL_QUESTION_POOLS } from '../questions/final'
-import { CHALLENGE500_QUESTION_MODULES } from '../questions/challenge500'
 import { tierForPercent } from '../config/challenge500Config'
-import { weightedPick } from './random'
+import { interpolateWeightCurve, weightedPick, type WeightCurvePoint } from './random'
 import type { Challenge500Tier } from '../questions/challenge500/types'
 
 /**
- * Ver.6 Phase 4.2: Endless上級（120〜500%相当の「全部乗せ」）が、1問ごとに
- * FINAL DOPA TRIAL系とChallenge500（200〜500% LIMIT BREAK）系のどちらから出題するかを
- * 決める、純粋ロジック（Reactに依存しないためvitestで直接検証できる）。
+ * Ver.6 Phase 4.2 → 次フェーズ（item 154-156、ENDLESS中級・上級の難易度再設計）で全面改訂:
+ * Endless上級（160〜500%相当の「全部乗せ」）が、1問ごとにFINAL DOPA TRIAL後半2tier
+ * （memory/mixed）とChallenge500（200〜500% LIMIT BREAK）の3tierのどちらから・どのtierで
+ * 出題するかを決める、純粋ロジック（Reactに依存しないためvitestで直接検証できる）。
+ *
+ * 旧仕様（final/challenge500の2値、問題モジュール数に基づく静的な重み）はstreakを
+ * 一切見ておらず、「streakが伸びるほど難しくなる」という今回のユーザー要望を満たせない。
+ * 5カテゴリ（final-memory/final-mixed/challenge500-tier1/tier2/tier3）に細分化し、
+ * streak連動の連続的な重みへ置き換えた。
  */
-export type EndlessAdvancedOrigin = 'final' | 'challenge500'
-
-const FINAL_MODULE_COUNT = Object.values(FINAL_QUESTION_POOLS).reduce((sum, pool) => sum + pool.length, 0)
-const CHALLENGE500_MODULE_COUNT = CHALLENGE500_QUESTION_MODULES.length
+export type EndlessAdvancedCategory = 'final-memory' | 'final-mixed' | 'challenge500-tier1' | 'challenge500-tier2' | 'challenge500-tier3'
 
 /**
- * 出題元の重み＝既存の問題モジュール数そのもの（FINAL DOPA TRIAL 38種 vs Challenge500 11種、
- * 2026-11時点）。「新しい恣意的な比率を作らない」ため、ユーザー指示の単純50:50固定も避けつつ、
- * 既に実装済みの問題プールの規模を唯一の根拠にする。プール数が将来変わってもこの重みは
- * 自動的に追従する（ハードコードした比率ではなく、インポートした配列から都度計算するため）。
- */
-export const ENDLESS_ADVANCED_ORIGIN_WEIGHTS: Record<EndlessAdvancedOrigin, number> = {
-  final: FINAL_MODULE_COUNT,
-  challenge500: CHALLENGE500_MODULE_COUNT,
-}
-
-/**
- * Challenge500系を抽選した際、どのtier（1/2/3）の問題プール・反転比率
+ * Challenge500系カテゴリを抽選した際、どのtier（1/2/3）の問題プール・反転比率
  * （CHALLENGE500_INVERSION_WEIGHTS）を使うかを表す代表％。Endlessの連続正解数で
  * DOPA%を進行させるわけではない（ユーザー指示どおり、Endless内でDOPA%は一切存在しない）ため、
- * 1問ごとに3tierから均等にランダム選択する。tier1のみ反転「2」が出ない
- * （CHALLENGE500_CONFIG.CHALLENGE500_INVERSION_WEIGHTS参照）ため、tier2/3を含めて
- * 均等に回すことで0/1/2反転と全11タイプを実際に全て出現させる。
+ * カテゴリ自体がtierを一意に決め、この代表％はそのtierのプール・反転比率を解決するためだけに使う。
  */
-export const CHALLENGE500_ENDLESS_TIERS: Challenge500Tier[] = [1, 2, 3]
 export const CHALLENGE500_TIER_REPRESENTATIVE_PERCENT: Record<Challenge500Tier, number> = {
   1: 250,
   2: 350,
@@ -41,20 +28,90 @@ export const CHALLENGE500_TIER_REPRESENTATIVE_PERCENT: Record<Challenge500Tier, 
 }
 
 // 代表％が意図したtierへ実際に解決されることを起動時に前提として保証しておく（テストでも確認する）。
-for (const tier of CHALLENGE500_ENDLESS_TIERS) {
+for (const tier of [1, 2, 3] as const) {
   if (tierForPercent(CHALLENGE500_TIER_REPRESENTATIVE_PERCENT[tier]) !== tier) {
     throw new Error(`endlessAdvancedPicker: representative percent for tier ${tier} does not resolve back to tier ${tier}`)
   }
 }
 
 /**
- * 直近2問が同じ出題元だった場合は、questionPicker.filterByCategoryStreakと同じ考え方で
- * 3連続を避ける（候補が1つしかない場合も強制的にもう一方へ切り替える、既存パターンの踏襲）。
- * それ以外は既存の問題数ベースの重みでweightedPickする。
+ * 次フェーズ（item 154-156）: 上級のSTREAK連動重み。
+ *
+ * ラダー節目（上級のmilestone: 3/10/20/30/50「人間卒業」MYTHIC/100「人外認定」SECRET）を
+ * 制御点に採用し、streakが伸びるほど
+ *   final-memory（実質160〜180%未満、5カテゴリ中もっとも易しい）
+ *   → final-mixed（180〜200%未満）
+ *   → challenge500-tier1（200〜299%）
+ *   → challenge500-tier2（300〜399%）
+ *   → challenge500-tier3（400〜499%、1 MISSで即終了の最難関）
+ * の順に重心が連続的に移る、カスケード状の重みカーブにした（各カテゴリは「立ち上がって
+ * 山を描き、次のカテゴリに主役を譲って下がっていく」——final-memoryとchallenge500-tier3の
+ * 両端だけが単調、中間3カテゴリは一度増えてから減る、という自然な遷移。tierが1つ進むごとに
+ * 一段階難しくなる、というChallenge500本家のcheckpoint設計と同じ考え方を踏襲した）。
+ * streak100超の長期streakでも最も易しいfinal-memoryを完全に0にはしない（中級と同じ、
+ * 問題プールの多様性維持のための下限）。
  */
-export function pickEndlessAdvancedOrigin(recentOrigins: EndlessAdvancedOrigin[]): EndlessAdvancedOrigin {
-  if (recentOrigins.length >= 2 && recentOrigins[0] === recentOrigins[1]) {
-    return recentOrigins[0] === 'final' ? 'challenge500' : 'final'
+export const ADVANCED_CATEGORY_CURVE: WeightCurvePoint<EndlessAdvancedCategory>[] = [
+  { streak: 1, weights: { 'final-memory': 55, 'final-mixed': 30, 'challenge500-tier1': 11, 'challenge500-tier2': 3, 'challenge500-tier3': 1 } },
+  { streak: 3, weights: { 'final-memory': 48, 'final-mixed': 32, 'challenge500-tier1': 14, 'challenge500-tier2': 4, 'challenge500-tier3': 2 } },
+  { streak: 10, weights: { 'final-memory': 32, 'final-mixed': 33, 'challenge500-tier1': 22, 'challenge500-tier2': 9, 'challenge500-tier3': 4 } },
+  { streak: 20, weights: { 'final-memory': 22, 'final-mixed': 28, 'challenge500-tier1': 26, 'challenge500-tier2': 16, 'challenge500-tier3': 8 } },
+  { streak: 30, weights: { 'final-memory': 16, 'final-mixed': 23, 'challenge500-tier1': 25, 'challenge500-tier2': 21, 'challenge500-tier3': 15 } },
+  { streak: 50, weights: { 'final-memory': 11, 'final-mixed': 17, 'challenge500-tier1': 22, 'challenge500-tier2': 25, 'challenge500-tier3': 25 } },
+  { streak: 100, weights: { 'final-memory': 8, 'final-mixed': 12, 'challenge500-tier1': 16, 'challenge500-tier2': 24, 'challenge500-tier3': 40 } },
+]
+
+export function advancedCategoryWeightsAtStreak(streak: number): Record<EndlessAdvancedCategory, number> {
+  return interpolateWeightCurve(streak, ADVANCED_CATEGORY_CURVE)
+}
+
+/**
+ * 5カテゴリのうち「どのくらい難しいか」を表すスカラー値（テスト・妥当性確認専用。
+ * 出題選択ロジック自体はこの値を使わない）。streakが伸びるほど、この値で重み付けた
+ * 期待値（advancedExpectedDifficultyAtStreak）が単調に増えることを検証する。
+ */
+export const ADVANCED_CATEGORY_DIFFICULTY_SCORE: Record<EndlessAdvancedCategory, number> = {
+  'final-memory': 1,
+  'final-mixed': 2,
+  'challenge500-tier1': 3,
+  'challenge500-tier2': 4,
+  'challenge500-tier3': 5,
+}
+
+export function advancedExpectedDifficultyAtStreak(streak: number): number {
+  const weights = advancedCategoryWeightsAtStreak(streak)
+  const total = Object.values(weights).reduce((sum, w) => sum + w, 0)
+  return (Object.entries(weights) as [EndlessAdvancedCategory, number][]).reduce(
+    (sum, [category, weight]) => sum + (weight / total) * ADVANCED_CATEGORY_DIFFICULTY_SCORE[category],
+    0,
+  )
+}
+
+/**
+ * 直近2問が同じカテゴリだった場合は、そのカテゴリを除いた残り4カテゴリの重みから
+ * weightedPickする（questionPicker.filterByCategoryStreakと同じ3連続回避の考え方。
+ * 2値だった旧仕様の「強制的に逆を選ぶ」より、5カテゴリでは「そのカテゴリ以外からstreak
+ * 連動の重みで選ぶ」方が、難易度の連続性を保ったまま多様性を確保できる）。
+ */
+export function pickEndlessAdvancedCategory(streak: number, recentCategories: EndlessAdvancedCategory[]): EndlessAdvancedCategory {
+  const weights = advancedCategoryWeightsAtStreak(streak)
+  if (recentCategories.length >= 2 && recentCategories[0] === recentCategories[1]) {
+    const repeated = recentCategories[0]
+    const rest = Object.fromEntries(Object.entries(weights).filter(([key]) => key !== repeated)) as Record<EndlessAdvancedCategory, number>
+    if (Object.keys(rest).length > 0) return weightedPick(rest)
   }
-  return weightedPick(ENDLESS_ADVANCED_ORIGIN_WEIGHTS)
+  return weightedPick(weights)
+}
+
+export function endlessAdvancedCategoryToChallenge500Tier(category: EndlessAdvancedCategory): Challenge500Tier | null {
+  if (category === 'challenge500-tier1') return 1
+  if (category === 'challenge500-tier2') return 2
+  if (category === 'challenge500-tier3') return 3
+  return null
+}
+
+export function endlessAdvancedCategoryToFinalTier(category: EndlessAdvancedCategory): 'memory' | 'mixed' | null {
+  if (category === 'final-memory') return 'memory'
+  if (category === 'final-mixed') return 'mixed'
+  return null
 }

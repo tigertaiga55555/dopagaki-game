@@ -1,21 +1,21 @@
 import { useRef, useState } from 'react'
 import {
   ENDLESS_BEGINNER_PHASE,
-  FINAL_POOL_TIERS,
   endlessMilestoneLevel,
   isEndlessMilestone,
 } from '../config/endlessConfig'
 import {
-  CHALLENGE500_ENDLESS_TIERS,
   CHALLENGE500_TIER_REPRESENTATIVE_PERCENT,
-  pickEndlessAdvancedOrigin,
-  type EndlessAdvancedOrigin,
+  endlessAdvancedCategoryToChallenge500Tier,
+  endlessAdvancedCategoryToFinalTier,
+  pickEndlessAdvancedCategory,
+  type EndlessAdvancedCategory,
 } from './endlessAdvancedPicker'
+import { pickEndlessIntermediateTier, type EndlessIntermediateTier } from './endlessIntermediatePicker'
 import { applyEndlessCorrect, applyEndlessMiss, createEndlessState, type EndlessState } from './endlessEngine'
 import { endlessSlotToProblemSetItem, problemSetItemToEndlessSlot } from './endlessReplay'
 import { pickFinalQuestion } from './finalQuestionPicker'
 import { generateNextQuestion } from './questionPicker'
-import { pick } from './random'
 import { pickChallenge500Question } from '../questions/challenge500'
 import { checkEndlessAchievements, checkEndlessTripleCrownAchievement, checkGrindAchievements } from '../utils/achievementStorage'
 import { trackEndlessEnd, trackEndlessStart } from '../utils/analytics'
@@ -159,7 +159,8 @@ export function useEndlessGame(
   const recentFinalTypesRef = useRef<string[]>([])
   const recentFinalTagsRef = useRef<FinalQuestionTag[]>([])
   const recentChallenge500TypeRef = useRef<string | null>(null)
-  const recentAdvancedOriginsRef = useRef<EndlessAdvancedOrigin[]>([])
+  const recentIntermediateTiersRef = useRef<EndlessIntermediateTier[]>([])
+  const recentAdvancedCategoriesRef = useRef<EndlessAdvancedCategory[]>([])
   const startedRef = useRef(false)
   const milestoneKeyRef = useRef(0)
   const milestoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -172,16 +173,34 @@ export function useEndlessGame(
     return recordedRef.current
   }
 
-  function buildFinalSlot(): EndlessQuestionSlot {
-    const tier = pick(FINAL_POOL_TIERS)
+  function buildFinalSlotWithTier(tier: EndlessIntermediateTier | 'memory' | 'mixed'): EndlessQuestionSlot {
     const spec = pickFinalQuestion(tier, recentFinalTypesRef.current, recentFinalTagsRef.current)
     recentFinalTypesRef.current = [spec.type, ...recentFinalTypesRef.current].slice(0, RECENT_TYPES_LENGTH)
     recentFinalTagsRef.current = spec.tags
     return { kind: 'final', spec }
   }
 
-  function buildChallenge500Slot(): EndlessQuestionSlot {
-    const tier = pick(CHALLENGE500_ENDLESS_TIERS)
+  /**
+   * 次フェーズ（item 154-156）: 中級専用。streakが伸びるほどreversal→twoConditionへ
+   * 重心が連続的に移る（engine/endlessIntermediatePicker.ts参照）。
+   */
+  function buildIntermediateSlot(streak: number): EndlessQuestionSlot {
+    const tier = pickEndlessIntermediateTier(streak, recentIntermediateTiersRef.current)
+    recentIntermediateTiersRef.current = [tier, ...recentIntermediateTiersRef.current].slice(0, RECENT_TYPES_LENGTH)
+    return buildFinalSlotWithTier(tier)
+  }
+
+  /**
+   * 次フェーズ（item 154-156）: 上級専用。memory/mixed（FINAL系後半2tier）と
+   * Challenge500 tier1/2/3の5カテゴリから、streak連動の重みで1つ選ぶ
+   * （engine/endlessAdvancedPicker.ts参照）。
+   */
+  function buildAdvancedSlot(streak: number): EndlessQuestionSlot {
+    const category = pickEndlessAdvancedCategory(streak, recentAdvancedCategoriesRef.current)
+    recentAdvancedCategoriesRef.current = [category, ...recentAdvancedCategoriesRef.current].slice(0, RECENT_TYPES_LENGTH)
+    const finalTier = endlessAdvancedCategoryToFinalTier(category)
+    if (finalTier) return buildFinalSlotWithTier(finalTier)
+    const tier = endlessAdvancedCategoryToChallenge500Tier(category)!
     const percent = CHALLENGE500_TIER_REPRESENTATIVE_PERCENT[tier]
     const spec = pickChallenge500Question(percent, recentChallenge500TypeRef.current)
     recentChallenge500TypeRef.current = spec.type
@@ -194,13 +213,14 @@ export function useEndlessGame(
       recentTypesRef.current = [spec.type, ...recentTypesRef.current].slice(0, RECENT_TYPES_LENGTH)
       return { kind: 'normal', spec }
     }
+    // 次フェーズ（item 154-156）: 次に出す問題の難易度は「今までに積み上げたstreak」
+    // （＝現在の到達難易度）を基準にする。開始直後（streak=0）は各カーブの最初の
+    // 制御点（streak=1相当）がそのまま使われる。
+    const streak = stateRef.current.streak
     if (difficulty === 'intermediate') {
-      return buildFinalSlot()
+      return buildIntermediateSlot(streak)
     }
-    // advanced: FINAL系とChallenge500系を既存の問題数ベースの重みで混在させる
-    const origin = pickEndlessAdvancedOrigin(recentAdvancedOriginsRef.current)
-    recentAdvancedOriginsRef.current = [origin, ...recentAdvancedOriginsRef.current].slice(0, RECENT_TYPES_LENGTH)
-    return origin === 'final' ? buildFinalSlot() : buildChallenge500Slot()
+    return buildAdvancedSlot(streak)
   }
 
   /**

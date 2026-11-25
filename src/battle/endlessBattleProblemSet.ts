@@ -1,10 +1,16 @@
-import { CHALLENGE500_ENDLESS_TIERS, CHALLENGE500_TIER_REPRESENTATIVE_PERCENT, pickEndlessAdvancedOrigin, type EndlessAdvancedOrigin } from '../engine/endlessAdvancedPicker'
+import {
+  CHALLENGE500_TIER_REPRESENTATIVE_PERCENT,
+  endlessAdvancedCategoryToChallenge500Tier,
+  endlessAdvancedCategoryToFinalTier,
+  pickEndlessAdvancedCategory,
+  type EndlessAdvancedCategory,
+} from '../engine/endlessAdvancedPicker'
+import { pickEndlessIntermediateTier, type EndlessIntermediateTier } from '../engine/endlessIntermediatePicker'
 import { endlessSlotToProblemSetItem } from '../engine/endlessReplay'
 import { pickFinalQuestion } from '../engine/finalQuestionPicker'
 import { generateNextQuestion } from '../engine/questionPicker'
-import { pick } from '../engine/random'
 import type { EndlessQuestionSlot } from '../engine/useEndlessGame'
-import { ENDLESS_BEGINNER_PHASE, FINAL_POOL_TIERS } from '../config/endlessConfig'
+import { ENDLESS_BEGINNER_PHASE } from '../config/endlessConfig'
 import { pickChallenge500Question } from '../questions/challenge500'
 import type { ChallengeProblemSetItem } from '../challenge/types'
 import type { EndlessDifficulty, FinalQuestionTag, QuestionTypeId } from '../types'
@@ -17,9 +23,10 @@ import type { EndlessDifficulty, FinalQuestionTag, QuestionTypeId } from '../typ
  * 記録」をそのまま再利用できたが、PRIVATE ROOMのENDLESS対戦には「元になる1人プレイ」が
  * 存在しない（同時に2人が初めて挑む——battle/battleProblemSet.tsのNORMAL対戦と同じ事情）。
  * そのため、ここでuseEndlessGame.ts内部のbuildRandomNext()と全く同じ分岐
- * （beginner=generateNextQuestion、intermediate=pickFinalQuestion、
- * advanced=pickEndlessAdvancedOriginによるfinal/challenge500混在）を踏襲した駆動ループだけを
- * 新規に書き、実際の出題選択ロジック自体は一切複製しない。各問題は既存の
+ * （beginner=generateNextQuestion、intermediate=pickEndlessIntermediateTier、
+ * advanced=pickEndlessAdvancedCategoryによるmemory/mixed/challenge500混在、item 154-156で
+ * STREAK連動の重みへ改訂）を踏襲した駆動ループだけを新規に書き、実際の出題選択ロジック
+ * 自体は一切複製しない。各問題は既存の
  * endlessSlotToProblemSetItem（ENDLESS Challengeのreplay機構で実績あり）でそのまま
  * ChallengeProblemSetItemへ変換するため、useEndlessGame.tsのreplayQuestionsオプションに
  * そのまま渡せる（両プレイヤーのEndlessPlayScreenが、ここで生成した同一配列を同一順序で
@@ -36,30 +43,46 @@ export const ENDLESS_BATTLE_PROBLEM_COUNT = 300
 
 const RECENT_TYPES_LENGTH = 3
 
+/**
+ * 次フェーズ（item 154-156）: useEndlessGame.ts（実プレイ）と同じく、中級=reversal/
+ * twoCondition・上級=memory/mixed+Challenge500 tier1/2/3のstreak連動重みを使う。
+ * この問題列は「対戦開始前に1回だけ確定させる静的な配列」のため、ここでの
+ * streak代用値は「今までに何問を確定させたか」（＝ループのi、実プレイでの
+ * 既に積み上げたstreakと同じ意味）をそのまま使う。
+ */
+function unshiftCapped<T>(arr: T[], value: T): void {
+  arr.unshift(value)
+  arr.length = Math.min(arr.length, RECENT_TYPES_LENGTH)
+}
+
 function buildEndlessBattleSlot(
   difficulty: EndlessDifficulty,
+  streak: number,
   recentNormalTypes: QuestionTypeId[],
   recentFinalTypes: string[],
   recentFinalTags: FinalQuestionTag[],
   recentChallenge500Type: { current: string | null },
-  recentAdvancedOrigins: EndlessAdvancedOrigin[],
+  recentIntermediateTiers: EndlessIntermediateTier[],
+  recentAdvancedCategories: EndlessAdvancedCategory[],
 ): EndlessQuestionSlot {
   if (difficulty === 'beginner') {
     const spec = generateNextQuestion(ENDLESS_BEGINNER_PHASE, recentNormalTypes)
     return { kind: 'normal', spec }
   }
   if (difficulty === 'intermediate') {
-    const tier = pick(FINAL_POOL_TIERS)
+    const tier = pickEndlessIntermediateTier(streak, recentIntermediateTiers)
+    unshiftCapped(recentIntermediateTiers, tier)
     const spec = pickFinalQuestion(tier, recentFinalTypes, recentFinalTags)
     return { kind: 'final', spec }
   }
-  const origin = pickEndlessAdvancedOrigin(recentAdvancedOrigins)
-  if (origin === 'final') {
-    const tier = pick(FINAL_POOL_TIERS)
-    const spec = pickFinalQuestion(tier, recentFinalTypes, recentFinalTags)
+  const category = pickEndlessAdvancedCategory(streak, recentAdvancedCategories)
+  unshiftCapped(recentAdvancedCategories, category)
+  const finalTier = endlessAdvancedCategoryToFinalTier(category)
+  if (finalTier) {
+    const spec = pickFinalQuestion(finalTier, recentFinalTypes, recentFinalTags)
     return { kind: 'final', spec }
   }
-  const tier = pick(CHALLENGE500_ENDLESS_TIERS)
+  const tier = endlessAdvancedCategoryToChallenge500Tier(category)!
   const percent = CHALLENGE500_TIER_REPRESENTATIVE_PERCENT[tier]
   const spec = pickChallenge500Question(percent, recentChallenge500Type.current)
   return { kind: 'challenge500', spec, tier }
@@ -70,24 +93,28 @@ export function generateEndlessBattleProblemSet(difficulty: EndlessDifficulty, c
   const recentFinalTypes: string[] = []
   let recentFinalTags: FinalQuestionTag[] = []
   const recentChallenge500Type = { current: null as string | null }
-  const recentAdvancedOrigins: EndlessAdvancedOrigin[] = []
+  const recentIntermediateTiers: EndlessIntermediateTier[] = []
+  const recentAdvancedCategories: EndlessAdvancedCategory[] = []
 
   const items: ChallengeProblemSetItem[] = []
   for (let i = 0; i < count; i++) {
-    const slot = buildEndlessBattleSlot(difficulty, recentNormalTypes, recentFinalTypes, recentFinalTags, recentChallenge500Type, recentAdvancedOrigins)
+    const slot = buildEndlessBattleSlot(
+      difficulty,
+      i,
+      recentNormalTypes,
+      recentFinalTypes,
+      recentFinalTags,
+      recentChallenge500Type,
+      recentIntermediateTiers,
+      recentAdvancedCategories,
+    )
     if (slot.kind === 'normal') {
-      recentNormalTypes.unshift(slot.spec.type)
-      recentNormalTypes.length = Math.min(recentNormalTypes.length, RECENT_TYPES_LENGTH)
+      unshiftCapped(recentNormalTypes, slot.spec.type)
     } else if (slot.kind === 'final') {
-      recentFinalTypes.unshift(slot.spec.type)
-      recentFinalTypes.length = Math.min(recentFinalTypes.length, RECENT_TYPES_LENGTH)
+      unshiftCapped(recentFinalTypes, slot.spec.type)
       recentFinalTags = slot.spec.tags
-      recentAdvancedOrigins.unshift('final')
-      recentAdvancedOrigins.length = Math.min(recentAdvancedOrigins.length, RECENT_TYPES_LENGTH)
     } else {
       recentChallenge500Type.current = slot.spec.type
-      recentAdvancedOrigins.unshift('challenge500')
-      recentAdvancedOrigins.length = Math.min(recentAdvancedOrigins.length, RECENT_TYPES_LENGTH)
     }
     items.push(endlessSlotToProblemSetItem(slot))
   }

@@ -1,21 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { ENDLESS_BEGINNER_PHASE, FINAL_POOL_TIERS } from '../config/endlessConfig'
-import { CHALLENGE500_TIER_REPRESENTATIVE_PERCENT } from './endlessAdvancedPicker'
+import { ENDLESS_BEGINNER_PHASE } from '../config/endlessConfig'
+import {
+  CHALLENGE500_TIER_REPRESENTATIVE_PERCENT,
+  endlessAdvancedCategoryToChallenge500Tier,
+  endlessAdvancedCategoryToFinalTier,
+  pickEndlessAdvancedCategory,
+} from './endlessAdvancedPicker'
+import { pickEndlessIntermediateTier } from './endlessIntermediatePicker'
 import { generateNextQuestion } from './questionPicker'
 import { pickFinalQuestion } from './finalQuestionPicker'
 import { CHALLENGE500_QUESTION_MODULES, pickChallenge500Question } from '../questions/challenge500'
-import { pick } from './random'
 import { FINAL_QUESTION_POOLS, ULTIMATE_QUESTION_POOL } from '../questions/final'
 import type { FinalQuestionTag, QuestionTypeId } from '../types'
 import type { PromptSegment } from '../components/InversionPrompt'
 
 const DRAWS = 300
 
-const FINAL_IDS = new Set(
-  [...FINAL_QUESTION_POOLS.reversal, ...FINAL_QUESTION_POOLS.twoCondition, ...FINAL_QUESTION_POOLS.memory, ...FINAL_QUESTION_POOLS.mixed].map(
-    (m) => m.id,
-  ),
-)
+const INTERMEDIATE_IDS = new Set([...FINAL_QUESTION_POOLS.reversal, ...FINAL_QUESTION_POOLS.twoCondition].map((m) => m.id))
+const ADVANCED_FINAL_IDS = new Set([...FINAL_QUESTION_POOLS.memory, ...FINAL_QUESTION_POOLS.mixed].map((m) => m.id))
+const ALL_FINAL_IDS = new Set([...INTERMEDIATE_IDS, ...ADVANCED_FINAL_IDS])
 const ULTIMATE_IDS = new Set(ULTIMATE_QUESTION_POOL.map((m) => m.id))
 const CHALLENGE500_IDS = new Set(CHALLENGE500_QUESTION_MODULES.map((m) => m.id))
 
@@ -35,13 +38,13 @@ function extractAllSegments(data: Record<string, unknown>): PromptSegment[] {
   throw new Error('Challenge500 question data has neither segments nor segmentsByPanel')
 }
 
-describe('Endless question pool mapping (Ver.6 Phase 4.2 再々設計)', () => {
-  describe('初級: 0〜120%相当（ENDLESS_BEGINNER_PHASE）', () => {
+describe('Endless question pool mapping (item 154-156: 中級=reversal/twoCondition・上級=memory/mixed+Challenge500)', () => {
+  describe('初級: 0〜120%相当（ENDLESS_BEGINNER_PHASE、今回のラウンドでは無変更）', () => {
     it('never produces a FINAL DOPA TRIAL question id', () => {
       let recent: QuestionTypeId[] = []
       for (let i = 0; i < DRAWS; i++) {
         const spec = generateNextQuestion(ENDLESS_BEGINNER_PHASE, recent)
-        expect(FINAL_IDS.has(spec.type)).toBe(false)
+        expect(ALL_FINAL_IDS.has(spec.type)).toBe(false)
         recent = [spec.type, ...recent].slice(0, 3)
       }
     })
@@ -56,14 +59,18 @@ describe('Endless question pool mapping (Ver.6 Phase 4.2 再々設計)', () => {
     })
   })
 
-  describe('中級: FINAL DOPA TRIAL 120〜200%相当', () => {
-    it('produces real FINAL DOPA TRIAL question ids (reversal/twoCondition/memory/mixed), never the Q16-only ULTIMATE pool', () => {
+  describe('中級: FINAL DOPA TRIAL前半2tier（reversal/twoCondition、実質120〜160%未満相当）', () => {
+    it('produces only reversal/twoCondition question ids — never memory/mixed, never the Q16-only ULTIMATE pool', () => {
       let recentTypes: string[] = []
       let recentTags: FinalQuestionTag[] = []
+      const recentTiers: ('reversal' | 'twoCondition')[] = []
       for (let i = 0; i < DRAWS; i++) {
-        const tier = pick(FINAL_POOL_TIERS)
+        const tier = pickEndlessIntermediateTier(i, recentTiers)
+        recentTiers.unshift(tier)
+        recentTiers.length = Math.min(recentTiers.length, 3)
         const spec = pickFinalQuestion(tier, recentTypes, recentTags)
-        expect(FINAL_IDS.has(spec.type)).toBe(true)
+        expect(INTERMEDIATE_IDS.has(spec.type)).toBe(true)
+        expect(ADVANCED_FINAL_IDS.has(spec.type)).toBe(false)
         expect(ULTIMATE_IDS.has(spec.type)).toBe(false)
         recentTypes = [spec.type, ...recentTypes].slice(0, 3)
         recentTags = spec.tags
@@ -73,8 +80,11 @@ describe('Endless question pool mapping (Ver.6 Phase 4.2 再々設計)', () => {
     it('never produces a Challenge500 question id', () => {
       let recentTypes: string[] = []
       let recentTags: FinalQuestionTag[] = []
+      const recentTiers: ('reversal' | 'twoCondition')[] = []
       for (let i = 0; i < DRAWS; i++) {
-        const tier = pick(FINAL_POOL_TIERS)
+        const tier = pickEndlessIntermediateTier(i, recentTiers)
+        recentTiers.unshift(tier)
+        recentTiers.length = Math.min(recentTiers.length, 3)
         const spec = pickFinalQuestion(tier, recentTypes, recentTags)
         expect(CHALLENGE500_IDS.has(spec.type)).toBe(false)
         recentTypes = [spec.type, ...recentTypes].slice(0, 3)
@@ -83,17 +93,44 @@ describe('Endless question pool mapping (Ver.6 Phase 4.2 再々設計)', () => {
     })
   })
 
-  describe('上級: 120〜500%相当の全部乗せ（FINAL ＋ Challenge500）', () => {
-    it('produces FINAL DOPA TRIAL question ids across many draws', () => {
+  describe('上級: FINAL後半2tier（memory/mixed、実質160〜200%未満相当）＋Challenge500 200〜500%', () => {
+    it('never produces a reversal/twoCondition question id (完全に中級と排他)', () => {
       let recentTypes: string[] = []
       let recentTags: FinalQuestionTag[] = []
-      let sawFinal = false
+      let recentChallenge500Type: string | null = null
+      const recentCategories: Parameters<typeof pickEndlessAdvancedCategory>[1] = []
       for (let i = 0; i < DRAWS; i++) {
-        const tier = pick(FINAL_POOL_TIERS)
-        const spec = pickFinalQuestion(tier, recentTypes, recentTags)
-        if (FINAL_IDS.has(spec.type)) sawFinal = true
-        recentTypes = [spec.type, ...recentTypes].slice(0, 3)
-        recentTags = spec.tags
+        const category = pickEndlessAdvancedCategory(i, recentCategories)
+        recentCategories.unshift(category)
+        recentCategories.length = Math.min(recentCategories.length, 3)
+        const finalTier = endlessAdvancedCategoryToFinalTier(category)
+        if (finalTier) {
+          const spec = pickFinalQuestion(finalTier, recentTypes, recentTags)
+          expect(INTERMEDIATE_IDS.has(spec.type)).toBe(false)
+          expect(ADVANCED_FINAL_IDS.has(spec.type)).toBe(true)
+          recentTypes = [spec.type, ...recentTypes].slice(0, 3)
+          recentTags = spec.tags
+        } else {
+          const tier = endlessAdvancedCategoryToChallenge500Tier(category)!
+          const percent = CHALLENGE500_TIER_REPRESENTATIVE_PERCENT[tier]
+          const spec = pickChallenge500Question(percent, recentChallenge500Type)
+          expect(CHALLENGE500_IDS.has(spec.type)).toBe(true)
+          recentChallenge500Type = spec.type
+        }
+      }
+    })
+
+    it('produces FINAL DOPA TRIAL (memory/mixed) question ids across many draws', () => {
+      let sawFinal = false
+      let recentTypes: string[] = []
+      let recentTags: FinalQuestionTag[] = []
+      for (const tier of ['memory', 'mixed'] as const) {
+        for (let i = 0; i < DRAWS; i++) {
+          const spec = pickFinalQuestion(tier, recentTypes, recentTags)
+          if (ADVANCED_FINAL_IDS.has(spec.type)) sawFinal = true
+          recentTypes = [spec.type, ...recentTypes].slice(0, 3)
+          recentTags = spec.tags
+        }
       }
       expect(sawFinal).toBe(true)
     })
@@ -134,9 +171,6 @@ describe('Endless question pool mapping (Ver.6 Phase 4.2 再々設計)', () => {
     })
 
     it('representative percents resolve to the intended Challenge500 tier', () => {
-      // 代表％がtierForPercentで意図通り1/2/3へ解決されることは、
-      // engine/endlessAdvancedPicker.tsのモジュール読み込み時assertでも保証されている。
-      // ここでは実際に生成されるデータのtier依存挙動（tier1はinversion<=1のみ）で裏付ける。
       let sawInversion2AtTier1 = false
       const percent1 = CHALLENGE500_TIER_REPRESENTATIVE_PERCENT[1]
       for (let i = 0; i < DRAWS; i++) {

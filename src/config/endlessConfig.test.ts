@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { DIFFICULTY_PHASES } from './difficultyConfig'
 import {
+  ENDLESS_ADVANCED_FINAL_POOL_TIERS,
   ENDLESS_BEGINNER_BGM_STAGE_INDEX,
   ENDLESS_BEGINNER_PHASE,
   ENDLESS_DIFFICULTIES,
   ENDLESS_DIFFICULTY_LABEL,
+  ENDLESS_INTERMEDIATE_POOL_TIERS,
   FINAL_POOL_TIERS,
   endlessMilestoneLevel,
   isEndlessMilestone,
@@ -38,9 +40,18 @@ describe('endlessConfig (Ver.6 Phase 4.2 再々設計: 初級=0〜120%代表／�
     })
   })
 
-  it('FINAL_POOL_TIERS covers the 4 real FINAL DOPA TRIAL tiers used by both intermediate and advanced', () => {
+  it('FINAL_POOL_TIERS covers all 4 real FINAL DOPA TRIAL tiers that exist in the game (reference constant, not directly picked from by Endless anymore)', () => {
     expect(new Set(FINAL_POOL_TIERS)).toEqual(new Set(['reversal', 'twoCondition', 'memory', 'mixed']))
     expect(FINAL_POOL_TIERS.length).toBe(4)
+  })
+
+  it('item 154: intermediate uses only the front-half 2 tiers (reversal/twoCondition), advanced uses only the back-half 2 tiers (memory/mixed) — mutually exclusive, together covering all 4', () => {
+    expect(new Set(ENDLESS_INTERMEDIATE_POOL_TIERS)).toEqual(new Set(['reversal', 'twoCondition']))
+    expect(new Set(ENDLESS_ADVANCED_FINAL_POOL_TIERS)).toEqual(new Set(['memory', 'mixed']))
+    const intersection = ENDLESS_INTERMEDIATE_POOL_TIERS.filter((t) => (ENDLESS_ADVANCED_FINAL_POOL_TIERS as string[]).includes(t))
+    expect(intersection).toEqual([])
+    const union = new Set([...ENDLESS_INTERMEDIATE_POOL_TIERS, ...ENDLESS_ADVANCED_FINAL_POOL_TIERS])
+    expect(union).toEqual(new Set(FINAL_POOL_TIERS))
   })
 
   it('has a Japanese label for every difficulty', () => {

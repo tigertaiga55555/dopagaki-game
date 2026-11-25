@@ -10,14 +10,28 @@ import type { EndlessDifficulty, FinalPoolTier } from '../types'
  *
  * - 初級 = 通常ゲーム0〜120%相当。特定の1フェーズだけでなく、0〜120%全体
  *   （warmup〜finalRushの6フェーズ）を代表する問題構成にする（下のbuildEndlessBeginnerPhase
- *   参照）。FINAL DOPA TRIAL固有問題・Challenge500固有問題は出さない。
- * - 中級 = FINAL DOPA TRIAL（120〜200%）の問題群をそのまま再利用（reversal/
- *   twoCondition/memory/mixedの4tier）。Challenge500固有の下線反転問題は含めない。
- * - 上級 = 120〜500%相当の「全部乗せ」。FINAL DOPA TRIAL問題群 ＋ 200〜500%
- *   LIMIT BREAK（Challenge500）の既存11問題タイプ＋下線部のみ意味を反転する0/1/2反転
- *   ルールを混在させる（実際の出題元選択ロジックはengine/endlessAdvancedPicker.ts）。
- *   Challenge500側のDOPA%進行・チェックポイント・tier別MISSペナルティ・400%台1MISS終了
- *   などの「進行ルール」はEndlessへ一切持ち込まない——Endlessは常に「1 MISS = END」のみ。
+ *   参照）。FINAL DOPA TRIAL固有問題・Challenge500固有問題は出さない。**今回の
+ *   難易度再設計（item 154-156）では初級は一切変更しない。**
+ * - 中級 = FINAL DOPA TRIALの前半2tier（reversal/twoCondition、実質120〜160%未満相当）
+ *   だけを使う。Challenge500固有の下線反転問題は含めない。
+ * - 上級 = FINAL DOPA TRIALの後半2tier（memory/mixed、実質160〜200%未満相当）＋
+ *   200〜500% LIMIT BREAK（Challenge500）の既存11問題タイプ＋下線部のみ意味を反転する
+ *   0/1/2反転ルールを混在させる。reversal/twoConditionは上級からは完全に除外する
+ *   （中級と丸かぶりしていた旧仕様の修正、item 154）。
+ *
+ * 次フェーズ（item 154-156、ENDLESS中級・上級の難易度再設計）: 旧仕様では中級・上級が
+ * 共にFINAL_POOL_TIERS（reversal/twoCondition/memory/mixedの4tier全部）を使っており、
+ * 「中級が上級の一部をそのまま内包してしまう」ことが中級・上級の差の小さい主因だった。
+ * FINAL_TRIAL_CONFIG.tierForQuestionNumber()で算出した実際の％帯（reversal=120〜140%未満・
+ * twoCondition=140〜160%未満・memory=160〜180%未満・mixed=180〜200%未満）を根拠に、
+ * twoConditionの上限とmemoryの下限が160%でクリーンに一致する境界を使い、中級=前半2tier・
+ * 上級=後半2tier＋Challenge500、という重複もギャップもない区切りへ再設計した
+ * （100〜120%未満の明示的な代表問題は存在しないため、中級の実質下限は120%とし、
+ * その旨を正直に報告する——初級の0〜120%合成プールを転用すると初級と丸かぶりするため
+ * 転用しない判断とした）。各tier→実際の出題選択ロジックはengine/endlessIntermediatePicker.ts
+ * （中級）・engine/endlessAdvancedPicker.ts（上級）を参照。
+ * Challenge500側のDOPA%進行・チェックポイント・tier別MISSペナルティ・400%台1MISS終了
+ * などの「進行ルール」はEndlessへ一切持ち込まない——Endlessは常に「1 MISS = END」のみ。
  *
  * いずれも新しい問題コンポーネント・新しい時間ルールは作らず、既存の問題生成ロジック
  * （generateNextQuestion／pickFinalQuestion／pickChallenge500Question）をそのまま
@@ -65,8 +79,25 @@ export const ENDLESS_BEGINNER_BGM_STAGE_INDEX = Math.round(
   DIFFICULTY_PHASES.reduce((sum, _p, i) => sum + i, 0) / DIFFICULTY_PHASES.length,
 )
 
-/** 中級・上級で使うFINAL DOPA TRIALのtierプール（Q16専用のULTIMATE_QUESTION_POOLは含めない）。 */
+/** FINAL DOPA TRIALの実在4tier全体（Q16専用のULTIMATE_QUESTION_POOLは含めない）。Endless側は
+ *  item 154以降、中級・上級それぞれ下の専用サブセットを使う——この定数自体は「4tierが
+ *  存在する」という事実の参照用に残す（本家FinalTrialScreen.tsxのQ1〜Q15はこの4tier全部を
+ *  順に使う。Endlessの中級/上級はこの配列を直接pickしない）。 */
 export const FINAL_POOL_TIERS: FinalPoolTier[] = ['reversal', 'twoCondition', 'memory', 'mixed']
+
+/**
+ * 次フェーズ（item 154）: 中級専用プール。FINAL_TRIAL_CONFIG.tierForQuestionNumber()で
+ * 実際に算出される％帯のうち、reversal=120〜140%未満・twoCondition=140〜160%未満の
+ * 「前半2tier」だけを使う（実質120〜160%未満相当）。memory/mixedは上級専用へ移動した。
+ */
+export const ENDLESS_INTERMEDIATE_POOL_TIERS: FinalPoolTier[] = ['reversal', 'twoCondition']
+
+/**
+ * 次フェーズ（item 154）: 上級のFINAL系出題対象プール。memory=160〜180%未満・
+ * mixed=180〜200%未満の「後半2tier」だけを使う（reversal/twoConditionは中級専用のため
+ * 上級からは完全に除外——旧仕様の「中級が上級に丸ごと内包される」問題を解消する）。
+ */
+export const ENDLESS_ADVANCED_FINAL_POOL_TIERS: FinalPoolTier[] = ['memory', 'mixed']
 
 export const ENDLESS_DIFFICULTY_LABEL: Record<EndlessDifficulty, string> = {
   beginner: '初級',
