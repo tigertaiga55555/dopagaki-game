@@ -33,6 +33,8 @@ function sampleInput(overrides: Partial<CreateChallengeInput> = {}): CreateChall
     creatorNickname: 'ドパ太郎',
     creatorIcon: { kind: 'preset', iconId: 'flame' },
     creatorEquippedTitle: 'dopa100',
+    creatorSubTitleIds: [null, null],
+    creatorHasPass: false,
     mode: 'challenge500',
     problemSet: { version: 1, items: [{ type: 'numberPick', data: { answer: 3 } }] },
     conditions: { mode: 'challenge500' },
@@ -59,6 +61,28 @@ describe('createD1ChallengeRepository (Ver.6 Phase 5.1: Challenge D1リポジト
     const repoFromAnotherRequest = createD1ChallengeRepository(db as never)
     const fetched = await repoFromAnotherRequest.getById('challenge-2')
     expect(fetched).toEqual({ id: 'challenge-2', createdAt: 1700000000001, ...sampleInput() })
+  })
+
+  it('item 157-159: creatorSubTitleIds（両方埋まっている）・creatorHasPass=trueが正しく往復する', async () => {
+    const db = createFakeD1Database()
+    const repo = createD1ChallengeRepository(db as never)
+    const input = sampleInput({ creatorSubTitleIds: ['title-sub1', 'title-sub2'], creatorHasPass: true })
+    const record = await repo.create('challenge-pass', 1700000000002, input)
+    expect(record.creatorSubTitleIds).toEqual(['title-sub1', 'title-sub2'])
+    expect(record.creatorHasPass).toBe(true)
+
+    const fetched = await repo.getById('challenge-pass')
+    expect(fetched?.creatorSubTitleIds).toEqual(['title-sub1', 'title-sub2'])
+    expect(fetched?.creatorHasPass).toBe(true)
+  })
+
+  it('item 157-159: creatorSubTitleIds=[null, null]・creatorHasPass=falseも正しく往復する（既定値）', async () => {
+    const db = createFakeD1Database()
+    const repo = createD1ChallengeRepository(db as never)
+    await repo.create('challenge-no-pass', 1700000000003, sampleInput())
+    const fetched = await repo.getById('challenge-no-pass')
+    expect(fetched?.creatorSubTitleIds).toEqual([null, null])
+    expect(fetched?.creatorHasPass).toBe(false)
   })
 
   it('getById: 存在しないIDはnullを返す', async () => {

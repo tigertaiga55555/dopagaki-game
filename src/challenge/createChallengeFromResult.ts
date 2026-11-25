@@ -1,3 +1,4 @@
+import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import { getProfile } from '../utils/profileStorage'
 import type { ChallengeMode, CreateChallengeInput } from './types'
 import type { FinalResultV4 } from '../types'
@@ -34,6 +35,9 @@ export function buildCreateChallengeInput(result: FinalResultV4): CreateChalleng
     creatorNickname: profile.nickname,
     creatorIcon: profile.avatar,
     creatorEquippedTitle: profile.equippedTitleId,
+    // 次フェーズ（item 157-159）: creatorEquippedTitleと同じスナップショット方式。
+    creatorSubTitleIds: profile.subTitleIds,
+    creatorHasPass: qaLocalEntitlementRepository.hasEntitlement('DOPA_PASS'),
     mode,
     problemSet: { version: 1, items: problemSet },
     conditions: { mode },

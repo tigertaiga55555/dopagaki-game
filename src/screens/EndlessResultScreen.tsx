@@ -65,7 +65,15 @@ export function EndlessResultScreen({
   const canRewardThisShare = !hasPass && localShareRewardRepository.canRewardResult(resultId)
   const shareRewardRemainingToday = SHARE_REWARD_DAILY_CAP - localShareRewardRepository.getDailyShareRewardCount()
   const challengeInput = buildCreateEndlessChallengeInput(
-    { playerId: profile.playerId, nickname: profile.nickname, icon: profile.avatar, equippedTitleId: profile.equippedTitleId },
+    {
+      playerId: profile.playerId,
+      nickname: profile.nickname,
+      icon: profile.avatar,
+      equippedTitleId: profile.equippedTitleId,
+      // 次フェーズ（item 157-159）: creatorEquippedTitleと同じスナップショット方式。
+      subTitleIds: profile.subTitleIds,
+      hasPass: qaLocalEntitlementRepository.hasEntitlement('DOPA_PASS'),
+    },
     difficulty,
     score,
     { version: 1, items: recordedProblemSet },

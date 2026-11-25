@@ -45,6 +45,20 @@ export interface TitleRarityTheme {
    */
   profileRingClass: string
   /**
+   * 次フェーズ（item 159、PASS専用カード外枠の刷新）: profileRingClassと同じ見た目を
+   * 「生のbox-shadow値」（Tailwindのshadow-[...]アービトラリ値の中身、アンダースコアで
+   * 空白をエスケープした形）として持つ。ring-*ユーティリティは複数並べても後勝ちで
+   * 競合してしまう（2つのring-*を同時に使うと、スタイルシートの出現順に依存して
+   * どちらか一方しか効かず、見た目が不安定になる）ため、Title本来のリング効果と
+   * DOPA PASSの金装飾を「併存」させる場合は、1つのshadow-[...]へ両方のbox-shadow
+   * レイヤーをカンマ区切りで合成する（config/titleRarityTheme.tsのcomposeCardFlourish
+   * 参照）。COMMON/RARE/EPICは profileRingClass と同じく空文字。
+   */
+  profileRingBoxShadow: string
+  /** 次フェーズ（item 159）: profileRingClassに含まれるpulseアニメーションクラスだけを
+   *  分離したもの（box-shadow合成とは独立して常にそのまま適用する）。 */
+  profileRingPulseClass: string
+  /**
    * 次フェーズ（item 117-118）: 未解放カードの見た目（AchievementScreen.tsxのグリッド
    * カード用）。rarity色をかなり暗く・低彩度にした枠＋背景のみ——発光・pulseは一切付けない
    * （「ロック中でも欲しくなる」が、解放後との差は必ず残るようにする）。
@@ -71,6 +85,8 @@ const THEMES: Record<TitleRarity, TitleRarityTheme> = {
     badgeGlowClass: '',
     badgePulseClass: '',
     profileRingClass: '',
+    profileRingBoxShadow: '',
+    profileRingPulseClass: '',
     lockedBorderClass: 'border-white/20',
     lockedBackgroundClass: 'bg-white/[0.06]',
     lockedTextClass: 'text-white/40',
@@ -84,6 +100,8 @@ const THEMES: Record<TitleRarity, TitleRarityTheme> = {
     badgeGlowClass: 'shadow-[0_0_10px_rgba(103,232,249,0.3)]',
     badgePulseClass: '',
     profileRingClass: '',
+    profileRingBoxShadow: '',
+    profileRingPulseClass: '',
     lockedBorderClass: 'border-cyan-600/55',
     lockedBackgroundClass: 'bg-cyan-900/25',
     lockedTextClass: 'text-cyan-200/40',
@@ -106,6 +124,8 @@ const THEMES: Record<TitleRarity, TitleRarityTheme> = {
     badgeGlowClass: 'shadow-[0_0_18px_rgba(217,70,239,0.45)]',
     badgePulseClass: '',
     profileRingClass: '',
+    profileRingBoxShadow: '',
+    profileRingPulseClass: '',
     lockedBorderClass: 'border-fuchsia-600/55',
     lockedBackgroundClass: 'bg-fuchsia-900/25',
     lockedTextClass: 'text-fuchsia-200/40',
@@ -119,6 +139,8 @@ const THEMES: Record<TitleRarity, TitleRarityTheme> = {
     badgeGlowClass: 'shadow-[0_0_22px_rgba(250,204,21,0.5)]',
     badgePulseClass: 'anim-rarity-pulse-slow',
     profileRingClass: 'ring-2 ring-amber-300/70 shadow-[0_0_20px_rgba(250,204,21,0.4)]',
+    profileRingBoxShadow: '0_0_0_2px_rgba(252,211,77,0.7),0_0_20px_rgba(250,204,21,0.4)',
+    profileRingPulseClass: '',
     lockedBorderClass: 'border-amber-500/60',
     lockedBackgroundClass: 'bg-amber-900/30',
     lockedTextClass: 'text-amber-200/45',
@@ -132,6 +154,8 @@ const THEMES: Record<TitleRarity, TitleRarityTheme> = {
     badgeGlowClass: 'shadow-[0_0_26px_rgba(199,92,255,0.5)]',
     badgePulseClass: 'anim-rarity-rainbow-slow',
     profileRingClass: 'ring-2 ring-fuchsia-300/70 anim-rarity-rainbow-slow shadow-[0_0_24px_rgba(199,92,255,0.45)]',
+    profileRingBoxShadow: '0_0_0_2px_rgba(240,171,252,0.7),0_0_24px_rgba(199,92,255,0.45)',
+    profileRingPulseClass: 'anim-rarity-rainbow-slow',
     /**
      * 次フェーズ（item 143、大型最終仕上げラウンド）: 「ロック中でも『これはとんでもない』
      * と一目で伝わるように」というユーザー指示により、MYTHICだけはロック中にも虹色/
@@ -184,6 +208,10 @@ export interface SecretTheme {
   unlockedPulseClass: string
   /** item 123-124: Profileカード/アバターリングへの装飾（MYTHICの虹リングとは別の藍リング）。 */
   profileRingClass: string
+  /** 次フェーズ（item 159）: profileRingClassの生box-shadow値版（TitleRarityThemeと同じ合成用）。 */
+  profileRingBoxShadow: string
+  /** 次フェーズ（item 159）: profileRingClassに含まれるpulseアニメーションクラスだけを分離したもの。 */
+  profileRingPulseClass: string
 }
 
 /**
@@ -223,5 +251,36 @@ export function getSecretTheme(): SecretTheme {
     unlockedPulseClass: 'anim-rarity-secret-slow',
     profileRingClass:
       'ring-2 ring-indigo-400/70 anim-rarity-secret-slow shadow-[0_0_8px_rgba(226,232,255,0.3),0_0_22px_rgba(99,102,241,0.4),0_0_42px_rgba(192,92,255,0.18)]',
+    profileRingBoxShadow:
+      '0_0_0_2px_rgba(129,140,248,0.7),0_0_8px_rgba(226,232,255,0.3),0_0_22px_rgba(99,102,241,0.4),0_0_42px_rgba(192,92,255,0.18)',
+    profileRingPulseClass: 'anim-rarity-secret-slow',
   }
+}
+
+/**
+ * 次フェーズ（item 159、PASS専用カード外枠の刷新）: 調査結果（コミット9f5c0b9、PASS
+ * 再デザイン・item 52時点から一貫した設計）——ProfileScreen.tsxの既存ロジックは
+ * `cardFlourishClass = titleFlourishClass || passCardFlourishClass`というOR（排他）で、
+ * LEGENDARY/MYTHIC等のTitle装飾がある場合、PASSの金装飾（ring-1 ring-amber-300/60
+ * shadow-[...]）が完全に消えていた。これは回帰ではなく最初からの設計だったが、今回
+ * 「排他ではなく併存」へ変更する（ユーザー指示: 紫の世界観を維持しつつ、PASSなら常に
+ * ゴールド系の枠線・光沢を追加——完全な黄色ベタ枠ではなく、紫×ゴールドの高級感）。
+ *
+ * 2つのring-*ユーティリティ（Title側のリング、PASSの金リング）を単純に並べて使うと、
+ * 両方が同じCSS変数（--tw-ring-shadow等）を書き換え合うため、どちらか一方しか効かず
+ * スタイルシートの出現順に依存して見た目が不安定になる。これを避けるため、Title側の
+ * リング効果を生のbox-shadow値（profileRingBoxShadow）として受け取り、PASSの金リング
+ * （ring相当の0 0 0 4pxレイヤー）＋金のソフトグロー を別レイヤーとして追加し、1つの
+ * shadow-[...]アービトラリ値へカンマ区切りで合成する——box-shadowは複数レイヤーを
+ * 公式にサポートしており、レイヤーの重なり順もここで完全に制御できる（Title本来の色を
+ * 内側・PASSの金を外側に配置し、「紫×ゴールド」の二層表現にする）。
+ *
+ * Title装飾が無い（COMMON/RARE/EPIC装備時・称号未装備時）場合は、PASSの金レイヤーだけが
+ * そのまま使われる（旧passCardFlourishClassと同じ見た目の意図、box-shadowでの表現に統一）。
+ * PASS非所有者は常に''（何も付与しない、Titleの効果だけがそのまま表示される）。
+ */
+export function composeCardFlourish(titleRingBoxShadow: string, hasPass: boolean): string {
+  const passLayer = hasPass ? '0_0_0_4px_rgba(252,211,77,0.55),0_0_16px_rgba(251,191,36,0.3)' : ''
+  const layers = [titleRingBoxShadow, passLayer].filter((l) => l.length > 0).join(',')
+  return layers ? `shadow-[${layers}]` : ''
 }

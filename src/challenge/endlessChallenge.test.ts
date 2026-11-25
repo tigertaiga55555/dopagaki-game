@@ -8,6 +8,8 @@ const host: EndlessChallengeHostProfile = {
   nickname: 'ホスト太郎',
   icon: { kind: 'preset', iconId: 'flame' },
   equippedTitleId: null,
+  subTitleIds: [null, null],
+  hasPass: false,
 }
 const problemSet = { version: 1 as const, items: [{ type: 'numberPick', data: { answer: 3 } }] }
 
@@ -33,12 +35,25 @@ describe('buildCreateEndlessChallengeInput (Ver.6 Phase 10: 最低STREAK条件�
       creatorNickname: 'ホスト太郎',
       creatorIcon: { kind: 'preset', iconId: 'flame' },
       creatorEquippedTitle: null,
+      creatorSubTitleIds: [null, null],
+      creatorHasPass: false,
       mode: 'endless',
       problemSet,
       conditions: { mode: 'endless', endlessDifficulty: 'advanced' },
       creatorScore: 37,
       performance: null,
     })
+  })
+
+  it('creatorSubTitleIds/creatorHasPassはホストプロフィールのスナップショットをそのまま使う（item 157-159）', () => {
+    const passHost: EndlessChallengeHostProfile = {
+      ...host,
+      subTitleIds: ['title-sub1', null],
+      hasPass: true,
+    }
+    const input = buildCreateEndlessChallengeInput(passHost, 'advanced', 10, problemSet)
+    expect(input.creatorSubTitleIds).toEqual(['title-sub1', null])
+    expect(input.creatorHasPass).toBe(true)
   })
 
   it('難易度ごとにconditions.endlessDifficultyが正しく設定される', () => {

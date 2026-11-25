@@ -11,6 +11,8 @@ function validInput() {
     creatorNickname: 'ドパ太郎',
     creatorIcon: { kind: 'preset', iconId: 'flame' },
     creatorEquippedTitle: 'dopa100',
+    creatorSubTitleIds: [null, null],
+    creatorHasPass: false,
     mode: 'challenge500',
     problemSet: {
       version: 1,
@@ -33,6 +35,40 @@ describe('validateCreateChallengeInput (Ver.6 Phase 5.1: Challenge作成入力�
     const result = validateCreateChallengeInput({ ...validInput(), creatorEquippedTitle: null })
     expect(result.ok).toBe(true)
     expect(result.value?.creatorEquippedTitle).toBeNull()
+  })
+
+  it('item 157-159: creatorSubTitleIdsは[null, null]を許容し、そのまま返る', () => {
+    const result = validateCreateChallengeInput({ ...validInput(), creatorSubTitleIds: [null, null] })
+    expect(result.ok).toBe(true)
+    expect(result.value?.creatorSubTitleIds).toEqual([null, null])
+  })
+
+  it('item 157-159: creatorSubTitleIdsは実在するtitle idの組も許容する', () => {
+    const result = validateCreateChallengeInput({ ...validInput(), creatorSubTitleIds: ['dopa100', null] })
+    expect(result.ok).toBe(true)
+    expect(result.value?.creatorSubTitleIds).toEqual(['dopa100', null])
+  })
+
+  it('item 157-159: creatorSubTitleIdsが未知のtitle idを含む場合はinvalid', () => {
+    const result = validateCreateChallengeInput({ ...validInput(), creatorSubTitleIds: ['totally-fake-title', null] })
+    expect(result.ok).toBe(false)
+  })
+
+  it('item 157-159: creatorSubTitleIdsが要素数2の配列でなければinvalid', () => {
+    expect(validateCreateChallengeInput({ ...validInput(), creatorSubTitleIds: [null] }).ok).toBe(false)
+    expect(validateCreateChallengeInput({ ...validInput(), creatorSubTitleIds: null }).ok).toBe(false)
+    expect(validateCreateChallengeInput({ ...validInput(), creatorSubTitleIds: 'dopa100' }).ok).toBe(false)
+  })
+
+  it('item 157-159: creatorHasPassはboolean以外ならinvalid', () => {
+    expect(validateCreateChallengeInput({ ...validInput(), creatorHasPass: 'true' }).ok).toBe(false)
+    expect(validateCreateChallengeInput({ ...validInput(), creatorHasPass: 1 }).ok).toBe(false)
+  })
+
+  it('item 157-159: creatorHasPass=trueはそのまま返る', () => {
+    const result = validateCreateChallengeInput({ ...validInput(), creatorHasPass: true })
+    expect(result.ok).toBe(true)
+    expect(result.value?.creatorHasPass).toBe(true)
   })
 
   it('bodyがオブジェクトでなければinvalid', () => {

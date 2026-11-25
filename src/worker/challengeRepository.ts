@@ -35,6 +35,11 @@ interface ChallengeRow {
   creator_icon_kind: string
   creator_icon_value: string
   creator_equipped_title: string | null
+  /** 次フェーズ（item 157-159）: このmigration（0010）以前の既存行はNULL。 */
+  creator_sub_title_1: string | null
+  creator_sub_title_2: string | null
+  /** 次フェーズ（item 157-159）: このmigration以前の既存行は0（migration自体のDEFAULT 0）。 */
+  creator_has_pass: number
   mode: string
   problem_set: string
   conditions: string
@@ -74,6 +79,10 @@ function rowToRecord(row: ChallengeRow): ChallengeRecord {
         ? { kind: 'remoteCustom', url: row.creator_icon_value }
         : { kind: 'preset', iconId: row.creator_icon_value as never },
     creatorEquippedTitle: row.creator_equipped_title,
+    // 次フェーズ（item 157-159）: migration 0010以前の既存行はcreator_sub_title_1/2が
+    // NULLのまま＝[null, null]。推測で埋めない。
+    creatorSubTitleIds: [row.creator_sub_title_1 ?? null, row.creator_sub_title_2 ?? null],
+    creatorHasPass: row.creator_has_pass === 1,
     mode: row.mode as ChallengeRecord['mode'],
     problemSet: JSON.parse(row.problem_set),
     conditions: JSON.parse(row.conditions),
@@ -90,10 +99,11 @@ export function createD1ChallengeRepository(db: D1Database): ChallengeRepository
         .prepare(
           `INSERT INTO challenges
             (id, creator_player_id, creator_nickname, creator_icon_kind, creator_icon_value,
-             creator_equipped_title, mode, problem_set, conditions, creator_score, created_at,
+             creator_equipped_title, creator_sub_title_1, creator_sub_title_2, creator_has_pass,
+             mode, problem_set, conditions, creator_score, created_at,
              performance_final_dopa_percent, performance_base_dopa_percent, performance_accuracy,
              performance_max_combo, performance_median_reaction_ms)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           id,
@@ -102,6 +112,9 @@ export function createD1ChallengeRepository(db: D1Database): ChallengeRepository
           input.creatorIcon.kind,
           input.creatorIcon.kind === 'preset' ? input.creatorIcon.iconId : input.creatorIcon.url,
           input.creatorEquippedTitle,
+          input.creatorSubTitleIds[0],
+          input.creatorSubTitleIds[1],
+          input.creatorHasPass ? 1 : 0,
           input.mode,
           JSON.stringify(input.problemSet),
           JSON.stringify(input.conditions),

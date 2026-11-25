@@ -3,13 +3,14 @@ import { NavBar } from '../components/NavBar'
 import { DopaPassBadge } from '../components/DopaPassBadge'
 import { PassTitleBadge } from '../components/PassTitleBadge'
 import { PassTitleDetailModal } from '../components/PassTitleDetailModal'
+import { SubTitleBadge } from '../components/SubTitleBadge'
 import { TitleBadge } from '../components/TitleBadge'
 import { TitleDetailModal } from '../components/TitleDetailModal'
 import { ACHIEVEMENT_DEFS, getAchievementDefById } from '../config/achievements'
 import { PASS_TITLE_DEFS_BY_ID } from '../config/passTitles'
 import { resolveAvatarEmoji } from '../config/profileConfig'
 import { TITLE_DEFS_BY_ID } from '../config/titles'
-import { getSecretTheme, getTitleRarityTheme } from '../config/titleRarityTheme'
+import { composeCardFlourish, getSecretTheme, getTitleRarityTheme } from '../config/titleRarityTheme'
 import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import { getOwnedPassTitleIds, isPassTitleOwned } from '../payment/passTitleGrants'
 import { trackProfileView } from '../utils/analytics'
@@ -87,21 +88,36 @@ export function ProfileScreen({
       : ''
 
   /**
-   * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 52）: DOPA PASS所有の表現を、
-   * 画面中央の大きな「👑 DOPA PASS」バッジ（視線の主役を奪っていた）から、①カード全体を
-   * 囲む薄い金のボーダー/グロー＋②カード上端に乗る小さなバッジ、の2点へ置き換える。
+   * 次フェーズ（FRIENDS/TABLE/ナビ追加調整ラウンド、item 52→item 159で刷新）: DOPA PASS
+   * 所有の表現を、画面中央の大きな「👑 DOPA PASS」バッジ（視線の主役を奪っていた）から、
+   * ①カード全体を囲む薄い金のボーダー/グロー＋②カード上端に乗る小さなバッジ、の2点へ
+   * 置き換えた。②の小さな上端バッジは、Titleの装飾の有無に関わらず常に表示する
+   * （PASS所有という事実そのものが隠れてしまうことは絶対に無いようにする）。
    *
-   * LEGENDARY/MYTHIC Titleの装飾（titleFlourishClass、虹/金のring+glow）との優先順位
-   * （判断根拠、最終報告書にも記載）: 装備中Titleは「このプレイヤーが実際に達成した
-   * 結果」を見せる演出であり、PASSは「購入状態」という静的なステータスに過ぎない。
-   * 両方を同じアバター/カードのリング位置へ同時に重ねると視覚的に喧嘩するため、
-   * Titleの装飾が何か存在する場合は常にそちらを優先し、PASSの金ボーダーはTitle側に
-   * 装飾が無い場合（COMMON/RAREのTitle装備時、または称号未装備時）だけ、カードの
-   * 外周に控えめに適用する——ただし②の小さな上端バッジは、Titleの装飾の有無に関わらず
-   * 常に表示する（PASS所有という事実そのものが隠れてしまうことは絶対に無いようにする）。
+   * item 159: ①について、過去（コミット9f5c0b9時点から一貫した設計）はLEGENDARY/MYTHIC
+   * 等のTitle装飾がある場合、PASSの金装飾を完全に消す「排他（OR）」ロジックだった。
+   * 紫系のTitle装飾（特にMYTHICの虹）に寄って見えると感じたユーザーの要望により、
+   * 「排他ではなく併存」へ変更する——紫の世界観（Titleの装飾）を維持しつつ、PASSなら
+   * 常にゴールド系の枠線・光沢を追加する（完全な黄色ベタ枠ではなく、紫×ゴールドの
+   * 高級感）。composeCardFlourish()がTitle側のring box-shadow値とPASSの金レイヤーを
+   * 1つのshadow-[...]へ安全に合成する（2つのring-*ユーティリティを並べる旧実装は
+   * CSS変数の競合で見た目が不安定になるため採用しない）。
+   * PASS限定Title装備時（既にborder-amber-400/60で金基調）はそのまま維持する
+   * （PASS限定Title自体が既に金テーマのため、追加の併存ロジックは不要）。
    */
-  const passCardFlourishClass = hasPass && !titleFlourishClass ? 'ring-1 ring-amber-300/60 shadow-[0_0_18px_rgba(251,191,36,0.22)]' : ''
-  const cardFlourishClass = titleFlourishClass || passCardFlourishClass
+  const titleRingBoxShadow = equippedRegularTitle
+    ? equippedIsSecret
+      ? getSecretTheme().profileRingBoxShadow
+      : getTitleRarityTheme(equippedRegularTitle.rarity).profileRingBoxShadow
+    : ''
+  const titleRingPulseClass = equippedRegularTitle
+    ? equippedIsSecret
+      ? getSecretTheme().profileRingPulseClass
+      : getTitleRarityTheme(equippedRegularTitle.rarity).profileRingPulseClass
+    : ''
+  const cardFlourishClass = equippedPassTitle
+    ? titleFlourishClass
+    : [composeCardFlourish(titleRingBoxShadow, hasPass), titleRingPulseClass].filter((c) => c.length > 0).join(' ')
 
   useEffect(() => {
     trackProfileView()
@@ -157,40 +173,9 @@ export function ProfileScreen({
           */}
           {hasPass && (
             <div className="flex w-full items-center justify-center gap-2">
-              {profile.subTitleIds.map((id, index) => {
-                const def = id ? TITLE_DEFS_BY_ID[id] : null
-                const passDef = id ? PASS_TITLE_DEFS_BY_ID[id] : null
-                // 次フェーズ（item 123-124）: サブ枠もSECRETはMYTHICと別演出にする
-                // （色・枠だけの控えめな反映で十分——メインほどの主張はしない）。
-                const isSubSecret = def ? getAchievementDefById(def.id)?.secret === true : false
-                const secretTheme = isSubSecret ? getSecretTheme() : null
-                const theme = def && !isSubSecret ? getTitleRarityTheme(def.rarity) : null
-                const filled = def || passDef
-                return (
-                  <button
-                    key={index}
-                    onClick={
-                      filled
-                        ? () => {
-                            sfx.uiTap()
-                            setDetailTitleId(id)
-                          }
-                        : undefined
-                    }
-                    disabled={!filled}
-                    className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-bold active:scale-95 disabled:active:scale-100 ${
-                      filled
-                        ? isSubSecret
-                          ? `${secretTheme!.unlockedBorderClass} ${secretTheme!.unlockedBackgroundClass} ${secretTheme!.unlockedTextClass}`
-                          : `${theme ? theme.badgeBorderClass : 'border-amber-400/50'} ${theme ? theme.badgeBackgroundClass : 'bg-amber-500/10'} ${theme ? theme.badgeTextClass : 'text-amber-200'}`
-                        : 'border-white/10 bg-white/5 text-white/25'
-                    }`}
-                  >
-                    <span className="text-[7px] font-black tracking-widest opacity-60">{index === 0 ? 'サブ1' : 'サブ2'}</span>
-                    <span>{def?.name ?? passDef?.name ?? '未装備'}</span>
-                  </button>
-                )
-              })}
+              {profile.subTitleIds.map((id, index) => (
+                <SubTitleBadge key={index} titleId={id} slotLabel={index === 0 ? 'サブ1' : 'サブ2'} onClick={() => setDetailTitleId(id)} />
+              ))}
             </div>
           )}
 

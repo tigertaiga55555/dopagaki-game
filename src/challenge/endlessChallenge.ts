@@ -6,6 +6,9 @@ export interface EndlessChallengeHostProfile {
   nickname: string
   icon: AvatarRef
   equippedTitleId: string | null
+  /** 次フェーズ（item 157-159）: creatorEquippedTitleと同じスナップショット方式。 */
+  subTitleIds: [string | null, string | null]
+  hasPass: boolean
 }
 
 /**
@@ -35,6 +38,8 @@ export function buildCreateEndlessChallengeInput(
     creatorNickname: host.nickname,
     creatorIcon: host.icon,
     creatorEquippedTitle: host.equippedTitleId,
+    creatorSubTitleIds: host.subTitleIds,
+    creatorHasPass: host.hasPass,
     mode: 'endless',
     problemSet,
     conditions,

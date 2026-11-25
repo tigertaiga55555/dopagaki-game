@@ -115,6 +115,16 @@ function isValidEquippedTitle(value: unknown): value is string | null {
   return typeof value === 'string' && KNOWN_TITLE_IDS.has(value)
 }
 
+/**
+ * 次フェーズ（item 157-159、挑戦状受信画面のプロフィール表示を通常プロフィールと統一）:
+ * creatorSubTitleIdsは必ず要素数2の配列で、各要素はcreatorEquippedTitleと同じ検証
+ * （null、またはKNOWN_TITLE_IDSに実在するid）を通す。
+ */
+function isValidSubTitleIds(value: unknown): value is [string | null, string | null] {
+  if (!Array.isArray(value) || value.length !== 2) return false
+  return value.every((v) => isValidEquippedTitle(v))
+}
+
 export interface ValidationResult {
   ok: boolean
   value?: CreateChallengeInput
@@ -138,6 +148,12 @@ export function validateCreateChallengeInput(raw: unknown): ValidationResult {
   }
   if (!isValidEquippedTitle(input.creatorEquippedTitle)) {
     return { ok: false, message: 'creatorEquippedTitle must be a known title id or null' }
+  }
+  if (!isValidSubTitleIds(input.creatorSubTitleIds)) {
+    return { ok: false, message: 'creatorSubTitleIds must be a 2-element array of known title ids or null' }
+  }
+  if (typeof input.creatorHasPass !== 'boolean') {
+    return { ok: false, message: 'creatorHasPass must be a boolean' }
   }
   if (typeof input.mode !== 'string' || !CHALLENGE_MODES.includes(input.mode as ChallengeMode)) {
     return { ok: false, message: 'mode is invalid' }
@@ -175,6 +191,8 @@ export function validateCreateChallengeInput(raw: unknown): ValidationResult {
       creatorNickname: input.creatorNickname,
       creatorIcon: input.creatorIcon as AvatarRef,
       creatorEquippedTitle: input.creatorEquippedTitle ?? null,
+      creatorSubTitleIds: input.creatorSubTitleIds as [string | null, string | null],
+      creatorHasPass: input.creatorHasPass as boolean,
       mode: input.mode as ChallengeMode,
       problemSet: input.problemSet as ChallengeProblemSet,
       conditions: input.conditions as ChallengeConditions,

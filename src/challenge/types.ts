@@ -42,6 +42,22 @@ export interface ChallengeRecord {
   creatorNickname: string
   creatorIcon: AvatarRef
   creatorEquippedTitle: string | null
+  /**
+   * 次フェーズ（item 157-159、挑戦状受信画面のプロフィール表示を通常プロフィールと統一）:
+   * creatorEquippedTitleと全く同じ「作成時点のローカルプロフィールのスナップショット」
+   * 方式（profileStorage.tsのPlayerProfile.subTitleIdsと同じ型・同じ意味）。サーバー側の
+   * 中央アカウント/entitlement管理は無いため、推測で埋めず、必ず作成時点の値をそのまま
+   * 保存する。このmigration以前に作成された既存Challengeは[null, null]（後方互換、
+   * 推測で埋めない）。
+   */
+  creatorSubTitleIds: [string | null, string | null]
+  /**
+   * 次フェーズ（item 157-159）: 作成時点でDOPA PASSを所有していたかのスナップショット。
+   * creatorEquippedTitle同様、後からPASSを購入/解約してもこの値は変わらない
+   * （「送った時点」の見た目を保つという既存のchallenges.creator_*と同じ非正規化方針）。
+   * このmigration以前に作成された既存Challengeはfalse（後方互換、推測で埋めない）。
+   */
+  creatorHasPass: boolean
   mode: ChallengeMode
   problemSet: ChallengeProblemSet
   conditions: ChallengeConditions
