@@ -103,6 +103,26 @@ export function buildResultImageHtml(payload: ResultSharePayload): string {
  * 意図的に異なる配色（赤〜amberの対戦的なトーン）＋「挑戦状」バッジで、一目で「挑戦状」だと
  * 分かる見た目にする。ゲームロジック（勝敗判定・URL構造等）には一切関与しない——見た目の
  * 組み立てだけを行う。
+ *
+ * 次フェーズ（item 147、大型最終仕上げラウンド）: 「margin微調整の積み重ねは禁止、構造を
+ * 根本から見直せ」というユーザー指示により、それまでの積み重ね式の余白調整をやめ、
+ * 1200x630内で完全に固定された6行の縦構造として組み直した——
+ *   上部: 挑戦状バッジ
+ *   中上部: 「{nickname}の記録、超えられる？」
+ *   中央: 記録値（数字だけの巨大テキスト。%やSTREAKの単位は含めない）
+ *   中央下: 単位ラベル（「%」または「STREAK」）
+ *   下部: モード/難易度（「DOPA RUSH」または「ENDLESS {難易度}」）
+ *   最下部: 「ドパガキゲーム」
+ * DOPA RUSH系・ENDLESS系のどちらでも全く同じ6行構成・同じgap・同じフォントサイズを使う
+ * （「DOPA RUSH Challenge / ENDLESS Challenge両方で共通の安全な構造を使うこと」という
+ * 指示どおり）。巨大な数字と単位ラベルは必ず別の行（縦積み）にし、satoriの既知の制約
+ * （巨大なfont-sizeを持つ葉要素は、横並びの兄弟との間隔・揃えが正しく計算されない）を
+ * 避ける——数字自体も「余白だけの外側div＋文字だけの内側div」の2重構造にして、gapの
+ * 計算を安全にする（buildRushResultImageHtmlと同じ、実機で確認済みのパターン）。
+ * relative/absolute position・transformは一切使わない（frame()自体のposition:relativeを
+ * 除く——これは外枠のみで、中のテキスト要素には使わない）。桁数が変わっても中央位置が
+ * 動かないよう、数字の文字幅ではなく「行数」で高さが決まる縦積みflexboxだけで組む
+ * （0・3桁・500%のいずれでも、各行の高さ自体は変わらないため中心は動かない）。
  */
 export function buildChallengeImageHtml(
   creatorNickname: string,
@@ -111,52 +131,18 @@ export function buildChallengeImageHtml(
   endlessDifficulty?: EndlessDifficulty,
 ): string {
   const isEndless = mode === 'endless' && endlessDifficulty !== undefined
-  /**
-   * 次フェーズ（item 133-135、追加最終調整ラウンド、実機で発見）: ENDLESSモードの
-   * statLineだけ、「巨大な数字」と「STREAKラベル」をalign-items:baselineの1行に
-   * 横並びさせていたため、buildRushResultImageHtml側で既に確認済みの satori の制約
-   * （巨大なfont-sizeを持つテキストを直接含む葉要素は、兄弟要素との間隔・揃えが
-   * 正しく計算されない）に、今度は「横並びの兄弟との間隔」という形で該当していた
-   * ——これが「数値とラベルの間隔が不自然」というXでの見え方の直接の原因だった。
-   * 横並びをやめ、buildEndlessResultImageHtml（通常のENDLESS結果シェア画像、
-   * ユーザーが「綺麗なので触らなくて良い」と明言した実績のある構成）と同じ、
-   * 「巨大な数字→その下にSTREAKラベル」という縦積み構成に統一した
-   * （巨大な数字自体も、RUSH同様に「余白だけの外側div＋文字だけの内側div」の
-   * 2重構造にして、satoriのgap計算を安全にしている）。
-   */
-  const statLine = isEndless
-    ? `<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
-<div style="display:flex;"><div style="display:flex;font-size:150px;font-weight:900;color:#fbbf24;line-height:1;">${creatorScore}</div></div>
-<div style="display:flex;font-size:40px;font-weight:900;color:#ffffff;letter-spacing:4px;">STREAK</div>
-</div>`
-    : `<div style="display:flex;"><div style="display:flex;font-size:150px;font-weight:900;color:#fbbf24;line-height:1;">${creatorScore}%</div></div>`
-  const subLabel = isEndless
-    ? `ENDLESS ${escapeHtml(ENDLESS_DIFFICULTY_LABEL[endlessDifficulty!])} ${creatorScore} STREAKに挑戦`
-    : `${creatorScore}%に挑戦`
-  /**
-   * 次フェーズ（item 102）: Xタイムラインでの見え方を実機（wrangler dev）で確認した結果、
-   * ①巨大な数字のすぐ下のサブ文言（◯◯%に挑戦 等）が詰まって見える、②コンテンツ全体が
-   * カード上部へ寄って見える（巨大な数字フォントの内部行間により、幾何学的な中央と
-   * 視覚的な中央がズレるため）の2点を確認したため、本文内のgapを広げ、外枠の上下
-   * パディングを非対称（下を厚く）にして視覚的な中央揃えに近づけた。
-   *
-   * 次フェーズ（item 133-135、追加最終調整ラウンド）: 1200x630のOGP原画像がXで
-   * 縮小・クロップされることを踏まえ、上記statLineの修正に合わせて余白も再調整した。
-   * ①上下パディングをRUSH/ENDLESS（40px）に揃え、重要テキストが上端ギリギリに
-   * 来ないようにした、②左右パディングを60→68pxへ増やし、ニックネーム等の長い
-   * 1行テキストが端に寄り過ぎないsafe marginを確保、③本文内gapを20→24pxへ広げ、
-   * statLine直後のmargin-bottomも14→20pxへ広げて「数値・ラベル・挑戦文の間隔」を
-   * はっきり分離した。配色・バッジ・文言・全体のレイアウト構成（赤/オレンジ系デザイン）
-   * 自体は変更していない。
-   */
-  const body = `<div style="display:flex;flex-direction:column;align-items:center;gap:24px;">
+  const unitLabel = isEndless ? 'STREAK' : '%'
+  const modeLabel = isEndless ? `ENDLESS ${escapeHtml(ENDLESS_DIFFICULTY_LABEL[endlessDifficulty!])}` : 'DOPA RUSH'
+
+  const body = `<div style="display:flex;flex-direction:column;align-items:center;gap:20px;">
 ${pillBadge('挑戦状', CHALLENGE_BORDER)}
 <div style="display:flex;font-size:34px;font-weight:900;color:#ffffff;">${escapeHtml(creatorNickname)}の記録、超えられる？</div>
-<div style="display:flex;margin-bottom:20px;">${statLine}</div>
-<div style="display:flex;font-size:32px;font-weight:900;color:#fca5a5;">${subLabel}</div>
+<div style="display:flex;"><div style="display:flex;font-size:150px;font-weight:900;color:#fbbf24;line-height:1;">${creatorScore}</div></div>
+<div style="display:flex;font-size:44px;font-weight:900;color:#ffffff;letter-spacing:4px;">${unitLabel}</div>
+<div style="display:flex;font-size:30px;font-weight:900;color:#fca5a5;letter-spacing:2px;">${modeLabel}</div>
 <div style="display:flex;font-size:26px;font-weight:700;color:rgba(255,255,255,0.55);">ドパガキゲーム</div>
 </div>`
-  return frame(CHALLENGE_BORDER, CHALLENGE_BG, body, '40px 68px 48px')
+  return frame(CHALLENGE_BORDER, CHALLENGE_BG, body, '44px 68px 44px')
 }
 
 export const OG_IMAGE_WIDTH = IMAGE_WIDTH
