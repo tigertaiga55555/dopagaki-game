@@ -4,6 +4,7 @@ import { connectToBattleRoom, type BattleSocket } from '../../battle/battleClien
 import { EndlessPlayScreen } from '../EndlessPlayScreen'
 import type { EndlessFinishPayload } from '../../engine/useEndlessGame'
 import type { EndlessBattleFinishResult, BattleOpponentProfile } from '../../battle/types'
+import { sfx } from '../../utils/sound'
 import type { ChallengeProblemSetItem, EndlessDifficulty } from '../../types'
 
 interface Props {
@@ -138,7 +139,10 @@ export function PrivateEndlessMatchScreen({ matchId, endlessDifficulty, playerId
           </div>
         </div>
         <button
-          onClick={onExit}
+          onClick={() => {
+            sfx.uiTap()
+            onExit()
+          }}
           className="w-full max-w-xs rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-4 text-base font-black tracking-widest text-white active:scale-95"
         >
           ロビーへ戻る
@@ -210,7 +214,10 @@ export function PrivateEndlessMatchScreen({ matchId, endlessDifficulty, playerId
       <PlayerVsCard profile={opponent} label="対戦相手" />
       {!iAmReady ? (
         <button
-          onClick={sendReady}
+          onClick={() => {
+            sfx.uiTap()
+            sendReady()
+          }}
           className="w-full max-w-xs rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-4 text-base font-black tracking-widest text-white active:scale-95"
         >
           READY
@@ -218,7 +225,13 @@ export function PrivateEndlessMatchScreen({ matchId, endlessDifficulty, playerId
       ) : (
         <p className="text-xs font-bold text-white/40">相手のREADYを待っています…</p>
       )}
-      <button onClick={onExit} className="text-xs font-bold text-white/30">
+      <button
+        onClick={() => {
+          sfx.uiTap()
+          onExit()
+        }}
+        className="text-xs font-bold text-white/30"
+      >
         やめる
       </button>
     </div>

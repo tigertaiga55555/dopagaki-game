@@ -20,6 +20,7 @@ import { getOfficialPlayCount, incrementOfficialPlayCount } from '../../utils/st
 import { PlayScreen } from '../PlayScreen'
 import { BattleResultScreen } from './BattleResultScreen'
 import { trackBattleDisconnect, trackBattleForfeit, trackBattleMatchEnd, trackBattleMatchStart } from '../../utils/analytics'
+import { sfx } from '../../utils/sound'
 import type { BattleFinishResult, BattleMode, BattleOpponentProfile } from '../../battle/types'
 import type { AchievementId, ChallengeProblemSetItem, FinalResultV4 } from '../../types'
 
@@ -311,7 +312,10 @@ export function BattleMatchScreen({ matchId, mode, roomCode, playerId, myProfile
           <PlayerVsCard profile={opponent} label="対戦相手" />
           {mode === 'friend' && !iAmReady && (
             <button
-              onClick={sendReady}
+              onClick={() => {
+                sfx.uiTap()
+                sendReady()
+              }}
               className="w-full max-w-xs rounded-2xl bg-gradient-to-b from-rose-500 to-red-700 py-4 text-base font-black tracking-widest text-white active:scale-95"
             >
               READY
@@ -320,7 +324,13 @@ export function BattleMatchScreen({ matchId, mode, roomCode, playerId, myProfile
           {mode === 'friend' && iAmReady && <p className="text-xs font-bold text-white/40">相手のREADYを待っています…</p>}
         </>
       )}
-      <button onClick={onExit} className="text-xs font-bold text-white/30">
+      <button
+        onClick={() => {
+          sfx.uiTap()
+          onExit()
+        }}
+        className="text-xs font-bold text-white/30"
+      >
         やめる
       </button>
     </div>

@@ -3,6 +3,7 @@ import { BackButton } from '../../components/BackButton'
 import { connectToWorldQueue, type BattleSocket } from '../../battle/battleClient'
 import { WORLD_BATTLE_RULESET, WORLD_BATTLE_RULESET_LABEL } from '../../config/worldBattleConfig'
 import { trackBattleMatchmakingCancel, trackBattleMatchmakingStart, trackBattleMatchmakingTimeout } from '../../utils/analytics'
+import { sfx } from '../../utils/sound'
 import type { BattleOpponentProfile } from '../../battle/types'
 
 interface Props {
@@ -59,12 +60,21 @@ export function WorldMatchingScreen({ playerId, profile, onBack, onMatchFound }:
         <p className="text-base font-bold text-white/70">対戦相手が見つかりませんでした</p>
         <div className="flex w-full max-w-xs flex-col gap-3">
           <button
-            onClick={() => setRetryKey((k) => k + 1)}
+            onClick={() => {
+              sfx.uiTap()
+              setRetryKey((k) => k + 1)
+            }}
             className="w-full rounded-2xl bg-gradient-to-b from-rose-500 to-red-700 py-4 text-base font-black tracking-widest text-white active:scale-95"
           >
             もう一度探す
           </button>
-          <button onClick={onBack} className="w-full rounded-2xl bg-white/10 py-3 text-sm font-bold text-white active:scale-95">
+          <button
+            onClick={() => {
+              sfx.navBack()
+              onBack()
+            }}
+            className="w-full rounded-2xl bg-white/10 py-3 text-sm font-bold text-white active:scale-95"
+          >
             戻る
           </button>
         </div>

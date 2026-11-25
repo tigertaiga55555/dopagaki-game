@@ -2,6 +2,7 @@ import { describeBattleDecidedBy } from '../../challenge/formatPerformance'
 import { AchievementUnlockBanner } from '../../components/AchievementUnlockBanner'
 import { PerformanceComparisonTable } from '../../components/PerformanceComparisonTable'
 import { resolveAvatarEmoji } from '../../config/profileConfig'
+import { sfx } from '../../utils/sound'
 import type { BattleFinishResult, BattleOpponentProfile } from '../../battle/types'
 import type { AchievementId } from '../../types'
 
@@ -84,7 +85,10 @@ export function BattleResultScreen({ result, viewerIsPlayerA, myProfile, opponen
       )}
 
       <button
-        onClick={onHome}
+        onClick={() => {
+          sfx.navHome()
+          onHome()
+        }}
         className="w-full max-w-xs rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-4 text-base font-black tracking-widest text-white shadow-[0_6px_0_0_rgba(126,34,206,0.8)] transition-transform active:translate-y-1 active:shadow-[0_2px_0_0_rgba(126,34,206,0.8)]"
       >
         ホームへ戻る

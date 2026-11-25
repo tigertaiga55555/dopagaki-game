@@ -3,6 +3,7 @@ import { NavBar } from '../../components/NavBar'
 import { createPrivateRoom, getActiveRoomForPlayer, getPrivateRoomStatus } from '../../battle/privateRoomClient'
 import { normalizeRoomCode, isValidRoomCode } from '../../battle/roomCode'
 import { trackPrivateRoomJoined } from '../../utils/analytics'
+import { sfx } from '../../utils/sound'
 import type { BattleOpponentProfile } from '../../battle/types'
 
 interface Props {
@@ -126,7 +127,10 @@ export function PrivateRoomHomeScreen({
         <h1 className="text-2xl font-black tracking-widest text-white">🤝 友達と対戦</h1>
         <div className="w-full max-w-xs space-y-4">
           <button
-            onClick={() => onEnterLobby(activeRoom.roomCode)}
+            onClick={() => {
+              sfx.uiTap()
+              onEnterLobby(activeRoom.roomCode)
+            }}
             className="w-full rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-4 text-base font-black tracking-widest text-white active:scale-95"
           >
             {activeRoom.isHost ? '作成中のルームに戻る' : '参加中のルームに戻る'}
@@ -135,7 +139,10 @@ export function PrivateRoomHomeScreen({
             ホームに戻ったり、アプリを閉じたりしても参加状態は保たれます。
           </p>
           <button
-            onClick={() => setView('menu')}
+            onClick={() => {
+              sfx.uiTap()
+              setView('menu')
+            }}
             className="w-full rounded-2xl border border-white/15 bg-white/5 py-3 text-sm font-bold text-white/70 active:scale-95"
           >
             別のルームを作る／入る
@@ -159,7 +166,10 @@ export function PrivateRoomHomeScreen({
         />
         {error && <p className="text-xs font-bold text-rose-300">{error}</p>}
         <button
-          onClick={handleJoin}
+          onClick={() => {
+            sfx.uiTap()
+            handleJoin()
+          }}
           disabled={busy}
           className="w-full max-w-xs rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-4 text-base font-black tracking-widest text-white active:scale-95 disabled:opacity-60"
         >
@@ -177,14 +187,20 @@ export function PrivateRoomHomeScreen({
       {error && <p className="text-xs font-bold text-rose-300">{error}</p>}
       <div className="flex w-full max-w-xs flex-col gap-4">
         <button
-          onClick={handleCreate}
+          onClick={() => {
+            sfx.uiTap()
+            handleCreate()
+          }}
           disabled={busy}
           className="w-full rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-4 text-base font-black tracking-widest text-white active:scale-95 disabled:opacity-60"
         >
           {hasPass ? 'ルームを作る' : '🔒 ルームを作る（DOPA PASS限定）'}
         </button>
         <button
-          onClick={() => setView('join_input')}
+          onClick={() => {
+            sfx.uiTap()
+            setView('join_input')
+          }}
           className="w-full rounded-2xl border border-white/15 bg-white/5 py-4 text-base font-black tracking-widest text-white/85 active:scale-95"
         >
           ルームに入る

@@ -1,5 +1,6 @@
 import { NavBar } from '../../components/NavBar'
 import { WORLD_BATTLE_RULESET, WORLD_BATTLE_RULESET_LABEL } from '../../config/worldBattleConfig'
+import { sfx } from '../../utils/sound'
 
 interface Props {
   onBack: () => void
@@ -41,7 +42,10 @@ export function BattleHomeScreen({ onBack, onHome, onWorldBattle, onPrivateRoom 
 
         <div className="flex w-full max-w-xs flex-col gap-4">
           <button
-            onClick={onWorldBattle}
+            onClick={() => {
+              sfx.uiTap()
+              onWorldBattle()
+            }}
             className="w-full rounded-2xl bg-gradient-to-b from-rose-500 to-red-700 py-5 text-lg font-black tracking-widest text-white shadow-[0_6px_0_0_rgba(136,19,55,0.9)] transition-transform active:translate-y-1 active:shadow-[0_2px_0_0_rgba(136,19,55,0.9)]"
           >
             🌐 世界対戦
@@ -52,7 +56,10 @@ export function BattleHomeScreen({ onBack, onHome, onWorldBattle, onPrivateRoom 
           </p>
 
           <button
-            onClick={onPrivateRoom}
+            onClick={() => {
+              sfx.uiTap()
+              onPrivateRoom()
+            }}
             className="mt-2 w-full rounded-2xl border border-fuchsia-400/30 bg-fuchsia-500/10 py-4 text-base font-black tracking-widest text-fuchsia-200 transition-transform active:scale-95"
           >
             🤝 友達と対戦
