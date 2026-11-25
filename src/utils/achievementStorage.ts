@@ -103,10 +103,16 @@ export function checkEndlessAchievements(difficulty: EndlessDifficulty, newStrea
   return unlockMatching((c) => c.type === 'endlessStreak' && c.difficulty === difficulty && newStreak >= c.threshold)
 }
 
-/** 500%チャレンジでFINAL QUESTION（490%）に到達したときに呼ぶ。 */
-export function checkFinalQuestionAchievement(reached490: boolean): AchievementId[] {
-  if (!reached490) return []
-  return unlockMatching((c) => c.type === 'challenge500FinalQuestion')
+/**
+ * 次フェーズ（item 137-140、大型最終仕上げラウンド）: 旧checkFinalQuestionAchievement
+ * （490%到達だけで解除、dopa490「最後の一問」用）は削除した。代わりに、490%（FINAL
+ * QUESTION）に到達しながら不正解に終わり500%到達を逃した場合だけ解除する
+ * （呼び出し元のengine/resultEngineV4.tsがstate.reached490 && state.ended && !state.cleared
+ * を渡す。SECRET「全部水の泡」用）。
+ */
+export function checkChallenge500MissedFinalAchievement(missedFinal: boolean): AchievementId[] {
+  if (!missedFinal) return []
+  return unlockMatching((c) => c.type === 'challenge500MissedFinal')
 }
 
 /** Ver.6 Phase 10: 公式DOPA RUSHプレイでpercent%以上・正答率100%だったときに呼ぶ（ノーミス/完全体）。 */
@@ -211,6 +217,68 @@ export function checkBattleComebackAchievement(): AchievementId[] {
 /** Ver.6 Phase 10: 公式プレイ（DOPA RUSH/ENDLESS/世界対戦/フレンド対戦）の累計回数。 */
 export function checkGrindAchievements(officialPlayCount: number): AchievementId[] {
   return unlockMatching((c) => c.type === 'officialPlayCount' && officialPlayCount >= c.threshold)
+}
+
+// --- SECRET（item 137-141、大型最終仕上げラウンド） ---
+
+/** ENDLESS初級150・中級100・上級50の自己ベストを3つとも同時に満たしている場合に呼ぶ（SECRET「三冠王」）。 */
+export function checkEndlessTripleCrownAchievement(beginnerBest: number, intermediateBest: number, advancedBest: number): AchievementId[] {
+  if (beginnerBest < 150 || intermediateBest < 100 || advancedBest < 50) return []
+  return unlockMatching((c) => c.type === 'endlessTripleCrown')
+}
+
+/**
+ * ENDLESS Challengeで、creatorScore===0の挑戦状を作成し、かつ挑戦者側も0 STREAKで終えた
+ * 相手を防衛（ホスト視点でWIN）した場合に呼ぶ（SECRET「0の壁」）。呼び出し元
+ * （ChallengeHistoryScreen.tsx）が、このChallenge自体がcreatorScore===0・mode==='endless'
+ * であること、かつ少なくとも1つのattemptがscore===0・ホスト視点winであることを
+ * 確認してから呼ぶ。
+ */
+export function checkChallengeZeroWallAchievement(qualifies: boolean): AchievementId[] {
+  if (!qualifies) return []
+  return unlockMatching((c) => c.type === 'challengeZeroStreakDefense')
+}
+
+/**
+ * DOPA RUSH系Challengeで、相手（作成者）の基準記録が500%だった挑戦状へ挑戦し、最終的に
+ * WINした場合に呼ぶ（SECRET「神越え」）。呼び出し元（ChallengeResultScreen.tsx）が
+ * challenge.creatorScore===500・challenge.mode!=='endless'・result==='win'を確認してから呼ぶ。
+ */
+export function checkChallengeBeatGodAchievement(qualifies: boolean): AchievementId[] {
+  if (!qualifies) return []
+  return unlockMatching((c) => c.type === 'challengeBeat500')
+}
+
+/**
+ * 自分が作成した同一Challengeに、異なる10人以上の挑戦者が挑み、かつその全員から防衛
+ * できている（誰にも突破されていない）場合に呼ぶ（SECRET「ラスボス」）。呼び出し元
+ * （SentChallengesScreen.tsx）が、1つのChallengeSummaryについてchallengerCount>=10・
+ * clearedCount===0を確認してから呼ぶ（複数Challengeの合算ではなく、1つで条件を
+ * 満たす必要がある——既存の「指名手配」と同じ単位の考え方）。
+ */
+export function checkChallengeLastBossAchievement(qualifies: boolean): AchievementId[] {
+  if (!qualifies) return []
+  return unlockMatching((c) => c.type === 'challengeUndefeated10')
+}
+
+/**
+ * PRIVATE ROOMが8/8満員、かつ4TABLEすべてが同時に対戦進行中の状態が成立した場合に呼ぶ
+ * （SECRET「ドパガキ大集合」）。呼び出し元（PrivateRoomLobbyScreen.tsx）がroom_state更新の
+ * たびにmembers.length===8 && tables.every(t=>t.activeMatch!==null)を確認してから呼ぶ。
+ */
+export function checkFriendRoomFullHouseAchievement(qualifies: boolean): AchievementId[] {
+  if (!qualifies) return []
+  return unlockMatching((c) => c.type === 'friendRoomAllTablesActive')
+}
+
+/**
+ * 同一PRIVATE ROOM内で、自分以外の7人全員に最低1回ずつ勝利した場合に呼ぶ
+ * （SECRET「フレネミー」）。呼び出し元（PrivateRoomLobbyScreen.tsx）がroomState.matchHistory
+ * から自分の勝利を集計し、現在の他メンバー全員（7人）を打ち負かしたことを確認してから呼ぶ。
+ */
+export function checkFriendRoomFrenemyAchievement(qualifies: boolean): AchievementId[] {
+  if (!qualifies) return []
+  return unlockMatching((c) => c.type === 'friendRoomBeatAllMembers')
 }
 
 // --- Title ---

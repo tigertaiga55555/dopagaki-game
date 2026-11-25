@@ -27,15 +27,6 @@ const NORMAL_ACHIEVEMENTS: AchievementDef[] = [
   { id: 'dopa350', name: '制御不能', description: '公式DOPA RUSHでDOPA度350%に到達する', unlockCondition: { type: 'dopaPercent', threshold: 350 }, category: 'dopa' },
   { id: 'dopa400', name: '危険区域の住人', description: '公式DOPA RUSHでDOPA度400%に到達する', unlockCondition: { type: 'dopaPercent', threshold: 400 }, category: 'dopa' },
   { id: 'dopa450', name: 'あと50が遠い', description: '公式DOPA RUSHでDOPA度450%に到達する', unlockCondition: { type: 'dopaPercent', threshold: 450 }, category: 'dopa' },
-  // 490はMISSで400へ・正解で500へ即座に遷移し、bestPercentとして490そのものが記録されることが
-  // ないため、専用のchallenge500FinalQuestion条件（engine/challenge500Engine.tsのreached490）で判定する。
-  {
-    id: 'dopa490',
-    name: '最後の一問',
-    description: '500%チャレンジでFINAL QUESTION（490%）に到達する',
-    unlockCondition: { type: 'challenge500FinalQuestion' },
-    category: 'dopa',
-  },
   // 次フェーズ（item 104-105）: DOPA TYPE正式名称の単一定義（config/dopaType.ts）に合わせ、
   // 「真・ドパガキ」から「ドパガキの神」へ改名した（新規Achievement重複作成はしない。
   // id/unlockCondition/rarityは一切変更していないため、既存ユーザーの解除済み状態への影響は無い）。
@@ -71,12 +62,44 @@ const ENDLESS_ACHIEVEMENTS: AchievementDef[] = [
   { id: 'endlessIntermediate30', name: '無呼吸', description: 'ENDLESS中級で30連続正解する', unlockCondition: { type: 'endlessStreak', difficulty: 'intermediate', threshold: 30 }, category: 'endless', endlessDifficulty: 'intermediate' },
   { id: 'endlessIntermediate50', name: '中級支配者', description: 'ENDLESS中級で50連続正解する', unlockCondition: { type: 'endlessStreak', difficulty: 'intermediate', threshold: 50 }, category: 'endless', endlessDifficulty: 'intermediate' },
   { id: 'endlessIntermediate75', name: '集中の化身', description: 'ENDLESS中級で75連続正解する', unlockCondition: { type: 'endlessStreak', difficulty: 'intermediate', threshold: 75 }, category: 'endless', endlessDifficulty: 'intermediate' },
+  // 次フェーズ（item 142、大型最終仕上げラウンド）: 中級ラダーの新6段目。解除条件は既存の
+  // endlessStreak型をそのまま使う（新しい条件種別は不要）。
+  { id: 'endlessIntermediate100', name: '無我の境地', description: 'ENDLESS中級で100連続正解する', unlockCondition: { type: 'endlessStreak', difficulty: 'intermediate', threshold: 100 }, category: 'endless', endlessDifficulty: 'intermediate' },
 
   { id: 'endlessAdvanced3', name: '危険区域へようこそ', description: 'ENDLESS上級で3連続正解する', unlockCondition: { type: 'endlessStreak', difficulty: 'advanced', threshold: 3 }, category: 'endless', endlessDifficulty: 'advanced' },
   { id: 'endlessAdvanced10', name: '逆転脳', description: 'ENDLESS上級で10連続正解する', unlockCondition: { type: 'endlessStreak', difficulty: 'advanced', threshold: 10 }, category: 'endless', endlessDifficulty: 'advanced' },
   { id: 'endlessAdvanced20', name: '赤信号無視', description: 'ENDLESS上級で20連続正解する', unlockCondition: { type: 'endlessStreak', difficulty: 'advanced', threshold: 20 }, category: 'endless', endlessDifficulty: 'advanced' },
   { id: 'endlessAdvanced30', name: 'DANGER SURVIVOR', description: 'ENDLESS上級で30連続正解する', unlockCondition: { type: 'endlessStreak', difficulty: 'advanced', threshold: 30 }, category: 'endless', endlessDifficulty: 'advanced' },
   { id: 'endlessAdvanced50', name: '人間卒業', description: 'ENDLESS上級で50連続正解する', unlockCondition: { type: 'endlessStreak', difficulty: 'advanced', threshold: 50 }, category: 'endless', endlessDifficulty: 'advanced' },
+]
+
+/**
+ * 次フェーズ（item 137-141、大型最終仕上げラウンド）: ENDLESS専用SECRET2個。通常ラダー
+ * には混ぜず末尾に追加する（SECRETの存在を隠す既存方針どおり）。
+ * - 三冠王: 初級150・中級100（上記の無我の境地）・上級50の3つの自己ベストを同時に満たす
+ *   （endlessStreak型では表現できない複合条件のため、専用のendlessTripleCrown型を新設）。
+ * - 人外認定: 上級100連続正解。表のラダーの上級MAXは50（人間卒業/MYTHIC）のまま——既存の
+ *   endlessStreak型をそのまま使い、表には一切出さずsecretとしてだけ存在させる。
+ */
+const ENDLESS_SECRET_ACHIEVEMENTS: AchievementDef[] = [
+  {
+    id: 'endlessTripleCrown',
+    name: '三冠王',
+    description: 'ENDLESS初級150連続・中級100連続・上級50連続、3つすべての自己ベストを同時に満たす',
+    hint: '三つの難易度。その頂点をすべて見た者だけが名乗れる。',
+    unlockCondition: { type: 'endlessTripleCrown' },
+    category: 'endless',
+    secret: true,
+  },
+  {
+    id: 'endlessAdvanced100',
+    name: '人外認定',
+    description: 'ENDLESS上級で100連続正解する',
+    hint: '卒業した先に、まだ続きがあるらしい。',
+    unlockCondition: { type: 'endlessStreak', difficulty: 'advanced', threshold: 100 },
+    category: 'endless',
+    secret: true,
+  },
 ]
 
 /**
@@ -113,6 +136,40 @@ const CHALLENGE_ACHIEVEMENTS: AchievementDef[] = [
   },
 ]
 
+/**
+ * 次フェーズ（item 137-141、大型最終仕上げラウンド）: Challenge専用SECRET3個。通常ラダー
+ * には混ぜず末尾に追加する。
+ */
+const CHALLENGE_SECRET_ACHIEVEMENTS: AchievementDef[] = [
+  {
+    id: 'challengeZeroWall',
+    name: '0の壁',
+    description: 'ENDLESS Challengeで0 STREAKの挑戦状を作成し、挑戦者も0 STREAKで終えたその挑戦を防衛する',
+    hint: '越えるべき壁が、そこにないとしても。',
+    unlockCondition: { type: 'challengeZeroStreakDefense' },
+    category: 'challenge',
+    secret: true,
+  },
+  {
+    id: 'challengeBeatTheGod',
+    name: '神越え',
+    description: 'DOPA RUSH系Challengeで、相手の基準記録が500%の挑戦状へ挑み、既存のタイブレーク判定も含めて最終的にWINする',
+    hint: '神に届くだけでは足りない。その先へ。',
+    unlockCondition: { type: 'challengeBeat500' },
+    category: 'challenge',
+    secret: true,
+  },
+  {
+    id: 'challengeLastBoss',
+    name: 'ラスボス',
+    description: '自分が作成した1つのChallengeに異なる10人以上が挑戦し、その全員から防衛する（誰にも突破されていない）',
+    hint: '挑戦者は多いほどいい。全員返り討ちにできるなら。',
+    unlockCondition: { type: 'challengeUndefeated10' },
+    category: 'challenge',
+    secret: true,
+  },
+]
+
 const WORLD_BATTLE_ACHIEVEMENTS: AchievementDef[] = [
   { id: 'worldBattleFirstPlay', name: '世界デビュー', description: '世界対戦に初めて参加する', unlockCondition: { type: 'worldBattleFirstPlay' }, category: 'worldBattle' },
   { id: 'worldBattleWin1', name: '初陣勝利', description: '世界対戦で初めて勝利する', unlockCondition: { type: 'worldBattleWinCount', threshold: 1 }, category: 'worldBattle' },
@@ -133,6 +190,31 @@ const FRIEND_BATTLE_ACHIEVEMENTS: AchievementDef[] = [
   { id: 'friendBattlePlay10', name: 'いつメン', description: 'フレンド対戦に通算10回参加する', unlockCondition: { type: 'friendBattlePlayCount', threshold: 10 }, category: 'friendBattle' },
   { id: 'friendBattlePlay50', name: '腐れ縁', description: 'フレンド対戦に通算50回参加する', unlockCondition: { type: 'friendBattlePlayCount', threshold: 50 }, category: 'friendBattle' },
   { id: 'friendBattlePlay100', name: '終わらない放課後', description: 'フレンド対戦に通算100回参加する', unlockCondition: { type: 'friendBattlePlayCount', threshold: 100 }, category: 'friendBattle' },
+]
+
+/**
+ * 次フェーズ（item 137-141、大型最終仕上げラウンド）: フレンド対戦専用SECRET2個。
+ * PRIVATE ROOM（友達と対戦）のロビー状態から判定する——通常ラダーには混ぜず末尾に追加する。
+ */
+const FRIEND_BATTLE_SECRET_ACHIEVEMENTS: AchievementDef[] = [
+  {
+    id: 'friendRoomFullHouse',
+    name: 'ドパガキ大集合',
+    description: 'ルームが8人満員になり、4つのTABLEすべてが同時に対戦進行中になる',
+    hint: '4つの卓が、すべて埋まった時——。',
+    unlockCondition: { type: 'friendRoomAllTablesActive' },
+    category: 'friendBattle',
+    secret: true,
+  },
+  {
+    id: 'friendRoomFrenemy',
+    name: 'フレネミー',
+    description: '同じルーム内で、自分以外の7人全員に最低1回ずつ勝利する',
+    hint: 'せっかく集まった7人。全員と仲良くする必要はない。',
+    unlockCondition: { type: 'friendRoomBeatAllMembers' },
+    category: 'friendBattle',
+    secret: true,
+  },
 ]
 
 /**
@@ -167,10 +249,15 @@ const SPECIAL_ACHIEVEMENTS: AchievementDef[] = [
     secret: true,
     rarity: 'rare',
   },
+  /**
+   * 次フェーズ（item 141、大型最終仕上げラウンド）: descriptionを、実際の判定コード
+   * （BattleMatchScreen.tsxのCOMEBACK_DEFICIT_THRESHOLD=20・maxDeficitRef・
+   * finishReason==='completed'判定）と一致する具体文へ書き換えた（条件自体は無変更）。
+   */
   {
     id: 'battleComeback',
     name: '大逆転',
-    description: '世界対戦で、大きくリードされた状態から最終的に逆転勝利する',
+    description: '世界対戦で、試合中に相手に20%以上の差をつけられた状態から、切断・棄権なしで最後まで戦い抜き、最終的に逆転勝利する',
     hint: 'どれだけ差をつけられても、試合終了のその瞬間まで諦めなければ見える景色がある。',
     unlockCondition: { type: 'battleComeback' },
     category: 'special',
@@ -224,16 +311,40 @@ const DOPA_CATEGORY_ORDERED: AchievementDef[] = [
   NORMAL_BY_ID.dopa400, // 400%
   DOPA_TYPE_BY_ID.dopaTypeKing, // 400-499%
   NORMAL_BY_ID.dopa450, // 450%
-  NORMAL_BY_ID.dopa490, // 490%（FINAL QUESTION）
   NORMAL_BY_ID.dopa500, // 500%
+]
+
+/**
+ * 次フェーズ（item 137-140、大型最終仕上げラウンド）: 既存dopa490「最後の一問」
+ * （490%到達だけで解除）を削除し、代わりにSECRET「全部水の泡」を新設した。490%
+ * （FINAL QUESTION）に到達しながら不正解に終わり500%到達を逃した場合だけ解除する
+ * （engine/challenge500Engine.tsのstate.reached490 && state.ended && !state.cleared、
+ * utils/achievementStorage.tsのcheckChallenge500MissedFinalAchievement参照）。
+ * SECRETの存在を隠す既存方針どおり、DOPA%昇順ラダー（DOPA_CATEGORY_ORDERED）には
+ * 混ぜず、dopaカテゴリの末尾に追加する。
+ */
+const DOPA_SECRET_ACHIEVEMENTS: AchievementDef[] = [
+  {
+    id: 'dopaFinalWipeout',
+    name: '全部水の泡',
+    description: '500%チャレンジで、FINAL QUESTION（490%）に到達しながら不正解に終わり、500%到達を逃す',
+    hint: 'あと一問。そこまで積み上げたものが、すべて消えることもある。',
+    unlockCondition: { type: 'challenge500MissedFinal' },
+    category: 'dopa',
+    secret: true,
+  },
 ]
 
 export const ACHIEVEMENT_DEFS: AchievementDef[] = [
   ...DOPA_CATEGORY_ORDERED,
+  ...DOPA_SECRET_ACHIEVEMENTS,
   ...ENDLESS_ACHIEVEMENTS,
+  ...ENDLESS_SECRET_ACHIEVEMENTS,
   ...CHALLENGE_ACHIEVEMENTS,
+  ...CHALLENGE_SECRET_ACHIEVEMENTS,
   ...WORLD_BATTLE_ACHIEVEMENTS,
   ...FRIEND_BATTLE_ACHIEVEMENTS,
+  ...FRIEND_BATTLE_SECRET_ACHIEVEMENTS,
   ...SPECIAL_ACHIEVEMENTS,
   ...GRIND_ACHIEVEMENTS,
 ]

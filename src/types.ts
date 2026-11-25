@@ -477,7 +477,6 @@ export type AchievementId =
   | 'dopa350'
   | 'dopa400'
   | 'dopa450'
-  | 'dopa490'
   | 'dopa500'
   /**
    * 次フェーズ（ゲーム機能クローズラウンド、item 104-109）: DOPA TYPE（config/dopaType.ts
@@ -506,6 +505,8 @@ export type AchievementId =
   | 'endlessAdvanced10'
   | 'endlessAdvanced20'
   | 'endlessAdvanced30'
+  /** 次フェーズ（item 142、大型最終仕上げラウンド）: 中級ラダーの新5段目（既存の5/15/30/50/75に続く100）。 */
+  | 'endlessIntermediate100'
   /**
    * Ver.6 Phase 8（ENDLESS Challenge）: Challenge専用の実績2個。通常ENDLESSの連続正解
    * 実績（endlessStreak系）とは完全に独立しており、通常プレイからは絶対に解除されない
@@ -568,15 +569,43 @@ export type AchievementId =
   | 'grindPlay300'
   | 'grindPlay500'
   | 'grindPlay1000'
+  /**
+   * 次フェーズ（item 137-141、大型最終仕上げラウンド）: SECRET最終10個のうち、新規追加の
+   * 8個（鏡写し・大逆転の既存2個は上記のまま変更なし）。各カテゴリの末尾に追加し、
+   * 通常ラダーには一切混ぜない（「SECRETの存在を隠す」既存方針どおり）。
+   */
+  | 'dopaFinalWipeout'
+  | 'endlessTripleCrown'
+  | 'endlessAdvanced100'
+  | 'challengeZeroWall'
+  | 'challengeBeatTheGod'
+  | 'challengeLastBoss'
+  | 'friendRoomFullHouse'
+  | 'friendRoomFrenemy'
 
 /**
  * 実績の解除条件。
  * - dopaPercent: 通常モード・FINAL DOPA TRIAL・500%チャレンジのいずれで到達しても共通の
  *   bestPercentV4（utils/storage.ts）がthreshold以上になった時点で解除。
  * - endlessStreak: 難易度別のEndless自己ベストがthreshold以上になった時点で解除。
- * - challenge500FinalQuestion: 490%（FINAL QUESTION、あと1問で500%）到達という一度きりの
- *   イベント。bestPercentの閾値では表現できない（490はMISSなら400へ、正解なら500へ
- *   瞬時に遷移し、記録される最終%として490そのものが残ることがないため）、専用の種別。
+ * - challenge500MissedFinal: 次フェーズ（item 137-140、大型最終仕上げラウンド）。旧
+ *   challenge500FinalQuestion（dopa490「最後の一問」、490%到達だけで解除）は削除した。
+ *   代わりに、490%（FINAL QUESTION）に到達しながら不正解に終わり500%到達を逃した
+ *   （state.reached490 && state.ended && !state.cleared、engine/challenge500Engine.ts参照）
+ *   場合だけ解除するSECRET「全部水の泡」用の種別。
+ * - endlessTripleCrown: ENDLESS初級150・中級100・上級50の自己ベストを3つとも同時に
+ *   満たしている（SECRET「三冠王」）。
+ * - challengeZeroStreakDefense: ENDLESS Challengeで、creatorScore===0の挑戦状を作成し、
+ *   かつ挑戦者側も0 STREAKで終えたその挑戦者に対して防衛（ホスト視点でWIN）した
+ *   （SECRET「0の壁」）。
+ * - challengeBeat500: DOPA RUSH系Challengeで、相手（作成者）の基準記録が500%だった
+ *   挑戦状へ挑戦し、既存のタイブレーク判定も含めて最終的にWINした（SECRET「神越え」）。
+ * - challengeUndefeated10: 自分が作成した同一Challengeに、異なる10人以上の挑戦者が挑み、
+ *   かつその全員から防衛できている（誰にも突破されていない）（SECRET「ラスボス」）。
+ * - friendRoomAllTablesActive: PRIVATE ROOMが8/8満員、かつ4TABLEすべてが同時に対戦進行中
+ *   （SECRET「ドパガキ大集合」）。
+ * - friendRoomBeatAllMembers: 同一PRIVATE ROOM内で、自分以外の7人全員に最低1回ずつ勝利した
+ *   （SECRET「フレネミー」）。
  *
  * Ver.6 Phase 10（実績拡張ラウンド）追加分：
  * - challengeCreated/challengeParticipated: Challenge作成／参加（挑戦者側）が初めて成立した。
@@ -605,7 +634,13 @@ export type AchievementUnlockCondition =
    */
   | { type: 'dopaPercentBand'; min: number; max: number }
   | { type: 'endlessStreak'; difficulty: EndlessDifficulty; threshold: number }
-  | { type: 'challenge500FinalQuestion' }
+  | { type: 'challenge500MissedFinal' }
+  | { type: 'endlessTripleCrown' }
+  | { type: 'challengeZeroStreakDefense' }
+  | { type: 'challengeBeat500' }
+  | { type: 'challengeUndefeated10' }
+  | { type: 'friendRoomAllTablesActive' }
+  | { type: 'friendRoomBeatAllMembers' }
   /** Ver.6 Phase 8（ENDLESS Challenge）: 挑戦者として初めてENDLESS ChallengeにWINした。 */
   | { type: 'endlessChallengeWin' }
   /** Ver.6 Phase 8（ENDLESS Challenge）: ホストとして初めて自分のENDLESS Challengeの防衛（相手のLOSE/DRAW）に成功した。 */

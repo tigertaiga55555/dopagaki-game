@@ -3,19 +3,25 @@ import {
   checkBattleComebackAchievement,
   checkBattleDecidingStatAchievement,
   checkBattleMirrorAchievement,
+  checkChallenge500MissedFinalAchievement,
+  checkChallengeBeatGodAchievement,
   checkChallengeCreatedAchievement,
   checkChallengeDefenseAchievements,
+  checkChallengeLastBossAchievement,
   checkChallengeParticipatedAchievement,
   checkChallengeWantedAchievement,
   checkChallengeWinAchievements,
+  checkChallengeZeroWallAchievement,
   checkDopaPercentAchievements,
   checkDopaTypeBandAchievements,
   checkEndlessAchievements,
   checkEndlessChallengeDefenseAchievement,
   checkEndlessChallengeWinAchievement,
-  checkFinalQuestionAchievement,
+  checkEndlessTripleCrownAchievement,
   checkFriendBattleFirstPlayAchievement,
   checkFriendBattlePlayAchievements,
+  checkFriendRoomFrenemyAchievement,
+  checkFriendRoomFullHouseAchievement,
   checkGrindAchievements,
   checkNoMissAchievements,
   checkWorldBattleFirstDrawAchievement,
@@ -82,7 +88,7 @@ describe('achievementStorage (Ver.6 Phase 5.1: DOPA%実績12個＋Endless実績1
     expect(unlocked).toEqual(['dopa50', 'dopa100', 'dopa120', 'dopa150', 'dopa200', 'dopa250', 'dopa300', 'dopa350', 'dopa400'])
   })
 
-  it('500 Achievement解除: 500%到達でdopaPercent系11実績が解除される（dopa490は含まれない）', () => {
+  it('500 Achievement解除: 500%到達でdopaPercent系11実績が解除される', () => {
     const unlocked = checkDopaPercentAchievements(500)
     expect(unlocked).toEqual([
       'dopa50',
@@ -97,7 +103,6 @@ describe('achievementStorage (Ver.6 Phase 5.1: DOPA%実績12個＋Endless実績1
       'dopa450',
       'dopa500',
     ])
-    expect(isAchievementUnlocked('dopa490')).toBe(false)
     expect(getAchievementCount()).toBe(11)
   })
 
@@ -126,16 +131,38 @@ describe('achievementStorage (Ver.6 Phase 5.1: DOPA%実績12個＋Endless実績1
     expect(checkDopaPercentAchievements(140)).toEqual([]) // 既に120/150は解除済み、140は新しい閾値を跨がない
   })
 
-  it('dopa490（FINAL QUESTION）: reached490=falseでは何も解除しない', () => {
-    expect(checkFinalQuestionAchievement(false)).toEqual([])
-    expect(isAchievementUnlocked('dopa490')).toBe(false)
+  it('item 137-140: SECRET「全部水の泡」: missedFinal=falseでは何も解除しない', () => {
+    expect(checkChallenge500MissedFinalAchievement(false)).toEqual([])
+    expect(isAchievementUnlocked('dopaFinalWipeout')).toBe(false)
   })
 
-  it('dopa490（FINAL QUESTION）: reached490=trueで一度だけ解除される。dopa500とは別実績', () => {
-    expect(checkFinalQuestionAchievement(true)).toEqual(['dopa490'])
-    expect(isAchievementUnlocked('dopa490')).toBe(true)
+  it('item 137-140: SECRET「全部水の泡」: missedFinal=trueで一度だけ解除される。dopa500とは別実績', () => {
+    expect(checkChallenge500MissedFinalAchievement(true)).toEqual(['dopaFinalWipeout'])
+    expect(isAchievementUnlocked('dopaFinalWipeout')).toBe(true)
     expect(isAchievementUnlocked('dopa500')).toBe(false)
-    expect(checkFinalQuestionAchievement(true)).toEqual([]) // 重複解除防止
+    expect(checkChallenge500MissedFinalAchievement(true)).toEqual([]) // 重複解除防止
+  })
+
+  it('item 137-141: SECRET新設7個の判定関数が、条件未達では何も解除しない', () => {
+    expect(checkEndlessTripleCrownAchievement(149, 100, 50)).toEqual([])
+    expect(checkEndlessTripleCrownAchievement(150, 99, 50)).toEqual([])
+    expect(checkEndlessTripleCrownAchievement(150, 100, 49)).toEqual([])
+    expect(checkChallengeZeroWallAchievement(false)).toEqual([])
+    expect(checkChallengeBeatGodAchievement(false)).toEqual([])
+    expect(checkChallengeLastBossAchievement(false)).toEqual([])
+    expect(checkFriendRoomFullHouseAchievement(false)).toEqual([])
+    expect(checkFriendRoomFrenemyAchievement(false)).toEqual([])
+    expect(getAchievementCount()).toBe(0)
+  })
+
+  it('item 137-141: SECRET新設7個の判定関数が、条件達成でそれぞれ正しいidを解除する', () => {
+    expect(checkEndlessTripleCrownAchievement(150, 100, 50)).toEqual(['endlessTripleCrown'])
+    expect(checkChallengeZeroWallAchievement(true)).toEqual(['challengeZeroWall'])
+    expect(checkChallengeBeatGodAchievement(true)).toEqual(['challengeBeatTheGod'])
+    expect(checkChallengeLastBossAchievement(true)).toEqual(['challengeLastBoss'])
+    expect(checkFriendRoomFullHouseAchievement(true)).toEqual(['friendRoomFullHouse'])
+    expect(checkFriendRoomFrenemyAchievement(true)).toEqual(['friendRoomFrenemy'])
+    expect(checkEndlessAchievements('advanced', 100)).toContain('endlessAdvanced100')
   })
 
   it('Endless初級STREAK実績: 閾値10/25/50/100を跨いだ分だけ解除される', () => {

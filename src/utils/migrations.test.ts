@@ -46,17 +46,24 @@ describe('migrations (Ver.6 Phase 5.1: 既存記録からAchievement遡及解除
     expect(isAchievementUnlocked('dopa300')).toBe(true)
     expect(isAchievementUnlocked('dopa350')).toBe(true)
     expect(isAchievementUnlocked('dopa400')).toBe(false)
-    expect(isAchievementUnlocked('dopa490')).toBe(false)
     expect(isAchievementUnlocked('dopa500')).toBe(false)
     expect(getAchievementCount()).toBe(8)
   })
 
-  it('v2: bestPercentV4が500（クリア済み）だったユーザーは、490通過が推論によりdopa490も遡及解除される', () => {
+  /**
+   * 次フェーズ（item 137-140、大型最終仕上げラウンド）: 旧dopa490「最後の一問」は削除し、
+   * 「500%クリアの直前に必ず490%を通過している」という推論によるdopa490の遡及解除も
+   * 廃止した。新設のSECRET「全部水の泡」（FINAL QUESTIONに到達しながら不正解に終わった、
+   * という一度きりの出来事）はbestPercentV4の値からは安全に推論できないため、
+   * 遡及解除の対象にしていない——bestPercentV4が500だった既存ユーザーは、通常の
+   * dopaPercent系11実績だけが遡及解除される。
+   */
+  it('v2: bestPercentV4が500（クリア済み）だったユーザーは、dopaPercent系11実績だけが遡及解除される（全部水の泡は推論できないため対象外）', () => {
     updateBestPercent(500)
     runMigrationsOnce()
-    expect(isAchievementUnlocked('dopa490')).toBe(true)
+    expect(isAchievementUnlocked('dopaFinalWipeout')).toBe(false)
     expect(isAchievementUnlocked('dopa500')).toBe(true)
-    expect(getAchievementCount()).toBe(12) // dopaPercent系11 + dopa490
+    expect(getAchievementCount()).toBe(11) // dopaPercent系11個のみ
   })
 
   it('v2: Endless初級/中級/上級の既存BESTから、対応するSTREAK実績が遡及解除される', () => {

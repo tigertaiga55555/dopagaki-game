@@ -35,7 +35,6 @@ const DOPA_MILESTONE_TITLES: TitleDef[] = [
   { id: 'dopa350', name: '制御不能', description: 'DOPA度350%に到達した証', unlockedByAchievementId: 'dopa350', rarity: 'epic' },
   { id: 'dopa400', name: '危険区域の住人', description: 'DOPA度400%に到達した証', unlockedByAchievementId: 'dopa400', rarity: 'epic' },
   { id: 'dopa450', name: 'あと50が遠い', description: 'DOPA度450%に到達した証', unlockedByAchievementId: 'dopa450', rarity: 'legendary' },
-  { id: 'dopa490', name: '最後の一問', description: '500%チャレンジのFINAL QUESTION（490%）に到達した証', unlockedByAchievementId: 'dopa490', rarity: 'legendary' },
   // 次フェーズ（item 104-105）: DOPA TYPE正式名称の単一定義（config/dopaType.ts）に合わせ、
   // 「真・ドパガキ」から「ドパガキの神」へ改名した（id/unlockedByAchievementId/rarityは
   // 一切変更していない）。
@@ -95,19 +94,29 @@ const DOPA_CATEGORY_TITLES_ORDERED: TitleDef[] = [
   DOPA_MILESTONE_BY_ID.dopa400,
   DOPA_TYPE_TITLE_BY_ID.dopaTypeKing,
   DOPA_MILESTONE_BY_ID.dopa450,
-  DOPA_MILESTONE_BY_ID.dopa490,
   DOPA_MILESTONE_BY_ID.dopa500,
+]
+
+/**
+ * 次フェーズ（item 137-141、大型最終仕上げラウンド）: SECRET最終10個のTitle。各カテゴリの
+ * achievements.tsと同じ末尾位置に追加する。rarityフィールドは必須のため、既存の鏡写し・
+ * 大逆転と同じ慣例（secretはrarity表示には使われないが、型上はmythicを設定）に揃える。
+ */
+const DOPA_SECRET_TITLES: TitleDef[] = [
+  { id: 'dopaFinalWipeout', name: '全部水の泡', description: '500%チャレンジのFINAL QUESTION（490%）に到達しながら500%を逃した証', unlockedByAchievementId: 'dopaFinalWipeout', rarity: 'mythic' },
 ]
 
 export const TITLE_DEFS: TitleDef[] = [
   // Normal / LIMIT BREAK（DOPA%昇順。既存マイルストーン＋DOPA TYPEを自然に混ぜる）
   ...DOPA_CATEGORY_TITLES_ORDERED,
+  ...DOPA_SECRET_TITLES,
 
   // ENDLESS
   { id: 'endlessBeginner10', name: '助走完了', description: 'ENDLESS初級で10連続正解した証', unlockedByAchievementId: 'endlessBeginner10', rarity: 'common' },
   { id: 'endlessBeginner25', name: '止まらない指', description: 'ENDLESS初級で25連続正解した証', unlockedByAchievementId: 'endlessBeginner25', rarity: 'common' },
   { id: 'endlessBeginner50', name: '流れに乗った', description: 'ENDLESS初級で50連続正解した証', unlockedByAchievementId: 'endlessBeginner50', rarity: 'rare' },
-  { id: 'endlessBeginner100', name: '永久機関', description: 'ENDLESS初級で100連続正解した証', unlockedByAchievementId: 'endlessBeginner100', rarity: 'rare' },
+  // 次フェーズ（item 142、大型最終仕上げラウンド）: RARE→EPICへ変更。
+  { id: 'endlessBeginner100', name: '永久機関', description: 'ENDLESS初級で100連続正解した証', unlockedByAchievementId: 'endlessBeginner100', rarity: 'epic' },
   { id: 'endlessBeginner150', name: '初級の終わらせ方', description: 'ENDLESS初級で150連続正解した証', unlockedByAchievementId: 'endlessBeginner150', rarity: 'epic' },
 
   { id: 'endlessIntermediate5', name: '集中開始', description: 'ENDLESS中級で5連続正解した証', unlockedByAchievementId: 'endlessIntermediate5', rarity: 'common' },
@@ -115,6 +124,8 @@ export const TITLE_DEFS: TitleDef[] = [
   { id: 'endlessIntermediate30', name: '無呼吸', description: 'ENDLESS中級で30連続正解した証', unlockedByAchievementId: 'endlessIntermediate30', rarity: 'rare' },
   { id: 'endlessIntermediate50', name: '中級支配者', description: 'ENDLESS中級で50連続正解した証', unlockedByAchievementId: 'endlessIntermediate50', rarity: 'epic' },
   { id: 'endlessIntermediate75', name: '集中の化身', description: 'ENDLESS中級で75連続正解した証', unlockedByAchievementId: 'endlessIntermediate75', rarity: 'epic' },
+  // 次フェーズ（item 142）: 中級ラダーの新6段目。LEGENDARYで新設。
+  { id: 'endlessIntermediate100', name: '無我の境地', description: 'ENDLESS中級で100連続正解した証', unlockedByAchievementId: 'endlessIntermediate100', rarity: 'legendary' },
 
   { id: 'endlessAdvanced3', name: '危険区域へようこそ', description: 'ENDLESS上級で3連続正解した証', unlockedByAchievementId: 'endlessAdvanced3', rarity: 'rare' },
   { id: 'endlessAdvanced10', name: '逆転脳', description: 'ENDLESS上級で10連続正解した証', unlockedByAchievementId: 'endlessAdvanced10', rarity: 'epic' },
@@ -124,6 +135,8 @@ export const TITLE_DEFS: TitleDef[] = [
   // MYTHICへ繰り上げた（解除条件自体は無変更。ENDLESS上級の並びの中で最後に来る＝
   // 上級ラダーの到達点としてふさわしい別格感を持たせるため）。
   { id: 'endlessAdvanced50', name: '人間卒業', description: 'ENDLESS上級で50連続正解した証', unlockedByAchievementId: 'endlessAdvanced50', rarity: 'mythic' },
+  { id: 'endlessTripleCrown', name: '三冠王', description: 'ENDLESS初級150・中級100・上級50の自己ベストを同時に満たした証', unlockedByAchievementId: 'endlessTripleCrown', rarity: 'mythic' },
+  { id: 'endlessAdvanced100', name: '人外認定', description: 'ENDLESS上級で100連続正解した証', unlockedByAchievementId: 'endlessAdvanced100', rarity: 'mythic' },
 
   // Challenge
   { id: 'challengeCreatedFirst', name: '挑戦状、投函', description: 'Challengeを初めて作成した証', unlockedByAchievementId: 'challengeCreatedFirst', rarity: 'common' },
@@ -138,6 +151,9 @@ export const TITLE_DEFS: TitleDef[] = [
   { id: 'challengeWanted10', name: '指名手配', description: '1つのChallengeに10人以上の挑戦者を集めた証', unlockedByAchievementId: 'challengeWanted10', rarity: 'epic' },
   { id: 'endlessChallengeFirstWin', name: '終わらない挑戦者', description: 'ENDLESS Challengeで初めてホストの記録を超えた証', unlockedByAchievementId: 'endlessChallengeFirstWin', rarity: 'rare' },
   { id: 'endlessChallengeFirstDefense', name: '終わらない門番', description: 'ENDLESS Challengeで初めて自分の記録を守り切った証', unlockedByAchievementId: 'endlessChallengeFirstDefense', rarity: 'rare' },
+  { id: 'challengeZeroWall', name: '0の壁', description: 'ENDLESS Challengeで0 STREAKの挑戦状を作成し、0 STREAKの挑戦者を防衛した証', unlockedByAchievementId: 'challengeZeroWall', rarity: 'mythic' },
+  { id: 'challengeBeatTheGod', name: '神越え', description: '相手の基準記録が500%のChallengeに挑み、最終的にWINした証', unlockedByAchievementId: 'challengeBeatTheGod', rarity: 'mythic' },
+  { id: 'challengeLastBoss', name: 'ラスボス', description: '1つのChallengeに10人以上が挑戦し、その全員から防衛した証', unlockedByAchievementId: 'challengeLastBoss', rarity: 'mythic' },
 
   // World Battle
   { id: 'worldBattleFirstPlay', name: '世界デビュー', description: '世界対戦に初めて参加した証', unlockedByAchievementId: 'worldBattleFirstPlay', rarity: 'common' },
@@ -158,6 +174,8 @@ export const TITLE_DEFS: TitleDef[] = [
   { id: 'friendBattlePlay10', name: 'いつメン', description: 'フレンド対戦に通算10回参加した証', unlockedByAchievementId: 'friendBattlePlay10', rarity: 'common' },
   { id: 'friendBattlePlay50', name: '腐れ縁', description: 'フレンド対戦に通算50回参加した証', unlockedByAchievementId: 'friendBattlePlay50', rarity: 'rare' },
   { id: 'friendBattlePlay100', name: '終わらない放課後', description: 'フレンド対戦に通算100回参加した証', unlockedByAchievementId: 'friendBattlePlay100', rarity: 'rare' },
+  { id: 'friendRoomFullHouse', name: 'ドパガキ大集合', description: 'ルームが8人満員になり、4TABLEすべてが同時に対戦進行中になった証', unlockedByAchievementId: 'friendRoomFullHouse', rarity: 'mythic' },
+  { id: 'friendRoomFrenemy', name: 'フレネミー', description: '同じルームの自分以外の7人全員に最低1回ずつ勝利した証', unlockedByAchievementId: 'friendRoomFrenemy', rarity: 'mythic' },
 
   // Skill / Special
   { id: 'noMiss100', name: 'ノーミス', description: 'DOPA度100%以上・正答率100%でクリアした証', unlockedByAchievementId: 'noMiss100', rarity: 'rare' },
@@ -167,7 +185,7 @@ export const TITLE_DEFS: TitleDef[] = [
   { id: 'battleWinByMaxCombo', name: '連鎖の鬼', description: '世界対戦で最大COMBOの比較で勝利した証', unlockedByAchievementId: 'battleWinByMaxCombo', rarity: 'rare' },
   { id: 'battleWinByReaction', name: '反射神経バケモノ', description: '世界対戦で反応速度の比較で勝利した証', unlockedByAchievementId: 'battleWinByReaction', rarity: 'rare' },
   { id: 'battleMirrorMatch', name: '鏡写し', description: '世界対戦で5項目が完全一致しDRAWになった証', unlockedByAchievementId: 'battleMirrorMatch', rarity: 'mythic' },
-  { id: 'battleComeback', name: '大逆転', description: '世界対戦で大きく離されてから逆転勝利した証', unlockedByAchievementId: 'battleComeback', rarity: 'mythic' },
+  { id: 'battleComeback', name: '大逆転', description: '世界対戦で相手に20%以上の差をつけられた状態から逆転勝利した証', unlockedByAchievementId: 'battleComeback', rarity: 'mythic' },
 
   // Grind（item 129: 10/50/100/300/500/1000の6段階。300新設・500/1000は改名+rarity変更）
   { id: 'grindPlay10', name: '常連', description: '公式プレイを通算10回行った証', unlockedByAchievementId: 'grindPlay10', rarity: 'common' },

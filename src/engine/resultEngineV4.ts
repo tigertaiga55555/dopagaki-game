@@ -4,7 +4,7 @@ import { OVERDRIVE_CONFIG } from '../config/overdriveConfig'
 import {
   checkDopaPercentAchievements,
   checkDopaTypeBandAchievements,
-  checkFinalQuestionAchievement,
+  checkChallenge500MissedFinalAchievement,
   checkGrindAchievements,
   checkNoMissAchievements,
 } from '../utils/achievementStorage'
@@ -396,9 +396,12 @@ export function computeChallenge500Result(
   const challenge500NewUnlocks = persist
     ? [...checkDopaPercentAchievements(finalPercent), ...checkDopaTypeBandAchievements(finalPercent)]
     : []
-  // Ver.6 Phase 5.1: DOPA 490（FINAL QUESTION到達）実績。bestPercentの閾値では表現できない
-  // ため、state.reached490を直接の判定材料にする専用関数を使う（engine/challenge500Engine.ts参照）。
-  const finalQuestionNewUnlocks = persist ? checkFinalQuestionAchievement(state.reached490) : []
+  // 次フェーズ（item 137-140、大型最終仕上げラウンド）: 旧DOPA 490（FINAL QUESTION到達）
+  // 実績は削除した。代わりに、490%（FINAL QUESTION）に到達しながら不正解に終わり500%到達を
+  // 逃した場合だけ解除するSECRET「全部水の泡」をここで判定する
+  // （state.reached490 && state.ended && !state.cleared、engine/challenge500Engine.ts参照）。
+  const missedFinal = state.reached490 && state.ended && !state.cleared
+  const finalQuestionNewUnlocks = persist ? checkChallenge500MissedFinalAchievement(missedFinal) : []
 
   return {
     ...baseResult,

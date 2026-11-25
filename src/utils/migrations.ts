@@ -1,9 +1,7 @@
-import { CHALLENGE500_CONFIG } from '../config/challenge500Config'
 import { ENDLESS_DIFFICULTIES } from '../config/endlessConfig'
 import {
   checkDopaPercentAchievements,
   checkEndlessAchievements,
-  checkFinalQuestionAchievement,
   checkWorldBattleStreakAchievements,
   checkWorldBattleWinAchievements,
 } from './achievementStorage'
@@ -30,10 +28,6 @@ import type { AchievementId } from '../types'
  *   - checkDopaPercentAchievements: 新設した50/150/250/350/450%の閾値を、既存の
  *     bestPercentV4へ対して再チェックする（既に解除済みの閾値は重複解除防止により
  *     無視されるだけなので、v1と同じ呼び出しを安全に繰り返せる）。
- *   - checkFinalQuestionAchievement: 490%（FINAL QUESTION）はbestPercentV4の値として
- *     残らないため直接は遡及できないが、bestPercentV4が500%に達している場合は
- *     「500%クリアの直前に必ず490%を通過している」という状態遷移の性質
- *     （engine/challenge500Engine.ts参照）から安全に推論して解除する。
  *   - checkEndlessAchievements: Endless初級/中級/上級それぞれの既存BEST記録から、
  *     新設した12個のSTREAK実績を遡及解除する。
  *
@@ -108,7 +102,10 @@ export function runMigrationsOnce(): AchievementId[] {
 
   if (current < 2) {
     unlocked.push(...checkDopaPercentAchievements(getBestPercent()))
-    unlocked.push(...checkFinalQuestionAchievement(getBestPercent() >= CHALLENGE500_CONFIG.clearPercent))
+    // 次フェーズ（item 137-140、大型最終仕上げラウンド）: 旧dopa490「最後の一問」（490%
+    // 到達だけで解除）はここで遡及解除していたが、この実績自体を削除したため行も削除した。
+    // 新設のSECRET「全部水の泡」（FINAL QUESTIONに到達しながら不正解に終わった、という
+    // 一度きりの出来事）は保存された記録から安全に推論できないため、遡及解除の対象にしない。
     for (const difficulty of ENDLESS_DIFFICULTIES) {
       unlocked.push(...checkEndlessAchievements(difficulty, getEndlessBest(difficulty)))
     }

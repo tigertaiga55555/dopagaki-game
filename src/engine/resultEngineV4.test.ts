@@ -286,6 +286,79 @@ describe('official フラグ（Ver.6 Phase 10実績拡張ラウンド）: Challe
     expect(getBestPercent()).toBe(0)
     expect(result.newlyUnlockedAchievements).toEqual([])
     expect(isAchievementUnlocked('dopa500')).toBe(false)
-    expect(isAchievementUnlocked('dopa490')).toBe(false)
+    expect(isAchievementUnlocked('dopaFinalWipeout')).toBe(false)
+  })
+
+  /**
+   * 次フェーズ（item 137-140、大型最終仕上げラウンド）: SECRET「全部水の泡」
+   * （490%=FINAL QUESTIONに到達しながら不正解に終わり500%到達を逃した場合のみ解除）の
+   * 専用テスト。computeChallenge500Result内のmissedFinal計算（state.reached490 &&
+   * state.ended && !state.cleared）を、持ち上がってくるChallenge500Stateの3パターンで直接検証する。
+   */
+  it('item 137-140: persist=trueで、490%到達後にMISSして500%を逃した場合だけ「全部水の泡」が解除される', () => {
+    const base: FinalResultV4 = {
+      percent: 200,
+      rawPercent: 200,
+      overdriveActive: true,
+      type: { id: 'test', name: 'テスト' },
+      comment: '',
+      crimeRecords: [],
+      maxCombo: 0,
+      fastestReactionMs: null,
+      accuracy: 0,
+      isFirstPlay: false,
+      isNewBest: false,
+      bestPercent: 200,
+      playCount: 1,
+    }
+    // 490%(tier3)でMISSし、400%(floor)へ即終了。reached490=trueのままcleared=false。
+    const missedState: Challenge500State = { percent: 400, floor: 400, ended: true, cleared: false, reached490: true }
+    const missedResult = computeChallenge500Result(missedState, base, true)
+    expect(missedResult.newlyUnlockedAchievements).toContain('dopaFinalWipeout')
+    expect(isAchievementUnlocked('dopaFinalWipeout')).toBe(true)
+  })
+
+  it('item 137-140: 500%まで完全クリアした場合は「全部水の泡」を解除しない（reached490=trueでもcleared=trueなら対象外）', () => {
+    const base: FinalResultV4 = {
+      percent: 200,
+      rawPercent: 200,
+      overdriveActive: true,
+      type: { id: 'test', name: 'テスト' },
+      comment: '',
+      crimeRecords: [],
+      maxCombo: 0,
+      fastestReactionMs: null,
+      accuracy: 0,
+      isFirstPlay: false,
+      isNewBest: false,
+      bestPercent: 200,
+      playCount: 1,
+    }
+    const clearedState: Challenge500State = { percent: 500, floor: 490, ended: true, cleared: true, reached490: true }
+    const result = computeChallenge500Result(clearedState, base, true)
+    expect(result.newlyUnlockedAchievements).not.toContain('dopaFinalWipeout')
+    expect(isAchievementUnlocked('dopaFinalWipeout')).toBe(false)
+  })
+
+  it('item 137-140: 490%に一度も到達していないMISS（tier1/2）では「全部水の泡」を解除しない', () => {
+    const base: FinalResultV4 = {
+      percent: 200,
+      rawPercent: 200,
+      overdriveActive: true,
+      type: { id: 'test', name: 'テスト' },
+      comment: '',
+      crimeRecords: [],
+      maxCombo: 0,
+      fastestReactionMs: null,
+      accuracy: 0,
+      isFirstPlay: false,
+      isNewBest: false,
+      bestPercent: 200,
+      playCount: 1,
+    }
+    const earlyMissState: Challenge500State = { percent: 300, floor: 300, ended: true, cleared: false, reached490: false }
+    const result = computeChallenge500Result(earlyMissState, base, true)
+    expect(result.newlyUnlockedAchievements).not.toContain('dopaFinalWipeout')
+    expect(isAchievementUnlocked('dopaFinalWipeout')).toBe(false)
   })
 })
