@@ -15,6 +15,7 @@ import { getOwnedPassTitleIds, isPassTitleOwned } from '../payment/passTitleGran
 import { trackProfileView } from '../utils/analytics'
 import { localPlayerStatsRepository } from '../utils/playerStatsRepository'
 import { equipTitle, getProfile } from '../utils/profileStorage'
+import { sfx } from '../utils/sound'
 import type { TitleId } from '../types'
 
 interface Props {
@@ -168,7 +169,14 @@ export function ProfileScreen({
                 return (
                   <button
                     key={index}
-                    onClick={filled ? () => setDetailTitleId(id) : undefined}
+                    onClick={
+                      filled
+                        ? () => {
+                            sfx.uiTap()
+                            setDetailTitleId(id)
+                          }
+                        : undefined
+                    }
                     disabled={!filled}
                     className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-bold active:scale-95 disabled:active:scale-100 ${
                       filled
@@ -188,7 +196,10 @@ export function ProfileScreen({
 
           {ownedPassTitleIds.length > 0 && profile.equippedTitleId !== ownedPassTitleIds[0] && (
             <button
-              onClick={() => handleEquipPassTitle(ownedPassTitleIds[0])}
+              onClick={() => {
+                sfx.titleEquip()
+                handleEquipPassTitle(ownedPassTitleIds[0])
+              }}
               className="text-[10px] font-bold text-amber-300/80 underline"
             >
               PASS限定Titleを装備する
@@ -196,7 +207,10 @@ export function ProfileScreen({
           )}
 
           <button
-            onClick={onEdit}
+            onClick={() => {
+              sfx.uiTap()
+              onEdit()
+            }}
             className="mt-1 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-bold text-white/70 active:scale-95"
           >
             プロフィールを編集
@@ -218,39 +232,57 @@ export function ProfileScreen({
         <div className="flex w-full max-w-xs flex-col gap-3">
           {hasPass ? (
             <button
-              onClick={onOpenPassAnalytics}
+              onClick={() => {
+                sfx.uiTap()
+                onOpenPassAnalytics()
+              }}
               className="w-full rounded-2xl border border-amber-400/50 bg-amber-500/10 py-3 text-sm font-black text-amber-300 active:scale-95"
             >
               DOPA PASS 詳細分析
             </button>
           ) : (
             <button
-              onClick={onOpenPassPaywall}
+              onClick={() => {
+                sfx.uiTap()
+                onOpenPassPaywall()
+              }}
               className="w-full rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-400 py-3.5 text-sm font-black text-black shadow-[0_6px_0_0_rgba(180,130,0,0.6)] active:translate-y-1 active:shadow-[0_2px_0_0_rgba(180,130,0,0.6)]"
             >
               DOPA PASSについて見る
             </button>
           )}
           <button
-            onClick={onAchievements}
+            onClick={() => {
+              sfx.uiTap()
+              onAchievements()
+            }}
             className="w-full rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-3.5 text-base font-black tracking-widest text-white shadow-[0_6px_0_0_rgba(126,34,206,0.8)] transition-transform active:translate-y-1 active:shadow-[0_2px_0_0_rgba(126,34,206,0.8)]"
           >
             ACHIEVEMENT
           </button>
           <button
-            onClick={onRanking}
+            onClick={() => {
+              sfx.uiTap()
+              onRanking()
+            }}
             className="w-full rounded-2xl border border-white/15 bg-white/5 py-3 text-base font-black tracking-widest text-white/80 active:scale-95"
           >
             RANKING
           </button>
           <button
-            onClick={onSentChallenges}
+            onClick={() => {
+              sfx.uiTap()
+              onSentChallenges()
+            }}
             className="w-full rounded-2xl border border-white/15 bg-white/5 py-3 text-sm font-bold text-white/70 active:scale-95"
           >
             作成したChallenge
           </button>
           <button
-            onClick={onParticipatedChallenges}
+            onClick={() => {
+              sfx.uiTap()
+              onParticipatedChallenges()
+            }}
             className="w-full rounded-2xl border border-white/15 bg-white/5 py-3 text-sm font-bold text-white/70 active:scale-95"
           >
             参加したChallenge

@@ -13,6 +13,7 @@ import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import { getUnlockedAchievements, getUnseenUnlockedAchievementIds, markAllUnlockedAchievementsSeen } from '../utils/achievementStorage'
 import { trackTitleEquipped } from '../utils/analytics'
 import { equipTitleToSlot, findSlotForTitle, getProfile, unequipTitleFromSlot } from '../utils/profileStorage'
+import { sfx } from '../utils/sound'
 import type { AchievementCategory, AchievementId, TitleId } from '../types'
 import type { TitleSlot } from '../utils/profileStorage'
 
@@ -146,7 +147,10 @@ export function AchievementScreen({ onBack, onHome }: Props) {
               <button
                 key={tab.id}
                 data-tab-id={tab.id}
-                onClick={() => setFilter(tab.id)}
+                onClick={() => {
+                  sfx.uiTap()
+                  setFilter(tab.id)
+                }}
                 className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-black tracking-widest transition-colors ${
                   filter === tab.id ? 'bg-fuchsia-500/80 text-white' : 'text-white/45'
                 }`}
@@ -213,9 +217,15 @@ export function AchievementScreen({ onBack, onHome }: Props) {
                 key={def.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => setDetailId(def.id)}
+                onClick={() => {
+                  sfx.uiTap()
+                  setDetailId(def.id)
+                }}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') setDetailId(def.id)
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    sfx.uiTap()
+                    setDetailId(def.id)
+                  }
                 }}
                 className={`relative flex flex-col gap-1 rounded-2xl border px-3 py-2.5 text-left active:scale-[0.98] ${cardBorderClass} ${cardBackgroundClass} ${cardGlowClass} ${cardPulseClass}`}
               >
@@ -278,6 +288,7 @@ export function AchievementScreen({ onBack, onHome }: Props) {
                   <button
                     onClick={(event) => {
                       event.stopPropagation()
+                      sfx.uiTap()
                       setPickerTitleId(title.id)
                     }}
                     className={`mt-1 rounded-full px-2 py-1 text-[10px] font-bold active:scale-95 ${

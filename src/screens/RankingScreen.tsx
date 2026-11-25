@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavBar } from '../components/NavBar'
 import { RANKING_CATEGORIES, localRankingDataSource } from '../utils/rankingRepository'
 import { trackRankingView } from '../utils/analytics'
+import { sfx } from '../utils/sound'
 import type { RankingCategoryId } from '../types'
 
 interface Props {
@@ -38,7 +39,10 @@ export function RankingScreen({ onBack, onHome }: Props) {
           {RANKING_CATEGORIES.map((c) => (
             <button
               key={c.id}
-              onClick={() => setSelected(c.id)}
+              onClick={() => {
+                sfx.uiTap()
+                setSelected(c.id)
+              }}
               className={`rounded-xl px-2 py-2.5 text-center text-[11px] font-bold leading-tight transition-transform active:scale-95 ${
                 selected === c.id ? 'bg-gradient-to-b from-fuchsia-500 to-purple-600 text-white' : 'bg-white/5 text-white/60'
               } ${c.comingSoon ? 'opacity-70' : ''}`}

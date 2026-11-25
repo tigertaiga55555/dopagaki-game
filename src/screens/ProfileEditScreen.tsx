@@ -3,6 +3,7 @@ import { BackButton } from '../components/BackButton'
 import { ICON_CATEGORIES, NICKNAME_MAX_LENGTH, PRESET_ICON_EMOJI, resolveAvatarEmoji } from '../config/profileConfig'
 import { trackProfileEdit } from '../utils/analytics'
 import { getProfile, updateIcon, updateNickname } from '../utils/profileStorage'
+import { sfx } from '../utils/sound'
 import type { PresetIconId } from '../types'
 
 interface Props {
@@ -68,7 +69,10 @@ export function ProfileEditScreen({ onDone }: Props) {
                   return (
                     <button
                       key={id}
-                      onClick={() => setIconId(id)}
+                      onClick={() => {
+                        sfx.uiTap()
+                        setIconId(id)
+                      }}
                       aria-pressed={selected}
                       className={`flex aspect-square items-center justify-center rounded-2xl text-xl transition-transform active:scale-90 ${
                         selected
@@ -86,7 +90,10 @@ export function ProfileEditScreen({ onDone }: Props) {
         </div>
 
         <button
-          onClick={handleSave}
+          onClick={() => {
+            sfx.uiTap()
+            handleSave()
+          }}
           className="mt-2 w-full max-w-xs rounded-2xl bg-gradient-to-b from-fuchsia-500 to-purple-600 py-4 text-base font-black tracking-widest text-white shadow-[0_6px_0_0_rgba(126,34,206,0.8)] transition-transform active:translate-y-1 active:shadow-[0_2px_0_0_rgba(126,34,206,0.8)]"
         >
           保存する

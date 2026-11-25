@@ -488,7 +488,19 @@ export default function App() {
    * 既存のBattleRoom DO・battleRoomEngine.ts・/api/battles/rooms系ルートは一切削除せず、
    * PRIVATE ROOMのNORMAL対戦が既にmode:'friend'として引き続き再利用する。
    */
-  const openBattleHome = useCallback(() => pushScreen('battleHome'), [pushScreen])
+  /**
+   * 次フェーズ（item 149-153、UI効果音拡充ラウンド）: ホーム画面の3モードカードのうち
+   * DOPA RUSH（startPlay）・ENDLESS（openEndlessSelect）は既にunlockAudio+sfx.startPressを
+   * 呼んでいるが、ONLINE BATTLEカード（これ）だけ効果音が一切無かった。3枚のカードを
+   * 同格に扱う既存のUI方針（Ver.6 Phase 7コメント参照）に合わせ、同じ「起動感のある」
+   * startPressをここでも鳴らす（新しい汎用uiTapで済ませると、3枚のうち1枚だけ
+   * 質感が違って浮いてしまうため）。
+   */
+  const openBattleHome = useCallback(() => {
+    unlockAudio()
+    sfx.startPress()
+    pushScreen('battleHome')
+  }, [pushScreen])
   const openWorldMatching = useCallback(() => pushScreen('battleWorldMatching'), [pushScreen])
 
   const handleWorldMatchFound = useCallback(

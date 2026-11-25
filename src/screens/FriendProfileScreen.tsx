@@ -6,6 +6,7 @@ import { resolveAvatarEmoji } from '../config/profileConfig'
 import { TITLE_DEFS_BY_ID } from '../config/titles'
 import { PASS_TITLE_DEFS_BY_ID } from '../config/passTitles'
 import { getFriendPublicProfile, getFriendRelationshipStatus, removeFriend, sendFriendRequestByPlayerId } from '../friends/friendsClient'
+import { sfx } from '../utils/sound'
 import type { FriendRelationshipStatus, PublicProfileSnapshot } from '../friends/types'
 
 interface Props {
@@ -118,7 +119,10 @@ export function FriendProfileScreen({ onBack, onHome, playerId, viewerPlayerId }
                   <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-bold text-amber-300">フレンド申請が届いています</span>
                 ) : (
                   <button
-                    onClick={handleSendRequest}
+                    onClick={() => {
+                      sfx.uiTap()
+                      handleSendRequest()
+                    }}
                     className="rounded-full bg-gradient-to-r from-fuchsia-500 to-purple-600 px-4 py-1.5 text-xs font-black text-white active:scale-95"
                   >
                     ＋ フレンド申請
@@ -145,7 +149,13 @@ export function FriendProfileScreen({ onBack, onHome, playerId, viewerPlayerId }
           ための意図的な配置——主要な情報・操作からは明確に離す）。
         */}
         {state.status === 'ready' && !isSelf && relationship === 'friends' && !removed && (
-          <button onClick={() => setConfirmRemoveOpen(true)} className="mt-2 text-[10px] font-bold text-white/25 underline underline-offset-2">
+          <button
+            onClick={() => {
+              sfx.uiTap()
+              setConfirmRemoveOpen(true)
+            }}
+            className="mt-2 text-[10px] font-bold text-white/25 underline underline-offset-2"
+          >
             フレンド削除
           </button>
         )}

@@ -10,6 +10,7 @@ import { PassQaPanel } from '../dev/PassQaPanel'
 import { isHeartQaPanelRequested, isPassQaPanelRequested } from '../dev/overdrivePreview'
 import { qaLocalEntitlementRepository } from '../payment/entitlementRepository'
 import { qaSetHeartCount } from '../utils/heartRepository'
+import { sfx } from '../utils/sound'
 import { getBestPercent } from '../utils/storage'
 
 interface Props {
@@ -71,7 +72,10 @@ export function TitleScreen({
     <div className="flex min-h-dvh flex-col items-center gap-5 px-6 py-8 text-center">
       <div className="flex w-full items-start justify-between">
         <button
-          onClick={onOpenFriends}
+          onClick={() => {
+            sfx.uiTap()
+            onOpenFriends()
+          }}
           className="relative flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1.5 text-[11px] font-bold text-white/60 active:scale-95"
           aria-label={`FRIENDS${friendsUnreadCount > 0 ? `（未読${friendsUnreadCount}件）` : ''}`}
         >
@@ -130,15 +134,33 @@ export function TitleScreen({
           弱めないよう、あくまで控えめな小さいテキストリンク3つに留める
           （アプリの管理画面のような見た目にしない）。 */}
       <div className="flex items-center gap-4 text-[11px] font-bold text-white/35">
-        <button onClick={onOpenProfile} className="flex items-center gap-1 active:text-white/60">
+        <button
+          onClick={() => {
+            sfx.uiTap()
+            onOpenProfile()
+          }}
+          className="flex items-center gap-1 active:text-white/60"
+        >
           <span aria-hidden="true">👤</span> PROFILE
         </button>
         <span className="text-white/15">|</span>
-        <button onClick={onOpenAchievements} className="flex items-center gap-1 active:text-white/60">
+        <button
+          onClick={() => {
+            sfx.uiTap()
+            onOpenAchievements()
+          }}
+          className="flex items-center gap-1 active:text-white/60"
+        >
           <span aria-hidden="true">🏆</span> ACHIEVEMENT
         </button>
         <span className="text-white/15">|</span>
-        <button onClick={onOpenRanking} className="flex items-center gap-1 active:text-white/60">
+        <button
+          onClick={() => {
+            sfx.uiTap()
+            onOpenRanking()
+          }}
+          className="flex items-center gap-1 active:text-white/60"
+        >
           <span aria-hidden="true">📊</span> RANKING
         </button>
       </div>
